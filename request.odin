@@ -51,8 +51,8 @@ handle_request :: proc(client: net.TCP_Socket) {
         }
     }
 
-    // Generate dynamic HTML from in-memory data
-    html_content := generate_html()
+    // Generate dynamic HTML based on requested path
+    html_content := get_page_html(path)
 
     response := fmt.tprintf(
         "HTTP/1.1 200 OK\r\n" +
