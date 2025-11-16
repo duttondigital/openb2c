@@ -31,6 +31,26 @@ handle_request :: proc(client: net.TCP_Socket) {
     
     fmt.printf("%s %s\n", method, path)
 
+    // Serve CSS file
+    if path == "/styles.css" {
+        css_content, read_ok := os.read_entire_file("styles.css")
+        if read_ok {
+            css_string := string(css_content)
+            response := fmt.tprintf(
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: text/css\r\n" +
+                "Content-Length: %d\r\n" +
+                "Connection: close\r\n" +
+                "\r\n" +
+                "%s",
+                len(css_string),
+                css_string,
+            )
+            net.send_tcp(client, transmute([]byte)response)
+            return
+        }
+    }
+
     // Generate dynamic HTML from in-memory data
     html_content := generate_html()
 
