@@ -34,18 +34,66 @@ generate_news_html :: proc() -> string {
     
     news_html := ""
     for news_item in news_items {
-        news_html = fmt.tprintf(`%s
+        if len(news_item.slug) > 0 {
+            // News item with slug - create link to full post
+            news_html = fmt.tprintf(`%s
+                    <div class="card">
+                        <h3><a href="/news/%s">%s</a></h3>
+                        <p class="date">%s</p>
+                        <p>%s</p>
+                        <a href="/news/%s" class="btn">Read More</a>
+                    </div>`, 
+                news_html, news_item.slug, news_item.title, news_item.date, news_item.content, news_item.slug)
+        } else {
+            // Regular news item without full post
+            news_html = fmt.tprintf(`%s
                     <div class="card">
                         <h3>%s</h3>
                         <p class="date">%s</p>
                         <p>%s</p>
                     </div>`, 
-            news_html, news_item.title, news_item.date, news_item.content)
+                news_html, news_item.title, news_item.date, news_item.content)
+        }
     }
     return news_html
 }
 
+get_news_post_html :: proc(post_slug: string) -> string {
+    // Convert slug to filename
+    filename := fmt.tprintf("news/%s.md", post_slug)
+    
+    // Read markdown file
+    markdown_content, read_ok := os.read_entire_file(filename)
+    if !read_ok {
+        return "<html><body><h1>404 - News Post Not Found</h1></body></html>"
+    }
+    
+    // Convert markdown to HTML
+    html_content := markdown_to_html(string(markdown_content))
+    
+    // Get the title from the first line (assuming it starts with #)
+    lines := strings.split_lines(string(markdown_content))
+    title := "News Post"
+    if len(lines) > 0 && strings.has_prefix(lines[0], "# ") {
+        title = strings.trim_prefix(lines[0], "# ")
+    }
+    
+    // Load news post template
+    template_content, template_ok := os.read_entire_file("templates/news-post.html")
+    if !template_ok {
+        return fmt.tprintf("<html><body><h1>%s</h1><div>%s</div></body></html>", title, html_content)
+    }
+    
+    return fmt.tprintf(string(template_content), title, html_content)
+}
+
 get_page_html :: proc(page: string) -> string {
+    // Handle news posts - format: /news/post-slug
+    if strings.has_prefix(page, "/news/") {
+        post_slug := strings.trim_prefix(page, "/news/")
+        return get_news_post_html(post_slug)
+    }
+    
     switch page {
     case "/", "/home":
         content, read_ok := os.read_entire_file("templates/home.html")

@@ -13,6 +13,7 @@ News :: struct {
     title:   string,
     content: string,
     date:    string,
+    slug:    string, // URL slug for individual news posts
 }
 
 // Sample data stored in memory
@@ -23,9 +24,10 @@ PRODUCTIONS := [?]Production{
 }
 
 NEWS := [?]News{
-    {1, "Auditions Open for Carmen", "We are excited to announce that auditions for our upcoming production of Carmen are now open. We are looking for passionate singers to join our cast.", "2024-02-15"},
-    {2, "New Rehearsal Space", "Thanks to generous community support, we have secured a new rehearsal space that will enhance our preparation process.", "2024-02-01"},
-    {3, "Season Announcement", "We are thrilled to announce our upcoming season featuring three amazing productions that showcase the best of opera.", "2024-01-15"},
+    {1, "Winter Season Auditions Now Open", "We're excited to announce that auditions for our Spring 2025 Season are now open! This year's lineup promises to be our most ambitious yet.", "2024-12-01", "2024-12-01-winter-auditions"},
+    {2, "Auditions Open for Carmen", "We are excited to announce that auditions for our upcoming production of Carmen are now open. We are looking for passionate singers to join our cast.", "2024-02-15", ""},
+    {3, "New Rehearsal Space", "Thanks to generous community support, we have secured a new rehearsal space that will enhance our preparation process.", "2024-02-01", ""},
+    {4, "Season Announcement", "We are thrilled to announce our upcoming season featuring three amazing productions that showcase the best of opera.", "2024-01-15", ""},
 }
 
 get_productions :: proc() -> []Production {
