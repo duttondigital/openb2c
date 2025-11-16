@@ -31,7 +31,9 @@ handle_request :: proc(client: net.TCP_Socket) {
     
     fmt.printf("%s %s\n", method, path)
 
-    // Serve HTML for all requests
+    // Generate dynamic HTML from in-memory data
+    html_content := generate_html()
+
     response := fmt.tprintf(
         "HTTP/1.1 200 OK\r\n" +
         "Content-Type: text/html; charset=utf-8\r\n" +
@@ -39,8 +41,8 @@ handle_request :: proc(client: net.TCP_Socket) {
         "Connection: close\r\n" +
         "\r\n" +
         "%s",
-        len(HTML_CONTENT),
-        HTML_CONTENT,
+        len(html_content),
+        html_content,
     )
 
     net.send_tcp(client, transmute([]byte)response)
