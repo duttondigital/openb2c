@@ -65,7 +65,7 @@ p {
 
 /* Header */
 header {
-    border-bottom: 2px solid black;
+    /* border-bottom: 2px solid black; */
     padding: 20px 0;
 }
 
@@ -76,8 +76,8 @@ header {
 }
 
 .logo {
-    font-size: 2.5rem;
-    font-weight: bold;
+    font-size: 2rem;
+    /* font-weight: bold; */
     color: black;
     text-decoration: none;
 }
@@ -178,8 +178,6 @@ section:not(:last-child) {
 
 /* Footer */
 footer {
-    background-color: black;
-    color: white;
     text-align: center;
     padding: 2rem 0;
     margin-top: 3rem;

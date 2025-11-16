@@ -58,6 +58,68 @@ generate_news_html :: proc() -> string {
     return news_html
 }
 
+render_page :: proc(title: string, content: string, active_page: string) -> string {
+    // Load layout template
+    layout_content, layout_ok := os.read_entire_file("templates/layout.html")
+    if !layout_ok {
+        return fmt.tprintf("<html><body><h1>%s</h1><div>%s</div></body></html>", title, content)
+    }
+    
+    // Load header fragment
+    header_content, header_ok := os.read_entire_file("templates/fragments/header.html")
+    header_html := "<header>Header not found</header>"
+    if header_ok {
+        header_html = string(header_content)
+    }
+    
+    // Load footer fragment  
+    footer_content, footer_ok := os.read_entire_file("templates/fragments/footer.html")
+    footer_html := "<footer>Footer not found</footer>"
+    if footer_ok {
+        footer_html = string(footer_content)
+    }
+    
+    // Process header with active page
+    processed_header := process_header_active_nav(header_html, active_page)
+    
+    // Compose the full page
+    full_title := title == "Duchy Opera" ? title : fmt.tprintf("%s - Duchy Opera", title)
+    return fmt.tprintf(string(layout_content), full_title, processed_header, content, footer_html)
+}
+
+process_header_active_nav :: proc(header: string, active_page: string) -> string {
+    result := header
+    
+    // Set all active states to empty first
+    result, _ = strings.replace_all(result, "{{.HomeActive}}", "")
+    result, _ = strings.replace_all(result, "{{.AboutActive}}", "")
+    result, _ = strings.replace_all(result, "{{.ProductionsActive}}", "")
+    result, _ = strings.replace_all(result, "{{.NewsActive}}", "")
+    result, _ = strings.replace_all(result, "{{.AuditionsActive}}", "")
+    result, _ = strings.replace_all(result, "{{.SupportActive}}", "")
+    result, _ = strings.replace_all(result, "{{.ContactActive}}", "")
+    
+    // Set the active page
+    switch active_page {
+    case "home":
+        result, _ = strings.replace_all(result, `<li><a href="/" {{.HomeActive}}>Home</a></li>`, `<li><a href="/" class="active">Home</a></li>`)
+    case "about":
+        result, _ = strings.replace_all(result, `<li><a href="/about" {{.AboutActive}}>About</a></li>`, `<li><a href="/about" class="active">About</a></li>`)
+    case "whats-on":
+        result, _ = strings.replace_all(result, `<li><a href="/whats-on" {{.ProductionsActive}}>What's on</a></li>`, `<li><a href="/whats-on" class="active">What's on</a></li>`)
+    case "news":
+        result, _ = strings.replace_all(result, `<li><a href="/news" {{.NewsActive}}>News</a></li>`, `<li><a href="/news" class="active">News</a></li>`)
+    case "auditions":
+        result, _ = strings.replace_all(result, `<li><a href="/auditions" {{.AuditionsActive}}>Auditions</a></li>`, `<li><a href="/auditions" class="active">Auditions</a></li>`)
+    case "support":
+        result, _ = strings.replace_all(result, `<li><a href="/support" {{.SupportActive}}>Support</a></li>`, `<li><a href="/support" class="active">Support</a></li>`)
+    case "contact":
+        result, _ = strings.replace_all(result, `<li><a href="/contact" {{.ContactActive}}>Contact</a></li>`, `<li><a href="/contact" class="active">Contact</a></li>`)
+    }
+    
+    return result
+}
+
 get_news_post_html :: proc(post_slug: string) -> string {
     // Convert slug to filename
     filename := fmt.tprintf("news/%s.md", post_slug)
@@ -65,7 +127,7 @@ get_news_post_html :: proc(post_slug: string) -> string {
     // Read markdown file
     markdown_content, read_ok := os.read_entire_file(filename)
     if !read_ok {
-        return "<html><body><h1>404 - News Post Not Found</h1></body></html>"
+        return render_page("404 - News Post Not Found", "<h1>404 - News Post Not Found</h1>", "news")
     }
     
     // Convert markdown to HTML
@@ -78,70 +140,17 @@ get_news_post_html :: proc(post_slug: string) -> string {
         title = strings.trim_prefix(lines[0], "# ")
     }
     
-    // Load news post template
-    template_content, template_ok := os.read_entire_file("templates/news-post.html")
-    if !template_ok {
-        return fmt.tprintf("<html><body><h1>%s</h1><div>%s</div></body></html>", title, html_content)
+    // Load news post content template
+    content_template, template_ok := os.read_entire_file("templates/pages/news-post.html")
+    template_html := "<div>%s</div>"
+    if template_ok {
+        template_html = string(content_template)
     }
     
-    return fmt.tprintf(string(template_content), title, html_content)
+    content := fmt.tprintf(template_html, html_content)
+    return render_page(title, content, "news")
 }
 
-get_page_html :: proc(page: string) -> string {
-    // Handle news posts - format: /news/post-slug
-    if strings.has_prefix(page, "/news/") {
-        post_slug := strings.trim_prefix(page, "/news/")
-        return get_news_post_html(post_slug)
-    }
-    
-    switch page {
-    case "/", "/home":
-        content, read_ok := os.read_entire_file("templates/home.html")
-        if read_ok {
-            return string(content)
-        }
-    case "/about":
-        content, read_ok := os.read_entire_file("templates/about.html")
-        if read_ok {
-            return string(content)
-        }
-    case "/productions":
-        content, read_ok := os.read_entire_file("templates/productions.html")
-        if read_ok {
-            productions_html := generate_productions_html()
-            return fmt.tprintf(string(content), productions_html)
-        }
-    case "/news":
-        content, read_ok := os.read_entire_file("templates/news.html")
-        if read_ok {
-            news_html := generate_news_html()
-            return fmt.tprintf(string(content), news_html)
-        }
-    case "/auditions":
-        content, read_ok := os.read_entire_file("templates/auditions.html")
-        if read_ok {
-            return string(content)
-        }
-    case "/support":
-        content, read_ok := os.read_entire_file("templates/support.html")
-        if read_ok {
-            return string(content)
-        }
-    case "/contact":
-        content, read_ok := os.read_entire_file("templates/contact.html")
-        if read_ok {
-            return string(content)
-        }
-    }
-    
-    // Default to home page if not found
-    content, read_ok := os.read_entire_file("templates/home.html")
-    if read_ok {
-        return string(content)
-    }
-    
-    return "<html><body><h1>404 - Page Not Found</h1></body></html>"
-}
 
 main :: proc() {
     endpoint := net.Endpoint{
