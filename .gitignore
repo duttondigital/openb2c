@@ -1,0 +1,5 @@
+*.bin
+*.bin.dSYM
+.direnv
+result
+node_modules
