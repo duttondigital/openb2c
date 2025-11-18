@@ -33,6 +33,9 @@
               odin
               ols
 
+              # database
+              sqlite
+
               # nix
               nixd
               alejandra
