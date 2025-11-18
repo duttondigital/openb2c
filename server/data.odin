@@ -16,12 +16,8 @@ News :: struct {
     slug:    string, // URL slug for individual news posts
 }
 
-// Sample data stored in memory
-PRODUCTIONS := [?]Production{
-    {1, "Carmen", "Bizet's passionate tale of love and jealousy set in 19th-century Spain. Our production brings new energy to this beloved classic.", "2024-06-15", "upcoming"},
-    {2, "The Magic Flute", "Mozart's enchanting fairy tale opera featuring spectacular staging and costumes. A perfect introduction to opera for newcomers.", "2024-08-20", "upcoming"},
-    {3, "La Traviata", "Verdi's heart-wrenching story of Violetta and Alfredo. Our intimate production highlights the emotional depth of this masterpiece.", "2024-03-10", "past"},
-}
+// Global database connection
+db: Database
 
 NEWS := [?]News{
     {1, "Winter Season Auditions Now Open", "We're excited to announce that auditions for our Spring 2025 Season are now open! This year's lineup promises to be our most ambitious yet.", "2024-12-01", "2024-12-01-winter-auditions"},
@@ -30,8 +26,21 @@ NEWS := [?]News{
     {4, "Season Announcement", "We are thrilled to announce our upcoming season featuring three amazing productions that showcase the best of opera.", "2024-01-15", ""},
 }
 
+init_database :: proc() -> bool {
+    db_result, ok := open_database("database/opera.db")
+    if !ok {
+        return false
+    }
+    db = db_result
+    return true
+}
+
+cleanup_database :: proc() {
+    close_database(&db)
+}
+
 get_productions :: proc() -> []Production {
-    return PRODUCTIONS[:]
+    return get_productions_from_db(&db)
 }
 
 get_news :: proc() -> []News {

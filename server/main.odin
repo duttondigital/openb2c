@@ -153,6 +153,13 @@ get_news_post_html :: proc(post_slug: string) -> string {
 
 
 main :: proc() {
+    // Initialize database
+    if !init_database() {
+        fmt.printf("Failed to initialize database\n")
+        return
+    }
+    defer cleanup_database()
+
     endpoint := net.Endpoint{
         address = ADDRESS,
         port = PORT,
