@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:net"
 import "core:strings"
 import "core:os"
+import "http"
 
 ADDRESS :: net.IP4_Address{127, 0, 0, 1}
 PORT :: 3000
@@ -58,35 +59,6 @@ generate_news_html :: proc() -> string {
     return news_html
 }
 
-render_page :: proc(title: string, content: string, active_page: string) -> string {
-    // Load layout template
-    layout_content, layout_ok := os.read_entire_file("templates/layout.html")
-    if !layout_ok {
-        return fmt.tprintf("<html><body><h1>%s</h1><div>%s</div></body></html>", title, content)
-    }
-    
-    // Load header fragment
-    header_content, header_ok := os.read_entire_file("templates/fragments/header.html")
-    header_html := "<header>Header not found</header>"
-    if header_ok {
-        header_html = string(header_content)
-    }
-    
-    // Load footer fragment  
-    footer_content, footer_ok := os.read_entire_file("templates/fragments/footer.html")
-    footer_html := "<footer>Footer not found</footer>"
-    if footer_ok {
-        footer_html = string(footer_content)
-    }
-    
-    // Process header with active page
-    processed_header := process_header_active_nav(header_html, active_page)
-    
-    // Compose the full page
-    full_title := title == "Duchy Opera" ? title : fmt.tprintf("%s - Duchy Opera", title)
-    return fmt.tprintf(string(layout_content), full_title, processed_header, content, footer_html)
-}
-
 process_header_active_nav :: proc(header: string, active_page: string) -> string {
     result := header
     
@@ -101,20 +73,13 @@ process_header_active_nav :: proc(header: string, active_page: string) -> string
     
     // Set the active page
     switch active_page {
-    case "home":
-        result, _ = strings.replace_all(result, `<li><a href="/" {{.HomeActive}}>Home</a></li>`, `<li><a href="/" class="active">Home</a></li>`)
-    case "about":
-        result, _ = strings.replace_all(result, `<li><a href="/about" {{.AboutActive}}>About</a></li>`, `<li><a href="/about" class="active">About</a></li>`)
-    case "whats-on":
-        result, _ = strings.replace_all(result, `<li><a href="/whats-on" {{.ProductionsActive}}>What's on</a></li>`, `<li><a href="/whats-on" class="active">What's on</a></li>`)
-    case "news":
-        result, _ = strings.replace_all(result, `<li><a href="/news" {{.NewsActive}}>News</a></li>`, `<li><a href="/news" class="active">News</a></li>`)
-    case "auditions":
-        result, _ = strings.replace_all(result, `<li><a href="/auditions" {{.AuditionsActive}}>Auditions</a></li>`, `<li><a href="/auditions" class="active">Auditions</a></li>`)
-    case "support":
-        result, _ = strings.replace_all(result, `<li><a href="/support" {{.SupportActive}}>Support</a></li>`, `<li><a href="/support" class="active">Support</a></li>`)
-    case "contact":
-        result, _ = strings.replace_all(result, `<li><a href="/contact" {{.ContactActive}}>Contact</a></li>`, `<li><a href="/contact" class="active">Contact</a></li>`)
+    case "home": result, _ = strings.replace_all(result, `<li><a href="/" {{.HomeActive}}>Home</a></li>`, `<li><a href="/" class="active">Home</a></li>`)
+    case "about": result, _ = strings.replace_all(result, `<li><a href="/about" {{.AboutActive}}>About</a></li>`, `<li><a href="/about" class="active">About</a></li>`)
+    case "whats-on": result, _ = strings.replace_all(result, `<li><a href="/whats-on" {{.ProductionsActive}}>What's on</a></li>`, `<li><a href="/whats-on" class="active">What's on</a></li>`)
+    case "news": result, _ = strings.replace_all(result, `<li><a href="/news" {{.NewsActive}}>News</a></li>`, `<li><a href="/news" class="active">News</a></li>`)
+    case "auditions": result, _ = strings.replace_all(result, `<li><a href="/auditions" {{.AuditionsActive}}>Auditions</a></li>`, `<li><a href="/auditions" class="active">Auditions</a></li>`)
+    case "support": result, _ = strings.replace_all(result, `<li><a href="/support" {{.SupportActive}}>Support</a></li>`, `<li><a href="/support" class="active">Support</a></li>`)
+    case "contact": result, _ = strings.replace_all(result, `<li><a href="/contact" {{.ContactActive}}>Contact</a></li>`, `<li><a href="/contact" class="active">Contact</a></li>`)
     }
     
     return result
@@ -161,8 +126,8 @@ main :: proc() {
     defer cleanup_database()
 
     endpoint := net.Endpoint{
-        address = ADDRESS,
-        port = PORT,
+      address = ADDRESS,
+      port = PORT,
     }
 
     socket, socket_err := net.listen_tcp(endpoint)
@@ -181,7 +146,30 @@ main :: proc() {
             continue
         }
 
-        handle_request(client)
+        req := http.receive(client)
+        fmt.printf("%s %s\n", req.method, req.path)
+
+        // Serve CSS file
+        if req.path == "/styles.css" {
+          css_content, read_ok := os.read_entire_file("styles.css")
+          if read_ok {
+            http.send(
+              client, 
+              body = string(css_content),
+              content_type = "text/css"
+            )
+          }
+        } else {
+          // Generate dynamic HTML based on requested path
+          html, html_ok := get_page_html(req.path)
+          assert(html_ok) 
+          http.send(
+            client, 
+            body = html,
+            content_type = "text/html"
+          )
+        }
+
         net.close(client)
     }
 }
