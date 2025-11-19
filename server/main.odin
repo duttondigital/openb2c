@@ -162,7 +162,10 @@ main :: proc() {
         } else {
           // Generate dynamic HTML based on requested path
           html, html_ok := get_page_html(req.path)
-          assert(html_ok) 
+          if !html_ok {
+            html = render_page("404 - Page Not Found", "<h1>404 - Page Not Found</h1>", "")
+          }
+
           http.send(
             client, 
             body = html,
