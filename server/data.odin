@@ -1,8 +1,6 @@
 package main
 
-import "core:fmt"
-import "core:strconv"
-import "sqlite"
+import "../sqlite"
 
 Production :: struct {
 	id:          int,
@@ -63,46 +61,14 @@ cleanup_database :: proc() {
 	sqlite.close(&db)
 }
 
-get_production_status :: proc(start_date: string, end_date: string) -> string {
-	return "upcoming"
+get_productions :: proc() -> (productions: [dynamic]Production) {
+	QUERY :: `SELECT * FROM production ORDER BY run_start_date DESC`
+	err := sqlite.query(&db, &productions, QUERY)
+	return
 }
 
-query_result_to_productions :: proc(result: sqlite.QueryResult) -> []Production {
-	productions := make([dynamic]Production, context.temp_allocator)
-
-	for row in result.rows {
-		if len(row) >= 11 {
-			id, _ := strconv.parse_int(row[0])
-			title := row[1]
-			composer := row[2]
-
-			description := fmt.tprintf("%s by %s", title, composer)
-			date := row[8] != "" ? row[8] : row[7]
-			status := get_production_status(row[7], row[8])
-
-			production := Production {
-				id          = id,
-				title       = title,
-				description = description,
-				date        = date,
-				status      = status,
-			}
-			append(&productions, production)
-		}
-	}
-
-	return productions[:]
-}
-
-get_productions :: proc() -> []Production {
-	QUERY :: "SELECT id, title, composer, conductor, director, venue, premiere_date, run_start_date, run_end_date, \"cast\", notes FROM production ORDER BY run_start_date DESC"
-	result, ok := sqlite.exec(&db, QUERY)
-	if !ok {
-		return nil
-	}
-	return query_result_to_productions(result)
-}
-
-get_news :: proc() -> []News {
-	return NEWS[:]
+get_news :: proc() -> (news: [dynamic]News) {
+	QUERY :: `SELECT * FROM news`
+	err := sqlite.query(&db, &news, QUERY)
+	return
 }

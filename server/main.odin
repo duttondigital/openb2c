@@ -93,20 +93,15 @@ process_header_active_nav :: proc(header: string, active_page: string) -> string
 	// Set the active page
 	//odinfmt: disable
 	switch active_page {
-	case "home":
-		result, _ = strings.replace_all(result, "{{.HomeActive}}", `class="active"`)
-	case "about":
-		result, _ = strings.replace_all(result, "{{.AboutActive}}", `class="active"`)
+	case "home": result, _ = strings.replace_all(result, "{{.HomeActive}}", `class="active"`)
+	case "about": result, _ = strings.replace_all(result, "{{.AboutActive}}", `class="active"`)
 	case "whats-on":
 		result, _ = strings.replace_all(result, "{{.ProductionsActive}}", `class="active"`)
-	case "news":
-		result, _ = strings.replace_all(result, "{{.NewsActive}}", `class="active"`)
+	case "news": result, _ = strings.replace_all(result, "{{.NewsActive}}", `class="active"`)
 	case "auditions":
 		result, _ = strings.replace_all(result, `{{.AuditionsActive}}`, `class="active"`)
-	case "support":
-		result, _ = strings.replace_all(result, `{{.SupportActive}}`, `class="active"`)
-	case "contact":
-		result, _ = strings.replace_all(result, `{{.ContactActive}}`, `class="active"`)
+	case "support": result, _ = strings.replace_all(result, `{{.SupportActive}}`, `class="active"`)
+	case "contact": result, _ = strings.replace_all(result, `{{.ContactActive}}`, `class="active"`)
 	}
 
 	return result
