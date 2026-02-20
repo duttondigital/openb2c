@@ -1,1 +1,1 @@
-(cd ./example/ && odin run ../server -out=server.bin)
+(cd ./example/ && odin run ../src/server -out=server.bin)
