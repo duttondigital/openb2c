@@ -19,6 +19,29 @@ body {
     flex-direction: column;
 }
 
+/* Skip Link */
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: black;
+    color: white;
+    text-decoration: none;
+    border-radius: 0 0 8px 8px;
+    z-index: 100;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Focus Styles */
+:focus-visible {
+    outline: 3px solid #005fcc;
+    outline-offset: 2px;
+}
+
 /* Layout */
 .container {
     max-width: 1200px;
@@ -59,13 +82,12 @@ p {
 
 .date {
     font-weight: bold;
-    color: #666;
+    color: #595959;
     font-size: 0.95rem;
 }
 
 /* Header */
 header {
-    /* border-bottom: 2px solid black; */
     padding: 20px 0;
 }
 
@@ -122,7 +144,7 @@ section:not(:last-child) {
 
 .page-header p {
     font-size: 1.25rem;
-    color: #666;
+    color: #595959;
 }
 
 /* Grid Layout */
@@ -159,6 +181,11 @@ section:not(:last-child) {
     margin-bottom: 1.25rem;
 }
 
+.card-list-item {
+    text-align: left;
+    margin-bottom: 2rem;
+}
+
 /* Buttons */
 .btn {
     display: inline-block;
@@ -177,6 +204,51 @@ section:not(:last-child) {
 
 .btn:hover {
     background-color: #333;
+}
+
+.btn-outline {
+    background-color: transparent;
+    color: black;
+    border: 2px solid black;
+}
+
+.btn-outline:hover {
+    background-color: black;
+    color: white;
+}
+
+/* Contact Info */
+.contact-info p {
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.contact-info a {
+    color: black;
+}
+
+/* Social Links */
+.social-links {
+    list-style: none;
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin: 1rem 0;
+}
+
+.social-links a {
+    color: black;
+    text-decoration: none;
+    font-size: 1.1rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid black;
+    border-radius: 6px;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.social-links a:hover {
+    background-color: black;
+    color: white;
 }
 
 /* Footer */
@@ -214,5 +286,10 @@ footer p {
     .grid {
         grid-template-columns: 1fr;
         gap: 1.5rem;
+    }
+
+    .social-links {
+        flex-direction: column;
+        align-items: center;
     }
 }

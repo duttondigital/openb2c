@@ -1,5 +1,20 @@
 {% extends "base.html" %}
 
 {% block content %}
-{{ page.content | safe }}
+{% if page.extra.hero %}
+<section class="page-header">
+    <div class="container">
+        <h1>{{ page.extra.hero }}</h1>
+        {% if page.extra.subtitle %}
+        <p>{{ page.extra.subtitle }}</p>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<section>
+    <div class="container">
+        {{ page.content | safe }}
+    </div>
+</section>
 {% endblock %}

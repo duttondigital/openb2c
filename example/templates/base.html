@@ -3,35 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if page.title and page.title != "Duchy Opera" %}{{ page.title }} - Duchy Opera{% elif section.title and section.title != "Duchy Opera" %}{{ section.title }} - Duchy Opera{% else %}Duchy Opera{% endif %}</title>
+    <title>{% if page.title and page.title != config.title %}{{ page.title }} - {{ config.title }}{% elif section.title and section.title != config.title %}{{ section.title }} - {{ config.title }}{% else %}{{ config.title }}{% endif %}</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <header>
       <div class="container">
         <div class="header-content">
-          <a href="/" class="logo"><img src="/logo.png" alt="Duchy Opera"></a>
-          <nav>
+          <a href="/" class="logo">
+            <img src="{{ config.extra.logo }}" alt="{{ config.extra.logo_alt }}">
+          </a>
+          <nav aria-label="Main navigation">
             <ul>
-              <li><a href="/" {% if current_path == "/" %}class="active"{% endif %}>Home</a></li>
-              <li><a href="/about/" {% if current_path is starting_with("/about") %}class="active"{% endif %}>About</a></li>
-              <li><a href="/news/" {% if current_path is starting_with("/news") %}class="active"{% endif %}>News</a></li>
-              <li><a href="/support/" {% if current_path is starting_with("/support") %}class="active"{% endif %}>Support</a></li>
-              <li><a href="/contact/" {% if current_path is starting_with("/contact") %}class="active"{% endif %}>Contact</a></li>
+              {% for item in config.extra.nav %}
+              <li>
+                <a href="{{ item.url }}"
+                  {% if current_path == item.url or (item.url != "/" and current_path is starting_with(item.url)) %}
+                    class="active" aria-current="page"
+                  {% endif %}
+                >{{ item.label }}</a>
+              </li>
+              {% endfor %}
             </ul>
           </nav>
         </div>
       </div>
     </header>
 
-    <main>
+    <main id="main-content">
         {% block content %}{% endblock %}
     </main>
 
     <footer>
       <div class="container">
-        <p>&copy; 2025 Duchy Opera Trust Ltd. All rights reserved.</p>
-        <p>Duchy Opera Trust Ltd is a Registered Charity No 285212 and a company limited by guarantee in England No 1639019</p>
+        <p>&copy; {{ config.extra.copyright_year }} {{ config.extra.legal_name }}. All rights reserved.</p>
+        {% for line in config.extra.legal_lines %}
+        <p>{{ line }}</p>
+        {% endfor %}
       </div>
     </footer>
 </body>

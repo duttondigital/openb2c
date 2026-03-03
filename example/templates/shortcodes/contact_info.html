@@ -1,0 +1,11 @@
+<div class="contact-info">
+    {% if config.extra.email %}
+    <p><strong>Email:</strong> <a href="mailto:{{ config.extra.email }}">{{ config.extra.email }}</a></p>
+    {% endif %}
+    {% if config.extra.phone %}
+    <p><strong>Phone:</strong> <a href="tel:{{ config.extra.phone | replace(from=" ", to="") }}">{{ config.extra.phone }}</a></p>
+    {% endif %}
+    {% if config.extra.address %}
+    <p><strong>Address:</strong> {{ config.extra.address }}</p>
+    {% endif %}
+</div>

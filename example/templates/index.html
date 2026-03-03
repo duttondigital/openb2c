@@ -3,8 +3,10 @@
 {% block content %}
 <section class="page-header">
     <div class="container">
-        <h1>The Cornish Opera Company</h1>
-        <p>A vibrant community opera company bringing exceptional performances to our local community</p>
+        <h1>{{ config.extra.tagline }}</h1>
+        {% if config.description %}
+        <p>{{ config.description }}</p>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

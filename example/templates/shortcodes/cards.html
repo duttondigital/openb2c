@@ -1,0 +1,11 @@
+<div class="grid">
+    {% set cards = body | split(pat="\n---\n") %}
+    {% for card in cards %}
+    {% set card_trimmed = card | trim %}
+    {% if card_trimmed %}
+    <div class="card">
+        {{ card_trimmed | markdown | safe }}
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
