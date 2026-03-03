@@ -1,25 +1,4 @@
 +++
 title = "Support"
+template = "support.html"
 +++
-
-<section>
-    <div class="container">
-        <h2>Support Duchy Opera</h2>
-        <p>
-            Help us continue bringing exceptional opera to our community. Your support makes our performances possible and helps us grow our impact.
-        </p>
-
-        <div class="grid">
-            <div class="card">
-                <h3>Become a Patron</h3>
-                <p>Join our community of supporters and receive exclusive benefits and behind-the-scenes access.</p>
-                <a href="/contact" class="btn">Learn More</a>
-            </div>
-            <div class="card">
-                <h3>Corporate Sponsorship</h3>
-                <p>Partner with us to support the arts in our community while gaining valuable exposure.</p>
-                <a href="/contact" class="btn">Sponsor Us</a>
-            </div>
-        </div>
-    </div>
-</section>
