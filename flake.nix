@@ -46,6 +46,9 @@
               odin
               ols
 
+              # SSG
+              zola
+
               # database
               sqlite
 

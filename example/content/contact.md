@@ -1,10 +1,14 @@
++++
+title = "Contact"
++++
+
 <section>
     <div class="container">
         <h2>Get In Touch</h2>
         <p>
             We'd love to hear from you! Whether you're interested in attending a performance, joining our company, or supporting our mission, please reach out.
         </p>
-        
+
         <div class="grid">
             <div class="card">
                 <h3>Contact Information</h3>

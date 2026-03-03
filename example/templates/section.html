@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+    <div class="container">
+        <h2>{{ section.title }}</h2>
+        {% for page in section.pages %}
+        <div class="card" style="margin-bottom: 2rem;">
+            <h3><a href="{{ page.permalink }}">{{ page.title }}</a></h3>
+            <p class="date">{{ page.date | date(format="%B %e, %Y") }}</p>
+            <p>{{ page.summary | default(value="") }}</p>
+            <a href="{{ page.permalink }}" class="btn">Read More</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

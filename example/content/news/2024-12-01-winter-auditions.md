@@ -1,6 +1,7 @@
-# Winter Season Auditions Now Open
-
-**Published: December 1, 2024**
++++
+title = "Winter Season Auditions Now Open"
+date = 2024-12-01
++++
 
 We're excited to announce that auditions for our **Spring 2025 Season** are now open! This year's lineup promises to be our most ambitious yet, featuring both beloved classics and exciting contemporary works.
 
@@ -30,8 +31,8 @@ Our orchestra is growing! We're particularly seeking:
 - **Callbacks**: January 22-24, 2025
 
 ### Where
-**Duchy Community Centre**  
-123 Main Street, Duchy  
+**Duchy Community Centre**
+123 Main Street, Duchy
 *Rehearsal Room A*
 
 ### What to Prepare

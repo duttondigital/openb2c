@@ -1,10 +1,14 @@
++++
+title = "About"
++++
+
 <section>
     <div class="container">
         <h2>About Duchy Opera</h2>
         <p>
             Duchy Opera is a passionate community opera company dedicated to bringing world-class operatic performances to our region. Our talented cast and crew work together to create memorable experiences that celebrate the beauty and drama of opera.
         </p>
-        
+
         <div class="grid">
             <div class="card">
                 <h3>Our Mission</h3>

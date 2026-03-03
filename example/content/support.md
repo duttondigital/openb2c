@@ -1,10 +1,14 @@
++++
+title = "Support"
++++
+
 <section>
     <div class="container">
         <h2>Support Duchy Opera</h2>
         <p>
             Help us continue bringing exceptional opera to our community. Your support makes our performances possible and helps us grow our impact.
         </p>
-        
+
         <div class="grid">
             <div class="card">
                 <h3>Become a Patron</h3>

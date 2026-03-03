@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if page.title and page.title != "Duchy Opera" %}{{ page.title }} - Duchy Opera{% elif section.title and section.title != "Duchy Opera" %}{{ section.title }} - Duchy Opera{% else %}Duchy Opera{% endif %}</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header>
+      <div class="container">
+        <div class="header-content">
+          <a href="/" class="logo"><img src="/logo.png" alt="Duchy Opera"></a>
+          <nav>
+            <ul>
+              <li><a href="/" {% if current_path == "/" %}class="active"{% endif %}>Home</a></li>
+              <li><a href="/about/" {% if current_path is starting_with("/about") %}class="active"{% endif %}>About</a></li>
+              <li><a href="/news/" {% if current_path is starting_with("/news") %}class="active"{% endif %}>News</a></li>
+              <li><a href="/support/" {% if current_path is starting_with("/support") %}class="active"{% endif %}>Support</a></li>
+              <li><a href="/contact/" {% if current_path is starting_with("/contact") %}class="active"{% endif %}>Contact</a></li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+      <div class="container">
+        <p>&copy; 2025 Duchy Opera Trust Ltd. All rights reserved.</p>
+        <p>Duchy Opera Trust Ltd is a Registered Charity No 285212 and a company limited by guarantee in England No 1639019</p>
+      </div>
+    </footer>
+</body>
+</html>

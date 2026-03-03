@@ -76,10 +76,13 @@ header {
 }
 
 .logo {
-    font-size: 2rem;
-    /* font-weight: bold; */
-    color: black;
     text-decoration: none;
+    display: flex;
+    align-items: center;
+}
+
+.logo img {
+    height: 2.5rem;
 }
 
 nav ul {

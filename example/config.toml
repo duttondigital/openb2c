@@ -1,0 +1,4 @@
+base_url = "http://localhost:3070"
+title = "Duchy Opera"
+compile_sass = false
+build_search_index = false
