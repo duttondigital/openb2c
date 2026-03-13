@@ -19,20 +19,6 @@
           f {
             pkgs = import nixpkgs {
               inherit system;
-              config.allowUnfree = true;
-              overlays = [
-                (final: prev: {
-                  ols = prev.ols.overrideAttrs (old: {
-                    version = "0-unstable-2026-02-12";
-                    src = prev.fetchFromGitHub {
-                      owner = "DanielGavin";
-                      repo = "ols";
-                      rev = "efc48e61d6112a8e545a1d07d1cea9ee99746d88";
-                      hash = "sha256-3UoVMQuUol7vfSM57mj644XZ1CKmTz7+VuDSETT9NSE=";
-                    };
-                  });
-                })
-              ];
             };
           }
       );
@@ -42,12 +28,8 @@
         with pkgs; {
           default = mkShell {
             packages = [
-              # odin
-              odin
-              ols
-
-              # SSG
-              zola
+              # runtime
+              bun
 
               # database
               sqlite
