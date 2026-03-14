@@ -29,6 +29,9 @@
 - [ ] Resource authorization (customers can only access their own tickets/transactions)
 - [ ] Rate limiting on identity endpoints (prevent challenge spam)
 
+## Identity
+- [x] Auto-create customer on first authenticated request (ensureCustomer)
+
 ## Technical Debt
 - [ ] Unique constraints on junction tables (performance_artist, transaction_ticket)
 - [ ] Fix async init race (await initRegistryKeys before serving requests)

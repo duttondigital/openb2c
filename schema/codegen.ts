@@ -377,6 +377,22 @@ export interface IdentityContext {
   email: string;
   publicKey: string;
   certificate: Certificate;
+  customerId: number;
+}
+
+// Ensure customer exists for identity, create if not
+export function ensureCustomer(db: Database, email: string): number {
+  const existing = db.query("SELECT id FROM customer WHERE email = ?").get(email) as { id: number } | null;
+  if (existing) return existing.id;
+
+  // Auto-create customer on first authenticated request
+  const result = db.query(\`
+    INSERT INTO customer (name, email, customer_type)
+    VALUES (?, ?, 'individual')
+    RETURNING id
+  \`).get(email, email) as { id: number };
+
+  return result.id;
 }
 
 // Registry keypair - in production, load from secure storage
@@ -1018,7 +1034,9 @@ const server = Bun.serve({
           if (!identity) {
             return Response.json({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
           }
-          // identity.email is now authenticated
+          // Ensure customer record exists for this identity
+          const customerId = S.ensureCustomer(db, identity.email);
+          log("debug", "authenticated", { email: identity.email, customerId });
         } catch {
           return Response.json({ error: "invalid certificate format", code: "invalid" }, { status: 401 });
         }
@@ -1543,6 +1561,61 @@ describe("Identity Auth", () => {
     expect(res.ok).toBe(true);
     const data = await res.json();
     expect(data.items).toBeDefined();
+  });
+
+  test("auto-creates customer on first auth", async () => {
+    // Use a fresh email that has no customer record
+    const freshKeypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const freshPubBytes = await crypto.subtle.exportKey("raw", freshKeypair.publicKey);
+    const freshPubHex = Array.from(new Uint8Array(freshPubBytes)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // Get certificate for new identity
+    const challengeRes = await fetch(AUTH_URL + "/identity/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "newuser@autocreate.test", publicKey: freshPubHex }),
+    });
+    const { challengeId, code } = await challengeRes.json();
+    const signature = await crypto.subtle.sign("Ed25519", freshKeypair.privateKey, new TextEncoder().encode(code));
+    const sigHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const verifyRes = await fetch(AUTH_URL + "/identity/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challengeId, code, signature: sigHex }),
+    });
+    const freshCert = (await verifyRes.json()).certificate;
+
+    // Make authenticated request - should auto-create customer
+    const timestamp = Date.now().toString();
+    const message = \`GET /api/customers \${timestamp}\`;
+    const reqSig = await crypto.subtle.sign("Ed25519", freshKeypair.privateKey, new TextEncoder().encode(message));
+    const reqSigHex = Array.from(new Uint8Array(reqSig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    await fetch(AUTH_URL + "/api/customers", {
+      headers: {
+        "X-Certificate": JSON.stringify(freshCert),
+        "X-Timestamp": timestamp,
+        "X-Signature": reqSigHex,
+      },
+    });
+
+    // Check customer was created with that email
+    const timestamp2 = Date.now().toString();
+    const message2 = \`GET /api/customers \${timestamp2}\`;
+    const reqSig2 = await crypto.subtle.sign("Ed25519", freshKeypair.privateKey, new TextEncoder().encode(message2));
+    const reqSigHex2 = Array.from(new Uint8Array(reqSig2)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const listRes = await fetch(AUTH_URL + "/api/customers?email=newuser@autocreate.test", {
+      headers: {
+        "X-Certificate": JSON.stringify(freshCert),
+        "X-Timestamp": timestamp2,
+        "X-Signature": reqSigHex2,
+      },
+    });
+    const listData = await listRes.json();
+    expect(listData.items.length).toBe(1);
+    expect(listData.items[0].email).toBe("newuser@autocreate.test");
+    expect(listData.items[0].customer_type).toBe("individual");
   });
 
   test("invalid signature rejected", async () => {
