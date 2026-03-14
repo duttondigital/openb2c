@@ -4,28 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Duchy Opera - Live Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pathway+Extreme:wght@300;400;500;800&display=swap" rel="stylesheet">
   <style>
-    * {
+    *, *::before, *::after {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
 
     :root {
-      --bg: #0a0a0f;
-      --fg: #f0f0f5;
-      --accent: #6366f1;
-      --accent-dim: #4f46e5;
-      --muted: #71717a;
-      --surface: #18181b;
-      --success: #22c55e;
+      --bg: #0b0b0b;
+      --fg: #e8e8e8;
+      --accent: #fff;
+      --accent-dim: rgba(255, 255, 255, 0.06);
+      --muted: #777;
+      --surface: #1e1e1e;
+      --success: #e8e8e8;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg);
       color: var(--fg);
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
     }
 
     .container {
@@ -57,7 +61,7 @@
       content: '';
       width: 8px;
       height: 8px;
-      background: var(--success);
+      background: var(--fg);
       border-radius: 50%;
       animation: pulse 2s infinite;
     }
@@ -123,12 +127,13 @@
       letter-spacing: 0.05em;
       padding: 0.25rem 0.5rem;
       border-radius: 0.25rem;
-      background: var(--accent-dim);
-      color: white;
+      border: 1px solid var(--muted);
+      color: var(--muted);
     }
 
     .booking-card .client.mcp {
-      background: var(--success);
+      border-color: var(--fg);
+      color: var(--fg);
     }
 
     .empty {
@@ -170,11 +175,11 @@
     }
 
     .event-option:hover {
-      border-color: var(--accent-dim);
+      border-color: var(--muted);
     }
 
     .event-option.selected {
-      border-color: var(--accent);
+      border-color: var(--fg);
     }
 
     .event-option h4 {
@@ -190,7 +195,7 @@
     .event-option .price {
       font-size: 1.1rem;
       font-weight: 600;
-      color: var(--accent);
+      color: var(--fg);
       margin-top: 0.5rem;
     }
 
@@ -212,7 +217,7 @@
 
     input:focus {
       outline: none;
-      border-color: var(--accent);
+      border-color: var(--fg);
     }
 
     input::placeholder {
@@ -220,19 +225,19 @@
     }
 
     button {
-      background: var(--accent);
+      background: var(--fg);
       border: none;
       border-radius: 0.5rem;
       padding: 1rem;
-      color: white;
+      color: var(--bg);
       font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: opacity 0.2s;
     }
 
     button:hover {
-      background: var(--accent-dim);
+      opacity: 0.85;
     }
 
     button:disabled {
@@ -241,25 +246,48 @@
     }
 
     .success-msg {
-      background: rgba(34, 197, 94, 0.15);
-      border: 1px solid var(--success);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--fg);
       border-radius: 0.5rem;
       padding: 1rem;
-      color: var(--success);
+      color: var(--fg);
       text-align: center;
       animation: slideIn 0.3s ease;
     }
 
-    /* Header */
-    .logo {
+    /* Logo */
+    .corner-logo {
       position: fixed;
       top: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      font-weight: 700;
-      font-size: 0.9rem;
-      color: var(--muted);
-      letter-spacing: 0.1em;
+      left: 1.5rem;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .corner-logo svg {
+      height: 1.6em;
+      width: auto;
+      display: block;
+    }
+
+    .corner-logo .logo-text {
+      letter-spacing: 0.08em;
+      font-size: 0.8rem;
+      font-weight: 300;
+      font-family: 'Pathway Extreme', sans-serif;
+      text-transform: uppercase;
+      line-height: 1.1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .corner-logo .logo-stretch {
+      display: block;
+      letter-spacing: 0.12em;
     }
 
     /* Responsive */
@@ -276,7 +304,13 @@
   </style>
 </head>
 <body>
-  <div class="logo">DUCHY OPERA</div>
+  <a class="corner-logo" href="https://dutton.digital">
+    <svg viewBox="-1 -1 23 23" fill="none" aria-hidden="true">
+      <path d="M 1,0 L 8,0 C 15,0 15,14 8,14 L 1,14 A 1,1 0 0,1 0,13 L 0,1 A 1,1 0 0,1 1,0 Z" stroke="white" stroke-width="1.2" fill="none"/>
+      <path d="M 7,7 L 14,7 C 21,7 21,21 14,21 L 7,21 A 1,1 0 0,1 6,20 L 6,8 A 1,1 0 0,1 7,7 Z" stroke="white" stroke-width="1.2" fill="none"/>
+    </svg>
+    <div class="logo-text"><span>Dutton</span><span class="logo-stretch">Digital</span></div>
+  </a>
 
   <div class="container">
     <!-- Live Bookings Feed -->
