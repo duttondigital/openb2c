@@ -31,6 +31,10 @@
 
 ## Identity
 - [x] Auto-create customer on first authenticated request (ensureCustomer)
+- [ ] Profile fields on identity registry (name, phone, accessibility, dob)
+- [ ] Scoped consent (business requests fields, user grants)
+- [ ] Profile sync (business fetches from registry, merges with local customer)
+- [ ] Age verification scope (confirms "over 18" without exposing DOB)
 
 ## Technical Debt
 - [ ] Unique constraints on junction tables (performance_artist, transaction_ticket)
