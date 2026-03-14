@@ -1374,6 +1374,164 @@ describe("MCP Protocol", () => {
   });
 ${mcpTests.join("")}
 });
+
+describe("Identity Auth", () => {
+  const AUTH_URL = "http://localhost:3087";
+
+  let authServer: Subprocess;
+  let clientPrivateKey: CryptoKey;
+  let clientPublicKeyHex: string;
+  let registryPubKey: string;
+  let certificate: { email: string; publicKey: string; issuedAt: string; expiresAt: string; signature: string };
+
+  beforeAll(async () => {
+    // Clean test db for auth tests
+    try { unlinkSync("test-auth.db"); } catch {}
+
+    // Start auth-enabled server
+    authServer = spawn({
+      cmd: ["bun", "run", "src/generated/server.ts"],
+      env: { ...process.env, PORT: "3087", DB_PATH: "test-auth.db", AUTH_ENABLED: "true" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await new Promise(r => setTimeout(r, 500));
+
+    // Generate client keypair
+    const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    clientPrivateKey = keypair.privateKey;
+    const pubBytes = await crypto.subtle.exportKey("raw", keypair.publicKey);
+    clientPublicKeyHex = Array.from(new Uint8Array(pubBytes)).map(b => b.toString(16).padStart(2, "0")).join("");
+  });
+
+  afterAll(() => {
+    authServer?.kill();
+    try { unlinkSync("test-auth.db"); } catch {}
+  });
+
+  test("GET /identity/public-key returns registry key", async () => {
+    const res = await fetch(AUTH_URL + "/identity/public-key");
+    expect(res.ok).toBe(true);
+    const data = await res.json();
+    expect(data.publicKey).toBeDefined();
+    expect(data.publicKey.length).toBe(64); // 32 bytes hex
+    registryPubKey = data.publicKey;
+  });
+
+  test("POST /identity/challenge creates challenge", async () => {
+    const res = await fetch(AUTH_URL + "/identity/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "test@example.com", publicKey: clientPublicKeyHex }),
+    });
+    expect(res.ok).toBe(true);
+    const data = await res.json();
+    expect(data.challengeId).toBeDefined();
+    expect(data.code).toBeDefined();
+    expect(data.code.length).toBe(6);
+  });
+
+  test("POST /identity/verify issues certificate", async () => {
+    // Create fresh challenge
+    const challengeRes = await fetch(AUTH_URL + "/identity/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "user@test.com", publicKey: clientPublicKeyHex }),
+    });
+    const { challengeId, code } = await challengeRes.json();
+
+    // Sign the code with client private key
+    const signature = await crypto.subtle.sign(
+      "Ed25519", clientPrivateKey,
+      new TextEncoder().encode(code)
+    );
+    const sigHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // Verify and get certificate
+    const verifyRes = await fetch(AUTH_URL + "/identity/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challengeId, code, signature: sigHex }),
+    });
+    expect(verifyRes.ok).toBe(true);
+    const data = await verifyRes.json();
+    expect(data.certificate).toBeDefined();
+    expect(data.certificate.email).toBe("user@test.com");
+    expect(data.certificate.publicKey).toBe(clientPublicKeyHex);
+    expect(data.certificate.signature).toBeDefined();
+    certificate = data.certificate;
+  });
+
+  test("API rejects unauthenticated requests", async () => {
+    const res = await fetch(AUTH_URL + "/api/customers");
+    expect(res.status).toBe(401);
+  });
+
+  test("API accepts certificate auth", async () => {
+    // Need valid certificate first
+    if (!certificate) {
+      const challengeRes = await fetch(AUTH_URL + "/identity/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "api@test.com", publicKey: clientPublicKeyHex }),
+      });
+      const { challengeId, code } = await challengeRes.json();
+      const signature = await crypto.subtle.sign("Ed25519", clientPrivateKey, new TextEncoder().encode(code));
+      const sigHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
+      const verifyRes = await fetch(AUTH_URL + "/identity/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId, code, signature: sigHex }),
+      });
+      certificate = (await verifyRes.json()).certificate;
+    }
+
+    // Sign request
+    const timestamp = Date.now().toString();
+    const message = \`GET /api/customers \${timestamp}\`;
+    const reqSig = await crypto.subtle.sign("Ed25519", clientPrivateKey, new TextEncoder().encode(message));
+    const reqSigHex = Array.from(new Uint8Array(reqSig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const res = await fetch(AUTH_URL + "/api/customers", {
+      headers: {
+        "X-Certificate": JSON.stringify(certificate),
+        "X-Timestamp": timestamp,
+        "X-Signature": reqSigHex,
+      },
+    });
+    expect(res.ok).toBe(true);
+    const data = await res.json();
+    expect(data.items).toBeDefined();
+  });
+
+  test("invalid signature rejected", async () => {
+    const timestamp = Date.now().toString();
+    const res = await fetch(AUTH_URL + "/api/customers", {
+      headers: {
+        "X-Certificate": JSON.stringify(certificate),
+        "X-Timestamp": timestamp,
+        "X-Signature": "00".repeat(64), // invalid sig
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("expired timestamp rejected", async () => {
+    const timestamp = (Date.now() - 10 * 60 * 1000).toString(); // 10 min ago
+    const message = \`GET /api/customers \${timestamp}\`;
+    const reqSig = await crypto.subtle.sign("Ed25519", clientPrivateKey, new TextEncoder().encode(message));
+    const reqSigHex = Array.from(new Uint8Array(reqSig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const res = await fetch(AUTH_URL + "/api/customers", {
+      headers: {
+        "X-Certificate": JSON.stringify(certificate),
+        "X-Timestamp": timestamp,
+        "X-Signature": reqSigHex,
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+});
 `;
 }
 
