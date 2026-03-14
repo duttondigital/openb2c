@@ -228,6 +228,46 @@ export interface Effect {
 export interface OpResult<D> extends Result<D> {
   effects?: Effect[];
 }
+
+export interface ListOptions {
+  limit?: number;
+  offset?: number;
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+const EMAIL_RE = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+const UK_POSTCODE_RE = /^[A-Z]{1,2}[0-9][0-9A-Z]?\\s?[0-9][A-Z]{2}$/i;
+const UK_PHONE_RE = /^(\\+44|0)[0-9]{10,11}$/;
+const DATE_RE = /^\\d{4}-\\d{2}-\\d{2}$/;
+const TIME_RE = /^\\d{2}:\\d{2}(:\\d{2})?$/;
+
+export function validateEmail(v: string): boolean { return EMAIL_RE.test(v); }
+export function validatePostcode(v: string): boolean { return UK_POSTCODE_RE.test(v); }
+export function validatePhone(v: string): boolean { return UK_PHONE_RE.test(v.replace(/\\s/g, "")); }
+export function validateDate(v: string): boolean { return DATE_RE.test(v); }
+export function validateTime(v: string): boolean { return TIME_RE.test(v); }
+
+function validate(input: Record<string, unknown>): string | null {
+  if (input.email !== undefined && typeof input.email === "string" && !validateEmail(input.email)) {
+    return "invalid email format";
+  }
+  if (input.postcode !== undefined && typeof input.postcode === "string" && !validatePostcode(input.postcode)) {
+    return "invalid UK postcode";
+  }
+  if (input.phone !== undefined && typeof input.phone === "string" && !validatePhone(input.phone)) {
+    return "invalid UK phone number";
+  }
+  if (input.date !== undefined && typeof input.date === "string" && !validateDate(input.date)) {
+    return "invalid date format (YYYY-MM-DD)";
+  }
+  if (input.time !== undefined && typeof input.time === "string" && !validateTime(input.time)) {
+    return "invalid time format (HH:MM)";
+  }
+  return null;
+}
 `;
 }
 
@@ -248,13 +288,23 @@ export function find${Entity}ById(db: Database, id: number): T.${Entity} | null 
   return db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
 }
 
-export function findAll${Entity}s(db: Database): T.${Entity}[] {
-  return db.query("SELECT * FROM ${tableName} ORDER BY id").all() as T.${Entity}[];
+export function findAll${Entity}s(db: Database, opts: ListOptions = {}): T.${Entity}[] {
+  const limit = opts.limit ?? 100;
+  const offset = opts.offset ?? 0;
+  return db.query("SELECT * FROM ${tableName} ORDER BY id LIMIT ? OFFSET ?").all(limit, offset) as T.${Entity}[];
+}
+
+export function count${Entity}s(db: Database): number {
+  return (db.query("SELECT COUNT(*) as n FROM ${tableName}").get() as { n: number }).n;
 }
 
 export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{ id: number }> {
   ${requiredCols.length > 0 ? `// Validate required fields
   ${requiredCols.map(c => `if (input.${c} === undefined) return { ok: false, error: "${c} is required", code: "invalid" };`).join("\n  ")}` : ""}
+
+  // Validate formats
+  const validationError = validate(input as Record<string, unknown>);
+  if (validationError) return { ok: false, error: validationError, code: "invalid" };
 
   // Build dynamic insert - only include provided fields, let DB handle defaults
   const cols: string[] = [];
@@ -273,6 +323,10 @@ export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{
 export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>): Result<{ id: number }> {
   const existing = find${Entity}ById(db, id);
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
+
+  // Validate formats
+  const validationError = validate(input as Record<string, unknown>);
+  if (validationError) return { ok: false, error: validationError, code: "invalid" };
 
   const sets: string[] = [];
   const vals: unknown[] = [];
@@ -410,7 +464,14 @@ function genRoutes(schema: Schema): string {
     const ops = schema.operations[entity] || {};
 
     routes.push(`  // ${Entity}`);
-    routes.push(`  { method: "GET", path: "/api/${entity}s", handler: () => Response.json(S.findAll${Entity}s(db)) },`);
+    routes.push(`  { method: "GET", path: "/api/${entity}s", handler: (req) => {
+    const url = new URL(req.url);
+    const limit = parseInt(url.searchParams.get("limit") || "100");
+    const offset = parseInt(url.searchParams.get("offset") || "0");
+    const items = S.findAll${Entity}s(db, { limit, offset });
+    const total = S.count${Entity}s(db);
+    return Response.json({ items, total, limit, offset });
+  }},`);
     routes.push(`  { method: "GET", path: "/api/${entity}s/:id", handler: (_, p) => {
     const r = S.find${Entity}ById(db, +p.id);
     return r ? Response.json(r) : Response.json({ error: "not found" }, { status: 404 });
@@ -447,6 +508,14 @@ import * as S from "./services";
 
 const DB_PATH = process.env.DB_PATH || "opera.db";
 const PORT = parseInt(process.env.PORT || "3085");
+const LOG_LEVEL = process.env.LOG_LEVEL || "info";
+
+// Structured logging
+function log(level: string, msg: string, data?: Record<string, unknown>) {
+  if (level === "debug" && LOG_LEVEL !== "debug") return;
+  const entry = { ts: new Date().toISOString(), level, msg, ...data };
+  console.log(JSON.stringify(entry));
+}
 
 const db = new Database(DB_PATH);
 db.run("PRAGMA journal_mode = WAL");
@@ -493,17 +562,35 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 
 const server = Bun.serve({
   port: PORT,
-  fetch(req) {
+  async fetch(req) {
+    const start = performance.now();
     const url = new URL(req.url);
+
+    // Health check
+    if (url.pathname === "/health") {
+      return Response.json({ status: "ok", db: DB_PATH });
+    }
+
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
+      log("info", "not found", { method: req.method, path: url.pathname });
       return Response.json({ error: "not found" }, { status: 404 });
     }
-    return result.route.handler(req, result.params);
+
+    try {
+      const res = await result.route.handler(req, result.params);
+      const ms = (performance.now() - start).toFixed(1);
+      log("info", "request", { method: req.method, path: url.pathname, status: res.status, ms });
+      return res;
+    } catch (err) {
+      const ms = (performance.now() - start).toFixed(1);
+      log("error", "request failed", { method: req.method, path: url.pathname, error: String(err), ms });
+      return Response.json({ error: "internal error" }, { status: 500 });
+    }
   },
 });
 
-console.log(\`Duchy Opera listening on http://localhost:\${server.port}\`);
+log("info", "server started", { port: server.port, db: DB_PATH });
 `;
 }
 
@@ -580,9 +667,10 @@ function genIntegrationTests(schema: Schema): string {
     const fetched = await api.get(\`/${entity}s/\${id}\`);
     expect(fetched.id).toBe(id);
 
-    // List
+    // List (paginated)
     const list = await api.get("/${entity}s");
-    expect(Array.isArray(list)).toBe(true);
+    expect(Array.isArray(list.items)).toBe(true);
+    expect(typeof list.total).toBe("number");
 
     // Update
     const updated = await api.put(\`/${entity}s/\${id}\`, {});
@@ -789,8 +877,18 @@ afterAll(() => {
 
 describe("REST API", () => {
   test("health check", async () => {
-    const res = await fetch(BASE_URL + "/api/customers");
+    const res = await fetch(BASE_URL + "/health");
     expect(res.ok).toBe(true);
+    const data = await res.json();
+    expect(data.status).toBe("ok");
+  });
+
+  test("pagination", async () => {
+    const res = await api.get("/customers?limit=1&offset=0");
+    expect(res.items.length).toBeLessThanOrEqual(1);
+    expect(typeof res.total).toBe("number");
+    expect(res.limit).toBe(1);
+    expect(res.offset).toBe(0);
   });
 ${httpTests.join("")}
 });

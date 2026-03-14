@@ -1,68 +1,72 @@
 # Duchy Opera
 
-Modular open-source B2C platform for local Cornish businesses.
+Open-source B2C platform for Cornish charity opera company.
+
+See [todo.md](todo.md) for roadmap.
 
 ## Design Principles
 
-- **Narrow scope**: UK-only, GBP-only. No i18n complexity.
-- **Composable modules**: Mix-and-match components for any local B2C use case (retail, services, hospitality, etc.)
-- **Backend-first**: Client-agnostic API. Maximum accessibility, flexibility, and compatibility (web, mobile, LLM/agentic UX).
-- **Cheap to run**: Bun + SQLite. Single runtime, low resource usage.
-- **Open source**: GPL-3 licensed.
+- **Narrow scope**: UK-only, GBP-only. No i18n.
+- **Declarative**: Business logic in Nix, codegen to TypeScript.
+- **Backend-first**: REST + MCP APIs. Client-agnostic.
+- **Cheap to run**: Bun + SQLite. Single runtime.
 
 ## Structure
 
 ```
-src/
-├── core/            # Core framework
-│   └── module.ts    # Module contract, registry, schema migration
-├── modules/         # Composable business modules
-│   └── customer/    # Example: customer management
-└── server/          # HTTP server (Bun.serve)
-    └── index.ts     # Entry point, route matching
+schema/                 # Nix source of truth
+├── modules/*.nix       # Entity definitions (tables, operations)
+├── lib/expr.nix        # AST builders for guards
+├── base.nix            # Module options
+├── default.nix         # Composition
+└── codegen.ts          # Nix JSON → TypeScript
+
+src/generated/          # All generated (gitignored)
+├── schema.sql          # SQLite DDL
+├── types.ts            # TypeScript interfaces
+├── services.ts         # CRUD + operations
+├── server.ts           # REST API
+├── mcp.ts              # MCP server
+└── integration.test.ts # E2E tests
 ```
 
-## Module System
+## Adding a Module
 
-Each module implements a standard contract:
-
-```ts
-interface Module {
-  name: string;           // unique identifier e.g. "customer"
-  deps: string[];         // names of required modules
-  schema: string;         // SQL schema (CREATE TABLE statements)
-  init?: (db: Database) => void;  // module initialization
-  routes: Route[];        // HTTP routes
-}
-```
-
-### Creating a Module
-
-1. Create directory `src/modules/<name>/`
-2. Add files:
-   - `mod.ts` - Module definition with `getModule()` function
-   - `types.ts` - TypeScript interfaces
-   - `handlers.ts` - HTTP handlers
-
-3. Register in `src/server/index.ts`:
-   ```ts
-   import { getModule as myModule } from "../modules/mymodule/mod";
-   registry.register(myModule());
+1. Create `schema/modules/<name>.nix`:
+   ```nix
+   { config, lib, ... }:
+   let E = import ../lib/expr.nix;
+   in {
+     tables.<name> = {
+       id = { type = "integer"; pk = true; auto = true; };
+       # columns...
+     };
+     operations.<name> = {
+       myOp = {
+         guard = E.eq (E.f "status") (E.lit "pending");
+         set = { status = "active"; };
+         effects = [{ emit = "<name>.activated"; }];
+       };
+     };
+   }
    ```
 
-### Schema Tracking
+2. Import in `schema/default.nix`
 
-Schemas are tracked in `_modules` table. Rerunning applies only new modules.
+3. Run `bun codegen`
 
-## Development
+## Commands
 
 ```bash
-bun dev         # Run server (requires nix devshell via direnv or `nix develop`)
+bun codegen     # Regenerate from Nix
+bun dev         # REST server :3085
+bun mcp         # MCP server (stdio)
+bun test        # All tests
 ```
 
 ## Tech
 
 - **Runtime**: Bun
-- **Language**: TypeScript
-- **Database**: SQLite (`bun:sqlite`)
-- **Dev environment**: Nix flake
+- **Database**: SQLite
+- **Schema**: Nix
+- **Dev**: Nix flake
