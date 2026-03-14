@@ -14,12 +14,14 @@
 - [x] Structured JSON logging
 - [x] OpenAPI spec generation (openapi.json)
 - [x] Consistent error responses (error, code, details)
-- [x] API key auth (Bearer token, scopes, expiry)
+- [x] API key auth (Bearer token, scopes, for services)
 - [x] Schema dependency ordering (topological sort for FKs)
+- [x] Federated identity (Ed25519 keypair + email verification)
+- [x] Certificate-based auth (registry signs, any business verifies)
 
 ## Requires External Integration
 - [ ] Payment (Stripe)
-- [ ] Email notifications (SendGrid / Resend)
+- [ ] Email sending (for OTP delivery in production)
 - [ ] Webhook dispatch (effect handlers)
 
 ## Future

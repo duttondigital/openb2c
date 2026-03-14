@@ -351,6 +351,231 @@ export function verifyApiKey(db: Database, key: string): AuthContext | null {
 export function hasScope(ctx: AuthContext, required: string): boolean {
   return ctx.scopes.includes("*") || ctx.scopes.includes(required);
 }
+
+// ============================================================================
+// Identity (Federated Auth)
+// ============================================================================
+
+export interface Certificate {
+  email: string;
+  publicKey: string;
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
+export interface IdentityContext {
+  email: string;
+  publicKey: string;
+  certificate: Certificate;
+}
+
+// Registry keypair - in production, load from secure storage
+let registryPrivateKey: CryptoKey | null = null;
+let registryPublicKey: CryptoKey | null = null;
+
+export async function initRegistryKeys(privateKeyHex?: string): Promise<string> {
+  if (privateKeyHex) {
+    // Import existing key
+    const keyData = hexToBytes(privateKeyHex);
+    registryPrivateKey = await crypto.subtle.importKey(
+      "raw", keyData, { name: "Ed25519" }, false, ["sign"]
+    );
+    // Derive public key (Ed25519 public key is last 32 bytes of 64-byte private key or derived)
+    const publicKeyData = keyData.slice(32);
+    registryPublicKey = await crypto.subtle.importKey(
+      "raw", publicKeyData, { name: "Ed25519" }, true, ["verify"]
+    );
+    return bytesToHex(publicKeyData);
+  } else {
+    // Generate new keypair
+    const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    registryPrivateKey = keypair.privateKey;
+    registryPublicKey = keypair.publicKey;
+    const pubKeyBytes = await crypto.subtle.exportKey("raw", keypair.publicKey);
+    return bytesToHex(new Uint8Array(pubKeyBytes));
+  }
+}
+
+export async function getRegistryPublicKey(): Promise<string> {
+  if (!registryPublicKey) throw new Error("Registry keys not initialized");
+  const bytes = await crypto.subtle.exportKey("raw", registryPublicKey);
+  return bytesToHex(new Uint8Array(bytes));
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function generateOTP(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(3)))
+    .map(b => (b % 10).toString()).join("").padStart(6, "0");
+}
+
+export async function createChallenge(
+  db: Database,
+  email: string,
+  publicKey: string
+): Promise<{ challengeId: number; code: string }> {
+  const code = generateOTP();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+
+  const result = db.query(\`
+    INSERT INTO identity_challenge (email, code, public_key, expires_at)
+    VALUES (?, ?, ?, ?) RETURNING id
+  \`).get(email, code, publicKey, expiresAt) as { id: number };
+
+  return { challengeId: result.id, code };
+}
+
+export async function verifyChallenge(
+  db: Database,
+  challengeId: number,
+  code: string,
+  signature: string  // signature of the code, proves key ownership
+): Promise<Result<Certificate>> {
+  const challenge = db.query(\`
+    SELECT * FROM identity_challenge WHERE id = ? AND used = 0
+  \`).get(challengeId) as { email: string; code: string; public_key: string; expires_at: string } | null;
+
+  if (!challenge) {
+    return { ok: false, error: "invalid or used challenge", code: "invalid" };
+  }
+
+  if (new Date(challenge.expires_at) < new Date()) {
+    return { ok: false, error: "challenge expired", code: "invalid" };
+  }
+
+  if (challenge.code !== code) {
+    return { ok: false, error: "incorrect code", code: "invalid" };
+  }
+
+  // Verify signature proves ownership of private key
+  const publicKeyBytes = hexToBytes(challenge.public_key);
+  const publicKey = await crypto.subtle.importKey(
+    "raw", publicKeyBytes, { name: "Ed25519" }, false, ["verify"]
+  );
+
+  const valid = await crypto.subtle.verify(
+    "Ed25519", publicKey,
+    hexToBytes(signature),
+    new TextEncoder().encode(code)
+  );
+
+  if (!valid) {
+    return { ok: false, error: "invalid signature", code: "invalid" };
+  }
+
+  // Mark challenge as used
+  db.query("UPDATE identity_challenge SET used = 1 WHERE id = ?").run(challengeId);
+
+  // Upsert to registry
+  db.query(\`
+    INSERT INTO identity_registry (email, public_key)
+    VALUES (?, ?)
+    ON CONFLICT(email) DO UPDATE SET public_key = ?, verified_at = CURRENT_TIMESTAMP, revoked = 0
+  \`).run(challenge.email, challenge.public_key, challenge.public_key);
+
+  // Issue certificate
+  const cert = await issueCertificate(challenge.email, challenge.public_key);
+
+  return { ok: true, data: cert };
+}
+
+export async function issueCertificate(email: string, publicKey: string): Promise<Certificate> {
+  if (!registryPrivateKey) throw new Error("Registry keys not initialized");
+
+  const issuedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year
+
+  const payload = JSON.stringify({ email, publicKey, issuedAt, expiresAt });
+  const signature = await crypto.subtle.sign(
+    "Ed25519", registryPrivateKey,
+    new TextEncoder().encode(payload)
+  );
+
+  return {
+    email,
+    publicKey,
+    issuedAt,
+    expiresAt,
+    signature: bytesToHex(new Uint8Array(signature)),
+  };
+}
+
+export async function verifyCertificate(cert: Certificate, registryPubKeyHex: string): Promise<boolean> {
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      "raw", hexToBytes(registryPubKeyHex), { name: "Ed25519" }, false, ["verify"]
+    );
+
+    const payload = JSON.stringify({
+      email: cert.email,
+      publicKey: cert.publicKey,
+      issuedAt: cert.issuedAt,
+      expiresAt: cert.expiresAt,
+    });
+
+    const valid = await crypto.subtle.verify(
+      "Ed25519", publicKey,
+      hexToBytes(cert.signature),
+      new TextEncoder().encode(payload)
+    );
+
+    if (!valid) return false;
+    if (new Date(cert.expiresAt) < new Date()) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyRequest(
+  cert: Certificate,
+  registryPubKeyHex: string,
+  method: string,
+  path: string,
+  timestamp: string,
+  signature: string
+): Promise<IdentityContext | null> {
+  // 1. Verify certificate is valid and signed by registry
+  const certValid = await verifyCertificate(cert, registryPubKeyHex);
+  if (!certValid) return null;
+
+  // 2. Verify request signature using user's public key from cert
+  try {
+    const userPubKey = await crypto.subtle.importKey(
+      "raw", hexToBytes(cert.publicKey), { name: "Ed25519" }, false, ["verify"]
+    );
+
+    const message = \`\${method} \${path} \${timestamp}\`;
+    const valid = await crypto.subtle.verify(
+      "Ed25519", userPubKey,
+      hexToBytes(signature),
+      new TextEncoder().encode(message)
+    );
+
+    if (!valid) return null;
+
+    // 3. Check timestamp is recent (5 min window)
+    const ts = parseInt(timestamp);
+    const now = Date.now();
+    if (Math.abs(now - ts) > 5 * 60 * 1000) return null;
+
+    return { email: cert.email, publicKey: cert.publicKey, certificate: cert };
+  } catch {
+    return null;
+  }
+}
 `;
 }
 
@@ -630,6 +855,10 @@ const DB_PATH = process.env.DB_PATH || "opera.db";
 const PORT = parseInt(process.env.PORT || "3085");
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
+const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
+const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
+
+let registryPubKey: string;
 
 // Structured logging
 function log(level: string, msg: string, data?: Record<string, unknown>) {
@@ -648,6 +877,20 @@ for (const stmt of statements) {
   if (stmt.trim()) db.run(stmt);
 }
 
+// Initialize registry keys
+(async () => {
+  if (REGISTRY_PRIVATE_KEY) {
+    registryPubKey = await S.initRegistryKeys(REGISTRY_PRIVATE_KEY);
+    log("info", "loaded registry keys");
+  } else if (!REGISTRY_PUBLIC_KEY) {
+    registryPubKey = await S.initRegistryKeys();
+    log("info", "generated ephemeral registry keys", { publicKey: registryPubKey });
+  } else {
+    registryPubKey = REGISTRY_PUBLIC_KEY;
+    log("info", "using external registry");
+  }
+})();
+
 type Handler = (req: Request, params: Record<string, string>) => Response | Promise<Response>;
 
 interface Route {
@@ -657,6 +900,29 @@ interface Route {
 }
 
 const routes: Route[] = [
+  // Identity endpoints (no auth required)
+  { method: "GET", path: "/identity/public-key", handler: async () => {
+    return Response.json({ publicKey: registryPubKey });
+  }},
+  { method: "POST", path: "/identity/challenge", handler: async (req) => {
+    const { email, publicKey } = await req.json() as { email: string; publicKey: string };
+    if (!email || !publicKey) {
+      return Response.json({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
+    }
+    const result = await S.createChallenge(db, email, publicKey);
+    // In production, send result.code via email. For dev, return it.
+    log("info", "identity challenge created", { email, code: result.code });
+    return Response.json({ challengeId: result.challengeId, code: result.code }); // Remove code in prod!
+  }},
+  { method: "POST", path: "/identity/verify", handler: async (req) => {
+    const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };
+    const result = await S.verifyChallenge(db, challengeId, code, signature);
+    if (!result.ok) {
+      return Response.json(result, { status: 400 });
+    }
+    return Response.json({ certificate: result.data });
+  }},
+
 ${routes.join("\n")}];
 
 function matchRoute(method: string, path: string): { route: Route; params: Record<string, string> } | null {
@@ -692,21 +958,42 @@ const server = Bun.serve({
       return Response.json({ status: "ok", db: DB_PATH, auth: AUTH_ENABLED });
     }
 
-    // Auth check
-    if (AUTH_ENABLED && url.pathname.startsWith("/api/")) {
+    // Skip auth for identity endpoints
+    if (url.pathname.startsWith("/identity/")) {
+      // handled by routes
+    }
+    // Auth check for API endpoints
+    else if (AUTH_ENABLED && url.pathname.startsWith("/api/")) {
       const authHeader = req.headers.get("Authorization");
-      if (!authHeader?.startsWith("Bearer ")) {
+      const certHeader = req.headers.get("X-Certificate");
+      const sigHeader = req.headers.get("X-Signature");
+      const tsHeader = req.headers.get("X-Timestamp");
+
+      if (certHeader && sigHeader && tsHeader) {
+        // Certificate-based auth
+        try {
+          const cert = JSON.parse(certHeader) as S.Certificate;
+          const identity = await S.verifyRequest(cert, registryPubKey, req.method, url.pathname, tsHeader, sigHeader);
+          if (!identity) {
+            return Response.json({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
+          }
+          // identity.email is now authenticated
+        } catch {
+          return Response.json({ error: "invalid certificate format", code: "invalid" }, { status: 401 });
+        }
+      } else if (authHeader?.startsWith("Bearer ")) {
+        // API key auth (for services/integrations)
+        const key = authHeader.slice(7);
+        const auth = S.verifyApiKey(db, key);
+        if (!auth) {
+          return Response.json({ error: "invalid api key", code: "invalid" }, { status: 401 });
+        }
+        const requiredScope = req.method === "GET" ? "read" : "write";
+        if (!S.hasScope(auth, requiredScope)) {
+          return Response.json({ error: "insufficient scope", code: "invalid" }, { status: 403 });
+        }
+      } else {
         return Response.json({ error: "missing authorization", code: "invalid" }, { status: 401 });
-      }
-      const key = authHeader.slice(7);
-      const auth = S.verifyApiKey(db, key);
-      if (!auth) {
-        return Response.json({ error: "invalid api key", code: "invalid" }, { status: 401 });
-      }
-      // Check scope: GET = read, others = write
-      const requiredScope = req.method === "GET" ? "read" : "write";
-      if (!S.hasScope(auth, requiredScope)) {
-        return Response.json({ error: "insufficient scope", code: "invalid" }, { status: 403 });
       }
     }
 
