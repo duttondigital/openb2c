@@ -19,6 +19,24 @@
 - [x] Federated identity (Ed25519 keypair + email verification)
 - [x] Certificate-based auth (registry signs, any business verifies)
 
+## Security (Critical)
+- [ ] Hide OTP in production (env flag to exclude code from /identity/challenge response)
+- [ ] Exclude API key secrets from REST responses (filter `key` field from list/get)
+- [ ] Hash API keys (bcrypt/argon2, compare hashes only)
+
+## Security (High)
+- [ ] Enforce certificate revocation (check `identity_registry.revoked` in verifyRequest)
+- [ ] Resource authorization (customers can only access their own tickets/transactions)
+- [ ] Rate limiting on identity endpoints (prevent challenge spam)
+
+## Technical Debt
+- [ ] Unique constraints on junction tables (performance_artist, transaction_ticket)
+- [ ] Fix async init race (await initRegistryKeys before serving requests)
+- [ ] Request body size limits (prevent DoS via large JSON)
+- [ ] Schema indexes (declare in Nix, generate CREATE INDEX)
+- [ ] Migration system (evolve schema without data loss)
+- [ ] Split codegen.ts into smaller modules
+
 ## Requires External Integration
 - [ ] Payment (Stripe)
 - [ ] Email sending (for OTP delivery in production)
