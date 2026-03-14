@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Duchy Opera - Client-Agnostic B2C</title>
+  <title>OpenB2C</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pathway+Extreme:wght@300;400;500;800&display=swap" rel="stylesheet">
@@ -36,7 +36,8 @@
 
     /* Slides */
     .slide {
-      min-height: 100vh;
+      position: fixed;
+      inset: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -45,11 +46,13 @@
       opacity: 0;
       transform: translateY(20px);
       transition: opacity 0.6s ease, transform 0.6s ease;
+      pointer-events: none;
     }
 
     .slide.visible {
       opacity: 1;
       transform: translateY(0);
+      pointer-events: auto;
     }
 
     .slide h1 {
@@ -426,8 +429,8 @@
 
   <!-- Slide 0: Title -->
   <section class="slide" data-slide="0">
-    <h1>Client-Agnostic B2C</h1>
-    <h2>Building systems with longevity</h2>
+    <h1>OpenB2C</h1>
+    <h2>Open-source, client-agnostic commerce for small business</h2>
   </section>
 
   <!-- Slide 1: The Problem -->
@@ -603,27 +606,22 @@
     function showSlide(index) {
       if (index < 0 || index >= totalSlides) return;
 
+      currentSlide = index;
+      progress.style.width = ((index + 1) / totalSlides * 100) + '%';
+
       slides.forEach((slide, i) => {
         slide.classList.toggle('visible', i === index);
       });
 
-      currentSlide = index;
-      progress.style.width = ((index + 1) / totalSlides * 100) + '%';
-
-      // Trigger animations for current slide
-      const currentSlideEl = slides[index];
-
-      // Failure cards
-      currentSlideEl.querySelectorAll('.failure-card').forEach((card, i) => {
-        setTimeout(() => card.classList.add('visible'), parseInt(card.dataset.delay) || i * 200);
+      // Trigger child animations
+      const el = slides[index];
+      el.querySelectorAll('.failure-card').forEach((card) => {
+        setTimeout(() => card.classList.add('visible'), parseInt(card.dataset.delay) || 0);
+      });
+      el.querySelectorAll('.solution-row').forEach((row) => {
+        setTimeout(() => row.classList.add('visible'), parseInt(row.dataset.delay) || 0);
       });
 
-      // Solution rows
-      currentSlideEl.querySelectorAll('.solution-row').forEach((row, i) => {
-        setTimeout(() => row.classList.add('visible'), parseInt(row.dataset.delay) || i * 200);
-      });
-
-      // Update architecture diagram
       if (index === 5) {
         document.getElementById('client-web').classList.add('active');
       }
@@ -632,8 +630,10 @@
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
         showSlide(currentSlide + 1);
       } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
         showSlide(currentSlide - 1);
       }
     });
@@ -681,9 +681,7 @@
       status.className = 'status';
       status.textContent = 'Booking...';
 
-      // Simulate API call (or make real one if server running)
       try {
-        // For demo, simulate success
         await new Promise(r => setTimeout(r, 1000));
 
         document.getElementById('booking-form').style.display = 'none';
