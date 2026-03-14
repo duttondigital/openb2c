@@ -14,9 +14,10 @@
 - [x] Structured JSON logging
 - [x] OpenAPI spec generation (openapi.json)
 - [x] Consistent error responses (error, code, details)
+- [x] API key auth (Bearer token, scopes, expiry)
+- [x] Schema dependency ordering (topological sort for FKs)
 
 ## Requires External Integration
-- [ ] Auth (API keys / sessions)
 - [ ] Payment (Stripe)
 - [ ] Email notifications (SendGrid / Resend)
 - [ ] Webhook dispatch (effect handlers)

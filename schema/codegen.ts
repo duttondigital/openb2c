@@ -95,8 +95,35 @@ export function sqlType(col: Column): string {
 }
 
 export function genSQL(tables: Tables): string {
-  const stmts: string[] = [];
+  // Topological sort: tables with no FK deps first
+  const tableNames = Object.keys(tables);
+  const deps: Record<string, string[]> = {};
   for (const [table, cols] of Object.entries(tables)) {
+    deps[table] = [];
+    for (const c of Object.values(cols)) {
+      if (c.references) {
+        const match = c.references.match(/^(\w+)\(/);
+        if (match && match[1] !== table && tableNames.includes(match[1])) {
+          deps[table].push(match[1]);
+        }
+      }
+    }
+  }
+
+  const sorted: string[] = [];
+  const visited = new Set<string>();
+  function visit(t: string) {
+    if (visited.has(t) || !tables[t]) return;
+    visited.add(t);
+    for (const d of deps[t] || []) visit(d);
+    sorted.push(t);
+  }
+  for (const t of tableNames) visit(t);
+
+  const stmts: string[] = [];
+  for (const table of sorted) {
+    const cols = tables[table];
+    if (!cols) continue;
     const defs: string[] = [];
     for (const [col, c] of Object.entries(cols)) {
       defs.push(`    ${col} ${sqlType(c)}`);
@@ -284,6 +311,45 @@ function validate(input: Record<string, unknown>): string | null {
     return "invalid time format (HH:MM)";
   }
   return null;
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+
+export interface AuthContext {
+  keyId: number;
+  customerId: number | null;
+  scopes: string[];
+}
+
+export function generateApiKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return "do_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function verifyApiKey(db: Database, key: string): AuthContext | null {
+  const row = db.query(\`
+    SELECT id, customer_id, scopes, active, expires_at
+    FROM api_key WHERE key = ?
+  \`).get(key) as { id: number; customer_id: number | null; scopes: string; active: number; expires_at: string | null } | null;
+
+  if (!row || !row.active) return null;
+  if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+
+  // Update last_used_at
+  db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
+
+  return {
+    keyId: row.id,
+    customerId: row.customer_id,
+    scopes: row.scopes.split(",").map(s => s.trim()),
+  };
+}
+
+export function hasScope(ctx: AuthContext, required: string): boolean {
+  return ctx.scopes.includes("*") || ctx.scopes.includes(required);
 }
 `;
 }
@@ -563,6 +629,7 @@ import * as S from "./services";
 const DB_PATH = process.env.DB_PATH || "opera.db";
 const PORT = parseInt(process.env.PORT || "3085");
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
+const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 
 // Structured logging
 function log(level: string, msg: string, data?: Record<string, unknown>) {
@@ -620,9 +687,27 @@ const server = Bun.serve({
     const start = performance.now();
     const url = new URL(req.url);
 
-    // Health check
+    // Health check (no auth)
     if (url.pathname === "/health") {
-      return Response.json({ status: "ok", db: DB_PATH });
+      return Response.json({ status: "ok", db: DB_PATH, auth: AUTH_ENABLED });
+    }
+
+    // Auth check
+    if (AUTH_ENABLED && url.pathname.startsWith("/api/")) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return Response.json({ error: "missing authorization", code: "invalid" }, { status: 401 });
+      }
+      const key = authHeader.slice(7);
+      const auth = S.verifyApiKey(db, key);
+      if (!auth) {
+        return Response.json({ error: "invalid api key", code: "invalid" }, { status: 401 });
+      }
+      // Check scope: GET = read, others = write
+      const requiredScope = req.method === "GET" ? "read" : "write";
+      if (!S.hasScope(auth, requiredScope)) {
+        return Response.json({ error: "insufficient scope", code: "invalid" }, { status: 403 });
+      }
     }
 
     const result = matchRoute(req.method, url.pathname);
@@ -644,7 +729,7 @@ const server = Bun.serve({
   },
 });
 
-log("info", "server started", { port: server.port, db: DB_PATH });
+log("info", "server started", { port: server.port, db: DB_PATH, auth: AUTH_ENABLED });
 `;
 }
 
@@ -706,14 +791,22 @@ function genIntegrationTests(schema: Schema): string {
 
   // Generate HTTP tests
   const httpTests: string[] = [];
+  let testCounter = 0;
   for (const entity of entities) {
+    testCounter++;
     const ops = schema.operations[entity] || {};
-    const sample = sampleData[entity];
+    // Make test data unique to avoid conflicts with setup data
+    const testSample = { ...sampleData[entity] };
+    for (const [col, c] of Object.entries(schema.tables[entity])) {
+      if (c.unique && testSample[col] && typeof testSample[col] === "string") {
+        testSample[col] = `${testSample[col]}_test${testCounter}`;
+      }
+    }
 
     httpTests.push(`
   test("${entity} CRUD", async () => {
     // Create
-    const created = await api.post("/${entity}s", ${JSON.stringify(sample)});
+    const created = await api.post("/${entity}s", ${JSON.stringify(testSample)});
     expect(created.id).toBeDefined();
     const id = created.id;
 
@@ -735,11 +828,19 @@ function genIntegrationTests(schema: Schema): string {
     expect(deleted.deleted).toBe(true);
   });`);
 
-    // Operation tests
+    // Operation tests - use unique data
+    let opCounter = 0;
     for (const opName of Object.keys(ops)) {
+      opCounter++;
+      const opSample = { ...testSample };
+      for (const [col, c] of Object.entries(schema.tables[entity])) {
+        if (c.unique && opSample[col] && typeof opSample[col] === "string") {
+          opSample[col] = `${sampleData[entity][col]}_op${testCounter}_${opCounter}`;
+        }
+      }
       httpTests.push(`
   test("${entity} ${opName}", async () => {
-    const created = await api.post("/${entity}s", ${JSON.stringify(sample)});
+    const created = await api.post("/${entity}s", ${JSON.stringify(opSample)});
     const result = await api.post(\`/${entity}s/\${created.id}/${opName.replace(/_/g, "-")}\`, {}, false);
     // May fail due to guards, just verify endpoint responds
     expect(result).toBeDefined();
@@ -749,14 +850,22 @@ function genIntegrationTests(schema: Schema): string {
 
   // Generate MCP tests
   const mcpTests: string[] = [];
+  let mcpCounter = 0;
   for (const entity of entities) {
+    mcpCounter++;
     const ops = schema.operations[entity] || {};
-    const sample = sampleData[entity];
+    // Make MCP test data unique
+    const mcpSample = { ...sampleData[entity] };
+    for (const [col, c] of Object.entries(schema.tables[entity])) {
+      if (c.unique && mcpSample[col] && typeof mcpSample[col] === "string") {
+        mcpSample[col] = `${mcpSample[col]}_mcp${mcpCounter}`;
+      }
+    }
 
     mcpTests.push(`
   test("${entity} MCP tools", async () => {
     // Create via MCP
-    const created = await mcp.call("create_${entity}", ${JSON.stringify(sample)});
+    const created = await mcp.call("create_${entity}", ${JSON.stringify(mcpSample)});
     expect(created).toMatch(/\\"id\\":/);
     const id = JSON.parse(created).id;
 
@@ -773,11 +882,19 @@ function genIntegrationTests(schema: Schema): string {
     expect(deleted).toBe("Deleted");
   });`);
 
-    // Operation tests
+    // Operation tests - use unique data
+    let mcpOpCounter = 0;
     for (const opName of Object.keys(ops)) {
+      mcpOpCounter++;
+      const mcpOpSample = { ...mcpSample };
+      for (const [col, c] of Object.entries(schema.tables[entity])) {
+        if (c.unique && mcpOpSample[col] && typeof mcpOpSample[col] === "string") {
+          mcpOpSample[col] = `${sampleData[entity][col]}_mcpop${mcpCounter}_${mcpOpCounter}`;
+        }
+      }
       mcpTests.push(`
   test("${entity} ${opName} MCP", async () => {
-    const created = await mcp.call("create_${entity}", ${JSON.stringify(sample)});
+    const created = await mcp.call("create_${entity}", ${JSON.stringify(mcpOpSample)});
     const id = JSON.parse(created).id;
     const result = await mcp.call("${opName}_${entity}", { id });
     expect(result).toBeDefined();
@@ -897,10 +1014,10 @@ beforeAll(async () => {
   // Clean test db
   try { unlinkSync(TEST_DB); } catch {}
 
-  // Start HTTP server on test port
+  // Start HTTP server on test port (auth disabled for tests)
   httpServer = spawn({
     cmd: ["bun", "run", "src/generated/server.ts"],
-    env: { ...process.env, PORT: "3086", DB_PATH: TEST_DB },
+    env: { ...process.env, PORT: "3086", DB_PATH: TEST_DB, AUTH_ENABLED: "false" },
     stdout: "pipe",
     stderr: "pipe",
   });
