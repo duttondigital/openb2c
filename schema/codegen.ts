@@ -840,11 +840,11 @@ function genRoutes(schema: Schema): string {
     }
     const items = S.findAll${Entity}s(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined });
     const total = S.count${Entity}s(db, Object.keys(filter).length ? filter : undefined);
-    return Response.json({ items: items.map(i => redact("${entity}", i)), total, limit, offset });
+    return corsResponse({ items: items.map(i => redact("${entity}", i)), total, limit, offset });
   }},`);
     routes.push(`  { method: "GET", path: "/api/${entity}s/:id", handler: (_, p) => {
     const r = S.find${Entity}ById(db, +p.id);
-    return r ? Response.json(redact("${entity}", r)) : Response.json({ error: "not found" }, { status: 404 });
+    return r ? corsResponse(redact("${entity}", r)) : corsResponse({ error: "not found" }, { status: 404 });
   }},`);
 
     // Special handling for api_key creation - generate and hash key
@@ -854,24 +854,24 @@ function genRoutes(schema: Schema): string {
     const rawKey = S.generateApiKey();
     const keyHash = await S.hashApiKey(rawKey);
     const r = S.createApiKey(db, { ...input, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) });
-    if (!r.ok) return Response.json(r, { status: 400 });
+    if (!r.ok) return corsResponse(r, { status: 400 });
     // Return raw key ONCE - it cannot be retrieved again
-    return Response.json({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
+    return corsResponse({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
   }},`);
     } else {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req) => {
     const r = S.create${Entity}(db, await req.json());
-    return r.ok ? Response.json(r.data, { status: 201 }) : Response.json(r, { status: 400 });
+    return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: 400 });
   }},`);
     }
 
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p) => {
     const r = S.update${Entity}(db, +p.id, await req.json());
-    return r.ok ? Response.json(r.data) : Response.json(r, { status: 400 });
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: 400 });
   }},`);
     routes.push(`  { method: "DELETE", path: "/api/${entity}s/:id", handler: (_, p) => {
     const r = S.delete${Entity}(db, +p.id);
-    return r.ok ? Response.json(r.data) : Response.json(r, { status: 400 });
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: 400 });
   }},`);
 
     // Custom operations
@@ -879,7 +879,7 @@ function genRoutes(schema: Schema): string {
       const OpName = camelCase(opName);
       routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: (_, p) => {
     const r = S.${OpName}${Entity}(db, +p.id);
-    return r.ok ? Response.json(r.data) : Response.json(r, { status: 400 });
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: 400 });
   }},`);
     }
     routes.push("");
@@ -956,28 +956,28 @@ interface Route {
 const routes: Route[] = [
   // Identity endpoints (no auth required)
   { method: "GET", path: "/identity/public-key", handler: async () => {
-    return Response.json({ publicKey: registryPubKey });
+    return corsResponse({ publicKey: registryPubKey });
   }},
   { method: "POST", path: "/identity/challenge", handler: async (req) => {
     const { email, publicKey } = await req.json() as { email: string; publicKey: string };
     if (!email || !publicKey) {
-      return Response.json({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
+      return corsResponse({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
     }
     const result = await S.createChallenge(db, email, publicKey);
     log("info", "identity challenge created", { email });
     // In production, code must be sent via email. In dev, return it for testing.
     if (PRODUCTION) {
-      return Response.json({ challengeId: result.challengeId, message: "verification code sent to email" });
+      return corsResponse({ challengeId: result.challengeId, message: "verification code sent to email" });
     }
-    return Response.json({ challengeId: result.challengeId, code: result.code });
+    return corsResponse({ challengeId: result.challengeId, code: result.code });
   }},
   { method: "POST", path: "/identity/verify", handler: async (req) => {
     const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };
     const result = await S.verifyChallenge(db, challengeId, code, signature);
     if (!result.ok) {
-      return Response.json(result, { status: 400 });
+      return corsResponse(result, { status: 400 });
     }
-    return Response.json({ certificate: result.data });
+    return corsResponse({ certificate: result.data });
   }},
 
 ${routes.join("\n")}];
@@ -1004,15 +1004,34 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
   return null;
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp",
+};
+
+function corsResponse(body: unknown, init?: ResponseInit): Response {
+  const res = Response.json(body, init);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) {
+    res.headers.set(k, v);
+  }
+  return res;
+}
+
 const server = Bun.serve({
   port: PORT,
   async fetch(req) {
     const start = performance.now();
     const url = new URL(req.url);
 
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     // Health check (no auth)
     if (url.pathname === "/health") {
-      return Response.json({ status: "ok", db: DB_PATH, auth: AUTH_ENABLED });
+      return corsResponse({ status: "ok", db: DB_PATH, auth: AUTH_ENABLED });
     }
 
     // Skip auth for identity endpoints
@@ -1032,34 +1051,34 @@ const server = Bun.serve({
           const cert = JSON.parse(certHeader) as S.Certificate;
           const identity = await S.verifyRequest(cert, registryPubKey, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
-            return Response.json({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
+            return corsResponse({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
           }
           // Ensure customer record exists for this identity
           const customerId = S.ensureCustomer(db, identity.email);
           log("debug", "authenticated", { email: identity.email, customerId });
         } catch {
-          return Response.json({ error: "invalid certificate format", code: "invalid" }, { status: 401 });
+          return corsResponse({ error: "invalid certificate format", code: "invalid" }, { status: 401 });
         }
       } else if (authHeader?.startsWith("Bearer ")) {
         // API key auth (for services/integrations)
         const key = authHeader.slice(7);
         const auth = await S.verifyApiKey(db, key);
         if (!auth) {
-          return Response.json({ error: "invalid api key", code: "invalid" }, { status: 401 });
+          return corsResponse({ error: "invalid api key", code: "invalid" }, { status: 401 });
         }
         const requiredScope = req.method === "GET" ? "read" : "write";
         if (!S.hasScope(auth, requiredScope)) {
-          return Response.json({ error: "insufficient scope", code: "invalid" }, { status: 403 });
+          return corsResponse({ error: "insufficient scope", code: "invalid" }, { status: 403 });
         }
       } else {
-        return Response.json({ error: "missing authorization", code: "invalid" }, { status: 401 });
+        return corsResponse({ error: "missing authorization", code: "invalid" }, { status: 401 });
       }
     }
 
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
       log("info", "not found", { method: req.method, path: url.pathname });
-      return Response.json({ error: "not found" }, { status: 404 });
+      return corsResponse({ error: "not found" }, { status: 404 });
     }
 
     try {
@@ -1070,7 +1089,7 @@ const server = Bun.serve({
     } catch (err) {
       const ms = (performance.now() - start).toFixed(1);
       log("error", "request failed", { method: req.method, path: url.pathname, error: String(err), ms });
-      return Response.json({ error: "internal error" }, { status: 500 });
+      return corsResponse({ error: "internal error" }, { status: 500 });
     }
   },
 });
