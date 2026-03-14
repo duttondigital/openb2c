@@ -334,11 +334,12 @@ export async function hashApiKey(key: string): Promise<string> {
 }
 
 export async function verifyApiKey(db: Database, key: string): Promise<AuthContext | null> {
-  // Find all active keys and verify against hash
+  // Use key prefix to narrow candidates, then bcrypt verify
+  const prefix = key.slice(0, 11);
   const rows = db.query(\`
     SELECT id, customer_id, scopes, active, expires_at, key_hash
-    FROM api_key WHERE active = 1
-  \`).all() as { id: number; customer_id: number | null; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
+    FROM api_key WHERE active = 1 AND key_prefix = ?
+  \`).all(prefix) as { id: number; customer_id: number | null; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
 
   for (const row of rows) {
     if (row.expires_at && new Date(row.expires_at) < new Date()) continue;

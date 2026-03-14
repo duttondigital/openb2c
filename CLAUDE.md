@@ -4,6 +4,16 @@ Open-source B2C platform for Cornish charity opera company.
 
 See [todo.md](todo.md) for roadmap.
 
+## Vision
+
+Combat US tech oligopoly by restoring agency to smaller UK businesses. Rather than blanket solutions for the world, build targeted solutions for proximal issues.
+
+Standardised backend (REST + MCP) enables client agnosticism on both ends of B2C:
+- **Businesses** choose their own frontends, integrate with existing tools
+- **Customers** use any client (web, native, AI assistant, accessibility tools)
+
+Federated identity (Ed25519 + email verification) means customers verify once, authenticate everywhere. No passwords, no per-business accounts, no platform lock-in.
+
 ## Design Principles
 
 - **Narrow scope**: UK-only, GBP-only. No i18n.
