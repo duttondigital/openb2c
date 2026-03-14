@@ -3,7 +3,8 @@ let E = import ../lib/expr.nix;
 in {
   tables.api_key = {
     id = { type = "integer"; pk = true; auto = true; };
-    key = { type = "text"; required = true; unique = true; };
+    key_hash = { type = "text"; required = true; };  # bcrypt hash, never expose
+    key_prefix = { type = "text"; required = true; };  # first 8 chars for identification
     name = { type = "text"; required = true; };  # description e.g. "mobile app"
     customer_id = { type = "integer"; required = false; references = "customer(id)"; };  # optional: scope to customer
     scopes = { type = "text"; required = false; default = "'*'"; };  # comma-separated: "read,write" or "*"

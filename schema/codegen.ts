@@ -329,23 +329,31 @@ export function generateApiKey(): string {
   return "do_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function verifyApiKey(db: Database, key: string): AuthContext | null {
-  const row = db.query(\`
-    SELECT id, customer_id, scopes, active, expires_at
-    FROM api_key WHERE key = ?
-  \`).get(key) as { id: number; customer_id: number | null; scopes: string; active: number; expires_at: string | null } | null;
+export async function hashApiKey(key: string): Promise<string> {
+  return Bun.password.hash(key, { algorithm: "bcrypt", cost: 10 });
+}
 
-  if (!row || !row.active) return null;
-  if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+export async function verifyApiKey(db: Database, key: string): Promise<AuthContext | null> {
+  // Find all active keys and verify against hash
+  const rows = db.query(\`
+    SELECT id, customer_id, scopes, active, expires_at, key_hash
+    FROM api_key WHERE active = 1
+  \`).all() as { id: number; customer_id: number | null; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
 
-  // Update last_used_at
-  db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
-
-  return {
-    keyId: row.id,
-    customerId: row.customer_id,
-    scopes: row.scopes.split(",").map(s => s.trim()),
-  };
+  for (const row of rows) {
+    if (row.expires_at && new Date(row.expires_at) < new Date()) continue;
+    const valid = await Bun.password.verify(key, row.key_hash);
+    if (valid) {
+      // Update last_used_at
+      db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
+      return {
+        keyId: row.id,
+        customerId: row.customer_id,
+        scopes: row.scopes.split(",").map(s => s.trim()),
+      };
+    }
+  }
+  return null;
 }
 
 export function hasScope(ctx: AuthContext, required: string): boolean {
@@ -815,16 +823,31 @@ function genRoutes(schema: Schema): string {
     }
     const items = S.findAll${Entity}s(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined });
     const total = S.count${Entity}s(db, Object.keys(filter).length ? filter : undefined);
-    return Response.json({ items, total, limit, offset });
+    return Response.json({ items: items.map(i => redact("${entity}", i)), total, limit, offset });
   }},`);
     routes.push(`  { method: "GET", path: "/api/${entity}s/:id", handler: (_, p) => {
     const r = S.find${Entity}ById(db, +p.id);
-    return r ? Response.json(r) : Response.json({ error: "not found" }, { status: 404 });
+    return r ? Response.json(redact("${entity}", r)) : Response.json({ error: "not found" }, { status: 404 });
   }},`);
-    routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req) => {
+
+    // Special handling for api_key creation - generate and hash key
+    if (entity === "api_key") {
+      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req) => {
+    const input = await req.json() as { name: string; customer_id?: number; scopes?: string; expires_at?: string };
+    const rawKey = S.generateApiKey();
+    const keyHash = await S.hashApiKey(rawKey);
+    const r = S.createApiKey(db, { ...input, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) });
+    if (!r.ok) return Response.json(r, { status: 400 });
+    // Return raw key ONCE - it cannot be retrieved again
+    return Response.json({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
+  }},`);
+    } else {
+      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req) => {
     const r = S.create${Entity}(db, await req.json());
     return r.ok ? Response.json(r.data, { status: 201 }) : Response.json(r, { status: 400 });
   }},`);
+    }
+
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p) => {
     const r = S.update${Entity}(db, +p.id, await req.json());
     return r.ok ? Response.json(r.data) : Response.json(r, { status: 400 });
@@ -855,6 +878,7 @@ const DB_PATH = process.env.DB_PATH || "opera.db";
 const PORT = parseInt(process.env.PORT || "3085");
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
+const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
 const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
 
@@ -865,6 +889,19 @@ function log(level: string, msg: string, data?: Record<string, unknown>) {
   if (level === "debug" && LOG_LEVEL !== "debug") return;
   const entry = { ts: new Date().toISOString(), level, msg, ...data };
   console.log(JSON.stringify(entry));
+}
+
+// Fields to exclude from API responses (sensitive data)
+const REDACTED_FIELDS: Record<string, string[]> = {
+  api_key: ["key_hash"],
+};
+
+function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
+  const fields = REDACTED_FIELDS[entity];
+  if (!fields) return obj;
+  const result = { ...obj };
+  for (const f of fields) delete (result as Record<string, unknown>)[f];
+  return result;
 }
 
 const db = new Database(DB_PATH);
@@ -910,9 +947,12 @@ const routes: Route[] = [
       return Response.json({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
     }
     const result = await S.createChallenge(db, email, publicKey);
-    // In production, send result.code via email. For dev, return it.
-    log("info", "identity challenge created", { email, code: result.code });
-    return Response.json({ challengeId: result.challengeId, code: result.code }); // Remove code in prod!
+    log("info", "identity challenge created", { email });
+    // In production, code must be sent via email. In dev, return it for testing.
+    if (PRODUCTION) {
+      return Response.json({ challengeId: result.challengeId, message: "verification code sent to email" });
+    }
+    return Response.json({ challengeId: result.challengeId, code: result.code });
   }},
   { method: "POST", path: "/identity/verify", handler: async (req) => {
     const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };
@@ -984,7 +1024,7 @@ const server = Bun.serve({
       } else if (authHeader?.startsWith("Bearer ")) {
         // API key auth (for services/integrations)
         const key = authHeader.slice(7);
-        const auth = S.verifyApiKey(db, key);
+        const auth = await S.verifyApiKey(db, key);
         if (!auth) {
           return Response.json({ error: "invalid api key", code: "invalid" }, { status: 401 });
         }

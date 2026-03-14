@@ -9,3 +9,4 @@ opera.db
 opera.db-wal
 opera.db-shm
 src/generated
+test-*.db*

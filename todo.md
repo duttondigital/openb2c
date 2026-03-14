@@ -20,9 +20,9 @@
 - [x] Certificate-based auth (registry signs, any business verifies)
 
 ## Security (Critical)
-- [ ] Hide OTP in production (env flag to exclude code from /identity/challenge response)
-- [ ] Exclude API key secrets from REST responses (filter `key` field from list/get)
-- [ ] Hash API keys (bcrypt/argon2, compare hashes only)
+- [x] Hide OTP in production (NODE_ENV=production excludes code from response)
+- [x] Exclude API key secrets from REST responses (key_hash filtered via REDACTED_FIELDS)
+- [x] Hash API keys (bcrypt via Bun.password, key_prefix for identification)
 
 ## Security (High)
 - [ ] Enforce certificate revocation (check `identity_registry.revoked` in verifyRequest)
