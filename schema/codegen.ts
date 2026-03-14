@@ -216,9 +216,23 @@ function genServiceImports(): string {
   return `import { Database } from "bun:sqlite";
 import type * as T from "./types";
 
+export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict";
+
 export type Result<D> =
   | { ok: true; data: D }
-  | { ok: false; error: string; code: "not_found" | "invalid" | "bad_state" };
+  | { ok: false; error: string; code: ErrorCode };
+
+export interface ApiError {
+  error: string;
+  code: ErrorCode;
+  details?: Record<string, string>;
+}
+
+export function errorResponse(error: string, code: ErrorCode, status: number, details?: Record<string, string>): Response {
+  const body: ApiError = { error, code };
+  if (details) body.details = details;
+  return Response.json(body, { status });
+}
 
 export interface Effect {
   type: "emit" | "notify" | "call";
@@ -232,6 +246,9 @@ export interface OpResult<D> extends Result<D> {
 export interface ListOptions {
   limit?: number;
   offset?: number;
+  sort?: string;      // column name
+  order?: "asc" | "desc";
+  filter?: Record<string, unknown>;  // column: value filters
 }
 
 // ============================================================================
@@ -288,14 +305,45 @@ export function find${Entity}ById(db: Database, id: number): T.${Entity} | null 
   return db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
 }
 
+const ${entity}Cols = new Set(${JSON.stringify(colNames)});
+
 export function findAll${Entity}s(db: Database, opts: ListOptions = {}): T.${Entity}[] {
   const limit = opts.limit ?? 100;
   const offset = opts.offset ?? 0;
-  return db.query("SELECT * FROM ${tableName} ORDER BY id LIMIT ? OFFSET ?").all(limit, offset) as T.${Entity}[];
+  const sort = opts.sort && ${entity}Cols.has(opts.sort) ? opts.sort : "id";
+  const order = opts.order === "desc" ? "DESC" : "ASC";
+
+  let where = "";
+  const params: unknown[] = [];
+  if (opts.filter) {
+    const clauses: string[] = [];
+    for (const [k, v] of Object.entries(opts.filter)) {
+      if (${entity}Cols.has(k) && v !== undefined) {
+        clauses.push(\`\${k} = ?\`);
+        params.push(v);
+      }
+    }
+    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
+  }
+
+  params.push(limit, offset);
+  return db.query(\`SELECT * FROM ${tableName} \${where} ORDER BY \${sort} \${order} LIMIT ? OFFSET ?\`).all(...params) as T.${Entity}[];
 }
 
-export function count${Entity}s(db: Database): number {
-  return (db.query("SELECT COUNT(*) as n FROM ${tableName}").get() as { n: number }).n;
+export function count${Entity}s(db: Database, filter?: Record<string, unknown>): number {
+  let where = "";
+  const params: unknown[] = [];
+  if (filter) {
+    const clauses: string[] = [];
+    for (const [k, v] of Object.entries(filter)) {
+      if (${entity}Cols.has(k) && v !== undefined) {
+        clauses.push(\`\${k} = ?\`);
+        params.push(v);
+      }
+    }
+    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
+  }
+  return (db.query(\`SELECT COUNT(*) as n FROM ${tableName} \${where}\`).get(...params) as { n: number }).n;
 }
 
 export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{ id: number }> {
@@ -468,8 +516,14 @@ function genRoutes(schema: Schema): string {
     const url = new URL(req.url);
     const limit = parseInt(url.searchParams.get("limit") || "100");
     const offset = parseInt(url.searchParams.get("offset") || "0");
-    const items = S.findAll${Entity}s(db, { limit, offset });
-    const total = S.count${Entity}s(db);
+    const sort = url.searchParams.get("sort") || undefined;
+    const order = url.searchParams.get("order") as "asc" | "desc" | undefined;
+    const filter: Record<string, string> = {};
+    for (const [k, v] of url.searchParams) {
+      if (!["limit", "offset", "sort", "order"].includes(k)) filter[k] = v;
+    }
+    const items = S.findAll${Entity}s(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined });
+    const total = S.count${Entity}s(db, Object.keys(filter).length ? filter : undefined);
     return Response.json({ items, total, limit, offset });
   }},`);
     routes.push(`  { method: "GET", path: "/api/${entity}s/:id", handler: (_, p) => {
@@ -890,6 +944,21 @@ describe("REST API", () => {
     expect(res.limit).toBe(1);
     expect(res.offset).toBe(0);
   });
+
+  test("sorting", async () => {
+    const asc = await api.get("/customers?sort=id&order=asc");
+    const desc = await api.get("/customers?sort=id&order=desc");
+    if (asc.items.length > 1) {
+      expect(asc.items[0].id).toBeLessThan(asc.items[asc.items.length - 1].id);
+      expect(desc.items[0].id).toBeGreaterThan(desc.items[desc.items.length - 1].id);
+    }
+  });
+
+  test("filtering", async () => {
+    const created = await api.post("/venues", { name: "Filter Test", address: "1 St", city: "Town", postcode: "TR1 1AA", capacity: 50 });
+    const filtered = await api.get(\`/venues?name=Filter%20Test\`);
+    expect(filtered.items.some((v: { id: number }) => v.id === created.id)).toBe(true);
+  });
 ${httpTests.join("")}
 });
 
@@ -1169,6 +1238,154 @@ export interface EffectHandlers {
 }
 
 // ============================================================================
+// OpenAPI Spec Generation
+// ============================================================================
+
+function genOpenAPI(schema: Schema): string {
+  const paths: Record<string, unknown> = {};
+  const schemas: Record<string, unknown> = {};
+
+  // Error schema
+  schemas.Error = {
+    type: "object",
+    properties: {
+      error: { type: "string" },
+      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict"] },
+      details: { type: "object", additionalProperties: { type: "string" } },
+    },
+    required: ["error", "code"],
+  };
+
+  // Paginated response schema
+  schemas.PaginatedResponse = {
+    type: "object",
+    properties: {
+      items: { type: "array", items: {} },
+      total: { type: "integer" },
+      limit: { type: "integer" },
+      offset: { type: "integer" },
+    },
+  };
+
+  for (const [entity, cols] of Object.entries(schema.tables)) {
+    const Entity = pascalCase(entity);
+    const ops = schema.operations[entity] || {};
+
+    // Entity schema
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const [col, c] of Object.entries(cols)) {
+      properties[col] = {
+        type: c.type === "integer" ? "integer" : "string",
+        ...(c.default !== null && { default: c.default }),
+      };
+      if (c.required || c.pk) required.push(col);
+    }
+    schemas[Entity] = { type: "object", properties, required };
+
+    // Input schema (no auto pk)
+    const inputProps: Record<string, unknown> = {};
+    const inputRequired: string[] = [];
+    for (const [col, c] of Object.entries(cols)) {
+      if (c.pk && c.auto) continue;
+      inputProps[col] = { type: c.type === "integer" ? "integer" : "string" };
+      if (c.required && c.default === null) inputRequired.push(col);
+    }
+    schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };
+
+    // List endpoint
+    paths[`/api/${entity}s`] = {
+      get: {
+        summary: `List ${entity}s`,
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer", default: 100 } },
+          { name: "offset", in: "query", schema: { type: "integer", default: 0 } },
+          { name: "sort", in: "query", schema: { type: "string" } },
+          { name: "order", in: "query", schema: { type: "string", enum: ["asc", "desc"] } },
+        ],
+        responses: {
+          "200": {
+            description: "Paginated list",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PaginatedResponse" } } },
+          },
+        },
+      },
+      post: {
+        summary: `Create ${entity}`,
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}Input` } } },
+        },
+        responses: {
+          "201": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+
+    // Single entity endpoints
+    paths[`/api/${entity}s/{id}`] = {
+      get: {
+        summary: `Get ${entity}`,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Found", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}` } } } },
+          "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      put: {
+        summary: `Update ${entity}`,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}Input` } } },
+        },
+        responses: {
+          "200": { description: "Updated", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+      delete: {
+        summary: `Delete ${entity}`,
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", properties: { deleted: { type: "boolean" } } } } } },
+          "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+
+    // Custom operations
+    for (const opName of Object.keys(ops)) {
+      paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
+        post: {
+          summary: `${opName.replace(/_/g, " ")} ${entity}`,
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            "200": { description: "Success", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" }, status: { type: "string" } } } } } },
+            "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      };
+    }
+  }
+
+  const spec = {
+    openapi: "3.0.3",
+    info: {
+      title: "Duchy Opera API",
+      version: "1.0.0",
+      description: "REST API for Duchy Opera charity event platform",
+    },
+    servers: [{ url: "http://localhost:3085" }],
+    paths,
+    components: { schemas },
+  };
+
+  return JSON.stringify(spec, null, 2);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1186,6 +1403,7 @@ if (import.meta.main) {
   writeFileSync(join(outDir, "server.ts"), genRoutes(schema));
   writeFileSync(join(outDir, "integration.test.ts"), genIntegrationTests(schema));
   writeFileSync(join(outDir, "mcp.ts"), genMcpServer(schema));
+  writeFileSync(join(outDir, "openapi.json"), genOpenAPI(schema));
 
   console.log("wrote src/generated/schema.sql");
   console.log("wrote src/generated/types.ts");
@@ -1194,4 +1412,5 @@ if (import.meta.main) {
   console.log("wrote src/generated/server.ts");
   console.log("wrote src/generated/integration.test.ts");
   console.log("wrote src/generated/mcp.ts");
+  console.log("wrote src/generated/openapi.json");
 }
