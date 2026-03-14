@@ -7,6 +7,7 @@ import {
   deleteCustomer,
 } from "./handlers";
 
+// Schema now loaded from generated/schema.sql via registry
 const schema = `
 CREATE TABLE IF NOT EXISTS customer (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

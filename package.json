@@ -4,9 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun ./src/server/index.ts"
+    "dev": "bun ./src/server/index.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "build": "bun build src/server/index.ts --outdir dist",
+    "start": "bun dist/index.js"
+  },
+  "dependencies": {
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "@types/uuid": "^9.0.7"
   }
 }

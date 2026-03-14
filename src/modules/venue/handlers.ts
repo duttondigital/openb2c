@@ -1,18 +1,16 @@
 import { Database } from "bun:sqlite";
-import type { Customer, CustomerInput } from "../../generated/types";
+import type { Venue, VenueInput } from "../../generated/types";
 
-export function listCustomers(
+export function listVenues(
   _req: Request,
   db: Database,
   _params: Record<string, string>,
 ): Response {
-  const rows = db
-    .query("SELECT * FROM customer ORDER BY id")
-    .all() as Customer[];
+  const rows = db.query("SELECT * FROM venue ORDER BY name").all() as Venue[];
   return Response.json(rows);
 }
 
-export function getCustomer(
+export function getVenue(
   _req: Request,
   db: Database,
   params: Record<string, string>,
@@ -21,34 +19,35 @@ export function getCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const row = db.query("SELECT * FROM customer WHERE id = ?").get(id) as Customer | null;
+  const row = db.query("SELECT * FROM venue WHERE id = ?").get(id) as Venue | null;
   if (!row) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(row);
 }
 
-export async function createCustomer(
+export async function createVenue(
   req: Request,
   db: Database,
   _params: Record<string, string>,
 ): Promise<Response> {
-  let input: CustomerInput;
+  let input: VenueInput;
   try {
-    input = (await req.json()) as CustomerInput;
+    input = (await req.json()) as VenueInput;
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!input.name)
-    return Response.json({ error: "name is required" }, { status: 400 });
+  if (!input.name || !input.address || !input.city || !input.postcode || !input.capacity)
+    return Response.json({ error: "all fields required" }, { status: 400 });
 
   const result = db
-    .query("INSERT INTO customer (name, email, phone) VALUES (?, ?, ?) RETURNING id")
-    .get(input.name, input.email ?? null, input.phone ?? null) as { id: number };
+    .query(`INSERT INTO venue (name, address, city, postcode, capacity)
+            VALUES (?, ?, ?, ?, ?) RETURNING id`)
+    .get(input.name, input.address, input.city, input.postcode, input.capacity) as { id: number };
 
   return Response.json({ id: result.id }, { status: 201 });
 }
 
-export async function updateCustomer(
+export async function updateVenue(
   req: Request,
   db: Database,
   params: Record<string, string>,
@@ -57,27 +56,25 @@ export async function updateCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const existing = db.query("SELECT id FROM customer WHERE id = ?").get(id);
+  const existing = db.query("SELECT id FROM venue WHERE id = ?").get(id);
   if (!existing)
     return Response.json({ error: "not found" }, { status: 404 });
 
-  let input: CustomerInput;
+  let input: VenueInput;
   try {
-    input = (await req.json()) as CustomerInput;
+    input = (await req.json()) as VenueInput;
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!input.name)
-    return Response.json({ error: "name is required" }, { status: 400 });
-
-  db.query("UPDATE customer SET name = ?, email = ?, phone = ? WHERE id = ?")
-    .run(input.name, input.email ?? null, input.phone ?? null, id);
+  db.query(`UPDATE venue SET name = ?, address = ?, city = ?, postcode = ?, capacity = ?
+            WHERE id = ?`)
+    .run(input.name, input.address, input.city, input.postcode, input.capacity, id);
 
   return Response.json({ id });
 }
 
-export function deleteCustomer(
+export function deleteVenue(
   _req: Request,
   db: Database,
   params: Record<string, string>,
@@ -86,10 +83,10 @@ export function deleteCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const existing = db.query("SELECT id FROM customer WHERE id = ?").get(id);
+  const existing = db.query("SELECT id FROM venue WHERE id = ?").get(id);
   if (!existing)
     return Response.json({ error: "not found" }, { status: 404 });
 
-  db.query("DELETE FROM customer WHERE id = ?").run(id);
+  db.query("DELETE FROM venue WHERE id = ?").run(id);
   return Response.json({ deleted: true });
 }

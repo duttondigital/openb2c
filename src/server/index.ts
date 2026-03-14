@@ -1,17 +1,30 @@
 import { Database } from "bun:sqlite";
 import { Registry, type Route } from "../core/module";
 import { getModule as customerModule } from "../modules/customer/mod";
+import { getModule as venueModule } from "../modules/venue/mod";
+import { getModule as artistModule } from "../modules/artist/mod";
+import { getModule as performanceModule } from "../modules/performance/mod";
+import { getModule as ticketModule } from "../modules/ticket/mod";
+import { getModule as transactionModule } from "../modules/transaction/mod";
 
 const db = new Database("opera.db");
 db.run("PRAGMA journal_mode = WAL");
+db.run("PRAGMA foreign_keys = ON");
 
 const registry = new Registry();
+
+// Register modules (order doesn't matter - deps are resolved)
 registry.register(customerModule());
+registry.register(venueModule());
+registry.register(artistModule());
+registry.register(performanceModule());
+registry.register(ticketModule());
+registry.register(transactionModule());
+
 registry.initAll(db);
 
 const routes = registry.allRoutes();
 
-/** Match a route pattern like /api/customers/:id against a path. */
 function matchRoute(
   method: string,
   path: string,

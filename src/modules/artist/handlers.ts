@@ -1,18 +1,16 @@
 import { Database } from "bun:sqlite";
-import type { Customer, CustomerInput } from "../../generated/types";
+import type { Artist, ArtistInput } from "../../generated/types";
 
-export function listCustomers(
+export function listArtists(
   _req: Request,
   db: Database,
   _params: Record<string, string>,
 ): Response {
-  const rows = db
-    .query("SELECT * FROM customer ORDER BY id")
-    .all() as Customer[];
+  const rows = db.query("SELECT * FROM artist ORDER BY name").all() as Artist[];
   return Response.json(rows);
 }
 
-export function getCustomer(
+export function getArtist(
   _req: Request,
   db: Database,
   params: Record<string, string>,
@@ -21,34 +19,35 @@ export function getCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const row = db.query("SELECT * FROM customer WHERE id = ?").get(id) as Customer | null;
+  const row = db.query("SELECT * FROM artist WHERE id = ?").get(id) as Artist | null;
   if (!row) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json(row);
 }
 
-export async function createCustomer(
+export async function createArtist(
   req: Request,
   db: Database,
   _params: Record<string, string>,
 ): Promise<Response> {
-  let input: CustomerInput;
+  let input: ArtistInput;
   try {
-    input = (await req.json()) as CustomerInput;
+    input = (await req.json()) as ArtistInput;
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!input.name)
-    return Response.json({ error: "name is required" }, { status: 400 });
+  if (!input.name || !input.role)
+    return Response.json({ error: "name and role required" }, { status: 400 });
 
   const result = db
-    .query("INSERT INTO customer (name, email, phone) VALUES (?, ?, ?) RETURNING id")
-    .get(input.name, input.email ?? null, input.phone ?? null) as { id: number };
+    .query(`INSERT INTO artist (name, role, bio, email)
+            VALUES (?, ?, ?, ?) RETURNING id`)
+    .get(input.name, input.role, input.bio ?? null, input.email ?? null) as { id: number };
 
   return Response.json({ id: result.id }, { status: 201 });
 }
 
-export async function updateCustomer(
+export async function updateArtist(
   req: Request,
   db: Database,
   params: Record<string, string>,
@@ -57,27 +56,24 @@ export async function updateCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const existing = db.query("SELECT id FROM customer WHERE id = ?").get(id);
+  const existing = db.query("SELECT id FROM artist WHERE id = ?").get(id);
   if (!existing)
     return Response.json({ error: "not found" }, { status: 404 });
 
-  let input: CustomerInput;
+  let input: ArtistInput;
   try {
-    input = (await req.json()) as CustomerInput;
+    input = (await req.json()) as ArtistInput;
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!input.name)
-    return Response.json({ error: "name is required" }, { status: 400 });
-
-  db.query("UPDATE customer SET name = ?, email = ?, phone = ? WHERE id = ?")
-    .run(input.name, input.email ?? null, input.phone ?? null, id);
+  db.query(`UPDATE artist SET name = ?, role = ?, bio = ?, email = ? WHERE id = ?`)
+    .run(input.name, input.role, input.bio ?? null, input.email ?? null, id);
 
   return Response.json({ id });
 }
 
-export function deleteCustomer(
+export function deleteArtist(
   _req: Request,
   db: Database,
   params: Record<string, string>,
@@ -86,10 +82,10 @@ export function deleteCustomer(
   if (!Number.isInteger(id))
     return Response.json({ error: "invalid id" }, { status: 400 });
 
-  const existing = db.query("SELECT id FROM customer WHERE id = ?").get(id);
+  const existing = db.query("SELECT id FROM artist WHERE id = ?").get(id);
   if (!existing)
     return Response.json({ error: "not found" }, { status: 404 });
 
-  db.query("DELETE FROM customer WHERE id = ?").run(id);
+  db.query("DELETE FROM artist WHERE id = ?").run(id);
   return Response.json({ deleted: true });
 }
