@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duchy Opera - Client-Agnostic B2C</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #0a0a0f;
+      --fg: #f0f0f5;
+      --accent: #6366f1;
+      --accent-dim: #4f46e5;
+      --muted: #71717a;
+      --surface: #18181b;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Slides */
+    .slide {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 4rem;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .slide.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .slide h1 {
+      font-size: 3.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      text-align: center;
+      background: linear-gradient(135deg, var(--fg) 0%, var(--muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .slide h2 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .slide h3 {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      color: var(--accent);
+    }
+
+    .slide p {
+      font-size: 1.25rem;
+      line-height: 1.8;
+      max-width: 600px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .slide .highlight {
+      color: var(--fg);
+      font-weight: 500;
+    }
+
+    /* Failure cards */
+    .failures {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+      max-width: 1000px;
+      margin-top: 2rem;
+    }
+
+    .failure-card {
+      background: var(--surface);
+      border-radius: 1rem;
+      padding: 2rem;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .failure-card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .failure-card .number {
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .failure-card h4 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .failure-card p {
+      font-size: 1rem;
+      color: var(--muted);
+    }
+
+    /* Solutions */
+    .solutions {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      max-width: 700px;
+    }
+
+    .solution-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .solution-row.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .solution-row .problem {
+      color: var(--muted);
+      text-decoration: line-through;
+      min-width: 200px;
+      text-align: right;
+    }
+
+    .solution-row .arrow {
+      color: var(--accent);
+      font-size: 1.5rem;
+    }
+
+    .solution-row .solution {
+      color: var(--fg);
+      font-weight: 500;
+    }
+
+    /* Architecture diagram */
+    .architecture {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .backend-box {
+      background: var(--accent);
+      color: white;
+      padding: 1.5rem 3rem;
+      border-radius: 1rem;
+      font-weight: 600;
+      font-size: 1.25rem;
+    }
+
+    .connection-line {
+      width: 2px;
+      height: 40px;
+      background: var(--muted);
+    }
+
+    .clients {
+      display: flex;
+      gap: 3rem;
+    }
+
+    .client-box {
+      background: var(--surface);
+      padding: 1rem 2rem;
+      border-radius: 0.5rem;
+      color: var(--muted);
+      position: relative;
+    }
+
+    .client-box::before {
+      content: '';
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      width: 2px;
+      height: 20px;
+      background: var(--muted);
+    }
+
+    .client-box.active {
+      background: var(--accent-dim);
+      color: white;
+    }
+
+    /* Demo section */
+    .demo-container {
+      max-width: 500px;
+      width: 100%;
+      margin-top: 2rem;
+    }
+
+    .demo-card {
+      background: var(--surface);
+      border-radius: 1rem;
+      padding: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .demo-card h4 {
+      margin-bottom: 1.5rem;
+      font-size: 1.25rem;
+    }
+
+    .event-card {
+      background: var(--bg);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: border 0.2s ease;
+      border: 2px solid transparent;
+    }
+
+    .event-card:hover {
+      border-color: var(--accent);
+    }
+
+    .event-card.selected {
+      border-color: var(--accent);
+    }
+
+    .event-card h5 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .event-card .meta {
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    .event-card .price {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 0.5rem;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      border: none;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    input {
+      background: var(--bg);
+      color: var(--fg);
+      border: 2px solid var(--surface);
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: var(--accent-dim);
+    }
+
+    button:disabled {
+      background: var(--muted);
+      cursor: not-allowed;
+    }
+
+    .status {
+      padding: 1rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .status.success {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--success);
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--error);
+    }
+
+    .ticket-result {
+      background: var(--bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .ticket-result .check {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Navigation */
+    .nav-hint {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .slide {
+        padding: 2rem;
+      }
+
+      .slide h1 {
+        font-size: 2rem;
+      }
+
+      .failures {
+        grid-template-columns: 1fr;
+      }
+
+      .clients {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+
+  <!-- Slide 0: Title -->
+  <section class="slide" data-slide="0">
+    <h1>Client-Agnostic B2C</h1>
+    <h2>Building systems with longevity</h2>
+  </section>
+
+  <!-- Slide 1: The Problem -->
+  <section class="slide" data-slide="1">
+    <h3>The Problem</h3>
+    <p>Global platforms fail local businesses.</p>
+    <p style="margin-top: 1rem; color: var(--accent);">Three ways:</p>
+  </section>
+
+  <!-- Slide 2: Three Failures -->
+  <section class="slide" data-slide="2">
+    <div class="failures">
+      <div class="failure-card" data-delay="0">
+        <div class="number">1</div>
+        <h4>One-Size-Fits-All</h4>
+        <p>Seasonal pricing? Integration with your tools? Too niche. 10% please.</p>
+      </div>
+      <div class="failure-card" data-delay="200">
+        <div class="number">2</div>
+        <h4>One Client Fits All</h4>
+        <p>Screen readers. AI assistants. If you're not average, you're an afterthought.</p>
+      </div>
+      <div class="failure-card" data-delay="400">
+        <div class="number">3</div>
+        <h4>Built For Today</h4>
+        <p>Yesterday websites. Today apps. Tomorrow AI. Systems break when paradigms shift.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 3: Solutions -->
+  <section class="slide" data-slide="3">
+    <h3>A Different Approach</h3>
+    <div class="solutions">
+      <div class="solution-row" data-delay="0">
+        <span class="problem">One-size-fits-all</span>
+        <span class="arrow">→</span>
+        <span class="solution">Local problems, local solutions</span>
+      </div>
+      <div class="solution-row" data-delay="200">
+        <span class="problem">One client fits all</span>
+        <span class="arrow">→</span>
+        <span class="solution">Any client, all equal</span>
+      </div>
+      <div class="solution-row" data-delay="400">
+        <span class="problem">Built for today</span>
+        <span class="arrow">→</span>
+        <span class="solution">Backend-first, clients come and go</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 4: Case Study -->
+  <section class="slide" data-slide="4">
+    <h3>Case Study: Duchy Opera</h3>
+    <p>Cornish charity opera company.</p>
+    <p style="margin-top: 2rem;">
+      <span class="highlight">Seasonal tourism.</span>
+      <span class="highlight">Ageing audience.</span>
+      <span class="highlight">Charity budget.</span>
+    </p>
+    <p style="margin-top: 2rem;">Can we build infrastructure that serves <em>them</em>?</p>
+  </section>
+
+  <!-- Slide 5: Architecture -->
+  <section class="slide" data-slide="5">
+    <h3>The Architecture</h3>
+    <div class="architecture">
+      <div class="backend-box">Backend: REST + MCP</div>
+      <div class="connection-line"></div>
+      <div class="clients">
+        <div class="client-box" id="client-web">Web UI</div>
+        <div class="client-box" id="client-ai">AI Agent</div>
+        <div class="client-box">Future?</div>
+      </div>
+    </div>
+    <p style="margin-top: 2rem;">One system. Many clients. Zero lock-in.</p>
+  </section>
+
+  <!-- Slide 6: Demo Intro -->
+  <section class="slide" data-slide="6">
+    <h3>Live Demo</h3>
+    <p>Same backend. Two clients.</p>
+    <p style="margin-top: 1rem; color: var(--accent);">Let's book some tickets.</p>
+  </section>
+
+  <!-- Slide 7: Web Demo -->
+  <section class="slide" data-slide="7">
+    <h3>Client 1: Web Booking</h3>
+    <div class="demo-container">
+      <div class="demo-card">
+        <h4>Select an Event</h4>
+        <div id="events-list">
+          <div class="event-card" data-id="1">
+            <h5>La Traviata</h5>
+            <div class="meta">Saturday 22nd March, 7:30pm</div>
+            <div class="meta">Minack Theatre</div>
+            <div class="price">£25</div>
+          </div>
+          <div class="event-card" data-id="2">
+            <h5>The Marriage of Figaro</h5>
+            <div class="meta">Sunday 23rd March, 3:00pm</div>
+            <div class="meta">Hall for Cornwall</div>
+            <div class="price">£30</div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-card" id="booking-form" style="display: none;">
+        <h4>Your Details</h4>
+        <input type="email" id="email-input" placeholder="Email address">
+        <input type="number" id="quantity-input" placeholder="Number of tickets" min="1" max="10" value="2">
+        <button id="book-btn">Book Tickets</button>
+        <div id="booking-status"></div>
+      </div>
+      <div class="demo-card" id="booking-result" style="display: none;">
+        <div class="ticket-result">
+          <div class="check">✓</div>
+          <h4>Booking Confirmed!</h4>
+          <p id="result-details"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 8: What Changed -->
+  <section class="slide" data-slide="8">
+    <h3>What Changed?</h3>
+    <p style="font-size: 2rem; color: var(--fg);">Nothing in the backend.</p>
+    <p style="margin-top: 2rem;">The AI didn't need a special integration.</p>
+    <p>It just used the API.</p>
+    <p style="margin-top: 2rem; color: var(--accent); font-weight: 600;">That's the point.</p>
+  </section>
+
+  <!-- Slide 9: Economics -->
+  <section class="slide" data-slide="9">
+    <h3>The Economics</h3>
+    <div style="background: var(--surface); border-radius: 1rem; padding: 2rem; margin-top: 1rem;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
+        <div style="color: var(--muted);">Eventbrite</div>
+        <div style="color: var(--error);">10% per ticket</div>
+        <div style="color: var(--muted);">Custom SaaS</div>
+        <div style="color: var(--error);">£100s/month</div>
+        <div style="color: var(--fg);">Self-hosted</div>
+        <div style="color: var(--success);">£5/month</div>
+      </div>
+    </div>
+    <p style="margin-top: 2rem;">Small orgs can afford professional infrastructure.</p>
+  </section>
+
+  <!-- Slide 10: Thesis -->
+  <section class="slide" data-slide="10">
+    <h1>Build Local.<br>Interface Universal.</h1>
+    <p style="margin-top: 2rem;">Stop predicting the future.</p>
+    <p>Build systems that don't need you to.</p>
+  </section>
+
+  <!-- Slide 11: Questions -->
+  <section class="slide" data-slide="11">
+    <h3>Questions?</h3>
+    <p style="margin-top: 2rem; font-family: monospace;">github.com/louisdutton/duchyopera</p>
+  </section>
+
+  <div class="nav-hint">← → to navigate</div>
+
+  <script>
+    const API_URL = 'http://localhost:3085';
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const progress = document.getElementById('progress');
+
+    // Slide navigation
+    function showSlide(index) {
+      if (index < 0 || index >= totalSlides) return;
+
+      slides.forEach((slide, i) => {
+        slide.classList.toggle('visible', i === index);
+      });
+
+      currentSlide = index;
+      progress.style.width = ((index + 1) / totalSlides * 100) + '%';
+
+      // Trigger animations for current slide
+      const currentSlideEl = slides[index];
+
+      // Failure cards
+      currentSlideEl.querySelectorAll('.failure-card').forEach((card, i) => {
+        setTimeout(() => card.classList.add('visible'), parseInt(card.dataset.delay) || i * 200);
+      });
+
+      // Solution rows
+      currentSlideEl.querySelectorAll('.solution-row').forEach((row, i) => {
+        setTimeout(() => row.classList.add('visible'), parseInt(row.dataset.delay) || i * 200);
+      });
+
+      // Update architecture diagram
+      if (index === 5) {
+        document.getElementById('client-web').classList.add('active');
+      }
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        showSlide(currentSlide + 1);
+      } else if (e.key === 'ArrowLeft') {
+        showSlide(currentSlide - 1);
+      }
+    });
+
+    // Touch navigation
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+    });
+    document.addEventListener('touchend', (e) => {
+      const diff = touchStartX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) {
+        showSlide(currentSlide + (diff > 0 ? 1 : -1));
+      }
+    });
+
+    // Demo functionality
+    let selectedEvent = null;
+
+    document.querySelectorAll('.event-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.event-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedEvent = {
+          id: card.dataset.id,
+          name: card.querySelector('h5').textContent,
+          price: card.querySelector('.price').textContent
+        };
+        document.getElementById('booking-form').style.display = 'block';
+        document.getElementById('booking-result').style.display = 'none';
+      });
+    });
+
+    document.getElementById('book-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email-input').value;
+      const quantity = document.getElementById('quantity-input').value;
+      const status = document.getElementById('booking-status');
+
+      if (!email || !quantity) {
+        status.className = 'status error';
+        status.textContent = 'Please fill in all fields';
+        return;
+      }
+
+      status.className = 'status';
+      status.textContent = 'Booking...';
+
+      // Simulate API call (or make real one if server running)
+      try {
+        // For demo, simulate success
+        await new Promise(r => setTimeout(r, 1000));
+
+        document.getElementById('booking-form').style.display = 'none';
+        document.getElementById('booking-result').style.display = 'block';
+        document.getElementById('result-details').textContent =
+          `${quantity}x ${selectedEvent.name} - Confirmation sent to ${email}`;
+      } catch (err) {
+        status.className = 'status error';
+        status.textContent = 'Booking failed. Is the server running?';
+      }
+    });
+
+    // Initialize
+    showSlide(0);
+  </script>
+</body>
+</html>

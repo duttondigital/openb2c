@@ -10,6 +10,7 @@ in
     type = { type = "text"; required = true; };  # purchase, refund, donation
     status = { type = "text"; default = "'pending'"; };  # pending, completed, failed, refunded
     reference = { type = "text"; };  # External payment reference
+    client = { type = "text"; default = "'web'"; };  # web, mcp, api
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
