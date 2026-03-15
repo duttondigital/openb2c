@@ -47,8 +47,8 @@ Split screen:
 ## Running the Demo
 
 ```bash
-# Terminal 1: Start server
-bun dev
+# Terminal 1: Start server (auth disabled for demo)
+AUTH_ENABLED=false bun dev
 
 # Terminal 2: Open demo
 open demo/booking.html
