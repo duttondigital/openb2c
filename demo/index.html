@@ -207,140 +207,244 @@
       font-size: 0.95rem;
     }
 
-    /* Case study layout (slide 2) */
-    .case-layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3rem;
-      max-width: 1100px;
-      width: 100%;
-      align-items: start;
-    }
-
-    .case-left {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .case-left p {
-      text-align: left;
-      max-width: none;
-    }
-
-    .case-left .highlight-line {
-      color: var(--fg);
-      font-weight: 500;
-      font-size: 1.1rem;
-    }
-
-    .case-left em {
-      font-style: italic;
-      color: var(--accent);
-    }
-
-    .case-right {
+    /* Slide 2: The Solution — interactive analysis */
+    .analyse-input-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 1rem;
+      transition: opacity 0.4s ease, transform 0.4s ease;
     }
 
-    .module-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.5rem;
-      width: 100%;
-      max-width: 320px;
+    .analyse-input-wrap.hidden {
+      opacity: 0;
+      transform: translateY(-10px);
+      pointer-events: none;
+      position: absolute;
     }
 
-    .module-box {
+    .analyse-input {
       background: var(--surface);
-      border-radius: 0.5rem;
-      padding: 0.6rem 0.75rem;
+      border: 2px solid var(--surface);
+      border-radius: 0.75rem;
+      padding: 1rem 1.5rem;
+      color: var(--fg);
+      font-size: 1.25rem;
+      width: 400px;
       text-align: center;
-      font-size: 0.8rem;
-      color: var(--muted);
+      transition: border-color 0.2s;
       font-family: monospace;
     }
 
-    .module-arrow {
+    .analyse-input:focus { outline: none; border-color: var(--fg); }
+    .analyse-input::placeholder { color: var(--muted); }
+
+    .analyse-hint {
+      font-size: 0.8rem;
       color: var(--muted);
-      font-size: 1.5rem;
     }
 
-    .module-backend {
-      background: var(--fg);
-      color: var(--bg);
-      padding: 0.75rem 2rem;
-      border-radius: 0.75rem;
-      font-weight: 600;
-      font-size: 1rem;
-    }
-
-    .module-clients {
-      display: flex;
-      gap: 1rem;
-    }
-
-    .module-client {
-      background: var(--surface);
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      color: var(--muted);
-      font-size: 0.85rem;
-    }
-
-    /* Architecture diagram */
-    .architecture {
+    /* Results layout */
+    .case-layout {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2rem;
-      margin-top: 2rem;
+      gap: 0;
+      opacity: 0;
+      transform: translateY(15px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+      position: absolute;
+      pointer-events: none;
     }
 
-    .backend-box {
-      background: var(--fg);
-      color: var(--bg);
-      padding: 1.5rem 3rem;
-      border-radius: 1rem;
-      font-weight: 600;
-      font-size: 1.25rem;
-    }
-
-    .connection-line {
-      width: 2px;
-      height: 40px;
-      background: var(--muted);
-    }
-
-    .clients {
-      display: flex;
-      gap: 3rem;
-    }
-
-    .client-box {
-      background: var(--surface);
-      padding: 1rem 2rem;
-      border-radius: 0.5rem;
-      color: var(--muted);
+    .case-layout.active {
+      opacity: 1;
+      transform: translateY(0);
       position: relative;
+      pointer-events: auto;
     }
 
-    .client-box::before {
+    /* Module graph SVG */
+    .mod-graph {
+      position: relative;
+      border: 1px solid transparent;
+      border-radius: 0.75rem;
+      padding: 1.25rem 1.25rem 1rem;
+      transition: border-color 0.5s ease;
+    }
+
+    .mod-graph-summary {
+      text-align: center;
+      margin-bottom: 1rem;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .mod-graph-summary.visible { opacity: 1; }
+
+    .mod-graph-summary .summary-title {
+      font-size: 0.95rem;
+      color: var(--fg);
+      margin-bottom: 0.25rem;
+    }
+
+    .mod-graph-summary .summary-traits {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .mod-graph.outlined {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .mod-graph-label {
+      position: absolute;
+      top: -0.65em;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      padding: 0 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .mod-graph.outlined .mod-graph-label {
+      opacity: 1;
+    }
+
+    .mod-svg {
+      display: block;
+      width: 310px;
+      height: 110px;
+    }
+
+    .mod-node-rect {
+      fill: var(--surface);
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+
+    .mod-node-rect.visible { opacity: 1; }
+
+    .mod-node-text {
+      fill: var(--muted);
+      font-family: monospace;
+      font-size: 11px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+
+    .mod-node-text.visible { opacity: 1; }
+
+    .mod-link {
+      stroke: rgba(255, 255, 255, 0.15);
+      stroke-width: 1;
+      fill: none;
+      stroke-dasharray: 40;
+      stroke-dashoffset: 40;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+
+    .mod-link.drawn { stroke-dashoffset: 0; }
+
+    /* Architecture connectors — flowing dotted lines */
+    .arch-connector {
+      width: 1px;
+      height: 28px;
+      position: relative;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .arch-connector.visible { opacity: 1; }
+
+    .arch-connector::before {
       content: '';
       position: absolute;
-      top: -20px;
-      left: 50%;
-      width: 2px;
-      height: 20px;
-      background: var(--muted);
+      top: -6px;
+      left: 0;
+      width: 1px;
+      height: calc(100% + 12px);
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.5) 0 2px,
+        transparent 2px 6px
+      );
+      animation: connFlow 0.4s linear infinite;
     }
 
-    .client-box.active {
+    @keyframes connFlow {
+      from { transform: translateY(0); }
+      to { transform: translateY(6px); }
+    }
+
+    .arch-api {
       background: var(--fg);
       color: var(--bg);
+      padding: 0.5rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    .arch-api.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* Fan-out lines: API → clients */
+    .arch-fan {
+      width: 240px;
+      height: 28px;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .arch-fan.visible { opacity: 1; }
+
+    .arch-fan-line {
+      stroke: rgba(255, 255, 255, 0.4);
+      stroke-width: 1;
+      stroke-dasharray: 3 4;
+      animation: fanFlow 0.5s linear infinite;
+    }
+
+    @keyframes fanFlow {
+      from { stroke-dashoffset: 0; }
+      to { stroke-dashoffset: -7; }
+    }
+
+    .arch-clients {
+      display: flex;
+      justify-content: space-around;
+      width: 240px;
+    }
+
+    .arch-client {
+      background: var(--surface);
+      padding: 0.4rem 0.75rem;
+      border-radius: 0.4rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(5px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .arch-client.visible {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     /* Web Booking: full-width two-panel */
@@ -695,16 +799,13 @@
         grid-template-columns: 1fr;
       }
 
-      .clients {
-        flex-direction: column;
-      }
-
       .booking-layout {
         grid-template-columns: 1fr;
       }
 
-      .case-layout {
-        grid-template-columns: 1fr;
+      .analyse-input {
+        width: 100%;
+        max-width: 300px;
       }
     }
   </style>
@@ -765,33 +866,68 @@
     </div>
   </section>
 
-  <!-- Slide 2: Duchy Opera + Module Composition (merged) -->
+  <!-- Slide 2: The Solution — interactive analysis -->
   <section class="slide" data-slide="2">
-    <h3>Duchy Opera</h3>
-    <div class="case-layout">
-      <div class="case-left">
-        <p style="color: var(--fg); font-size: 1.1rem;">Cornish charity opera company.</p>
-        <p><span class="highlight-line">Seasonal tourism. Ageing audience. Charity budget.</span></p>
-        <p>Can we build infrastructure that serves <em>them</em>?</p>
-      </div>
-      <div class="case-right">
-        <div class="module-grid">
-          <div class="module-box">venue</div>
-          <div class="module-box">performance</div>
-          <div class="module-box">ticket</div>
-          <div class="module-box">customer</div>
-          <div class="module-box">transaction</div>
-          <div class="module-box">artist</div>
+    <h3>The Solution</h3>
+
+    <!-- Phase 1: URL input -->
+    <div class="analyse-input-wrap" id="analyse-input-wrap">
+      <input type="text" class="analyse-input" id="analyse-input" placeholder="example.com" autocomplete="off" spellcheck="false" />
+      <div class="analyse-hint">Enter a website to analyse</div>
+    </div>
+
+    <!-- Results: module graph + architecture (centered) -->
+    <div class="case-layout" id="case-results">
+        <div class="mod-graph" id="mod-graph">
+          <div class="mod-graph-label">Duchy Opera</div>
+          <div class="mod-graph-summary" id="mod-summary">
+            <div class="summary-title">Cornish charity opera company</div>
+            <div class="summary-traits">Seasonal tourism · Ageing audience · Charity budget</div>
+          </div>
+          <svg class="mod-svg" viewBox="0 0 310 110">
+            <!-- Domain connections (drawn behind nodes) -->
+            <!-- venue → performance: performances at venues -->
+            <line class="mod-link" x1="90" y1="25" x2="113" y2="25"/>
+            <!-- performance → artist: artists in performances -->
+            <line class="mod-link" x1="197" y1="25" x2="220" y2="25"/>
+            <!-- performance → ticket: tickets for performances -->
+            <line class="mod-link" x1="155" y1="41" x2="155" y2="69"/>
+            <!-- customer → ticket: customers buy tickets -->
+            <line class="mod-link" x1="90" y1="85" x2="113" y2="85"/>
+            <!-- ticket → transaction: transactions contain tickets -->
+            <line class="mod-link" x1="197" y1="85" x2="220" y2="85"/>
+            <!-- Row 1: venue, performance, artist -->
+            <rect class="mod-node-rect" x="6" y="9" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="48" y="26">venue</text>
+            <rect class="mod-node-rect" x="113" y="9" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="155" y="26">performance</text>
+            <rect class="mod-node-rect" x="220" y="9" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="262" y="26">artist</text>
+            <!-- Row 2: customer, ticket, transaction -->
+            <rect class="mod-node-rect" x="6" y="69" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="48" y="86">customer</text>
+            <rect class="mod-node-rect" x="113" y="69" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="155" y="86">ticket</text>
+            <rect class="mod-node-rect" x="220" y="69" width="84" height="32" rx="5"/>
+            <text class="mod-node-text" x="262" y="86">transaction</text>
+          </svg>
         </div>
-        <div class="module-arrow">↓</div>
-        <div class="module-backend">Backend: REST + MCP</div>
-        <div class="module-arrow">↓</div>
-        <div class="module-clients">
-          <div class="module-client" id="client-web">Web UI</div>
-          <div class="module-client" id="client-ai">AI Agent</div>
-          <div class="module-client">Future?</div>
+        <!-- Connector: Duchy Opera → API -->
+        <div class="arch-connector" id="arch-conn-1"></div>
+        <!-- API box -->
+        <div class="arch-api" id="arch-api">REST + MCP</div>
+        <!-- Fan-out: API → all clients -->
+        <svg class="arch-fan" id="arch-fan" viewBox="0 0 240 28" fill="none">
+          <line class="arch-fan-line" x1="120" y1="0" x2="40" y2="28"/>
+          <line class="arch-fan-line" x1="120" y1="0" x2="120" y2="28"/>
+          <line class="arch-fan-line" x1="120" y1="0" x2="200" y2="28"/>
+        </svg>
+        <!-- Client boxes -->
+        <div class="arch-clients">
+          <div class="arch-client" id="client-web">Web UI</div>
+          <div class="arch-client" id="client-ai">AI Agent</div>
+          <div class="arch-client" id="client-future">???</div>
         </div>
-      </div>
     </div>
   </section>
 
@@ -934,6 +1070,9 @@
     // Sub-step state for slide 1 (problem → solutions reveal)
     let slide1Step = 0; // 0 = cards shown, 1 = solutions revealed
 
+    // Slide 2 analysis state: 'input' | 'analysing' | 'done'
+    let slide2Phase = 'input';
+
     // Slide navigation
     function showSlide(index) {
       if (index < 0 || index >= totalSlides) return;
@@ -960,9 +1099,14 @@
         });
       }
 
-      // Highlight web client on slide 2
+      // Slide 2: reset analysis state when entering, focus input
       if (index === 2) {
-        document.getElementById('client-web').classList.add('active');
+        if (slide2Phase === 'input') {
+          setTimeout(() => document.getElementById('analyse-input').focus(), 300);
+        }
+      } else {
+        // Reset slide 2 when leaving
+        resetSlide2();
       }
 
       // Copy feed snapshot to Future slide
@@ -981,12 +1125,21 @@
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
+      // Block slide nav when analyse input is focused
+      const analyseInput = document.getElementById('analyse-input');
+      if (document.activeElement === analyseInput) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          startAnalysis(analyseInput.value.trim());
+        }
+        return; // don't intercept other keys while typing
+      }
+
       if (e.key === 'ArrowRight' || e.key === ' ') {
         e.preventDefault();
 
         // Sub-step handling for slide 1
         if (currentSlide === 1 && slide1Step === 0) {
-          // Reveal solutions within cards
           const cards = document.querySelectorAll('.failure-card');
           cards.forEach((card, i) => {
             setTimeout(() => card.classList.add('revealed'), i * 150);
@@ -994,6 +1147,12 @@
           slide1Step = 1;
           return;
         }
+
+        // Block nav during slide 2 analysis animation
+        if (currentSlide === 2 && slide2Phase === 'analysing') return;
+
+        // On slide 2 with input still showing, don't advance
+        if (currentSlide === 2 && slide2Phase === 'input') return;
 
         showSlide(currentSlide + 1);
       } else if (e.key === 'ArrowLeft') {
@@ -1013,6 +1172,75 @@
         showSlide(currentSlide + (diff > 0 ? 1 : -1));
       }
     });
+
+    // --- Slide 2: Analysis animation ---
+    function resetSlide2() {
+      slide2Phase = 'input';
+      document.getElementById('analyse-input-wrap').classList.remove('hidden');
+      document.getElementById('case-results').classList.remove('active');
+      document.getElementById('mod-graph').classList.remove('outlined');
+      document.getElementById('mod-summary').classList.remove('visible');
+
+      document.querySelectorAll('.mod-node-rect, .mod-node-text').forEach(el => el.classList.remove('visible'));
+      document.querySelectorAll('.mod-link').forEach(el => el.classList.remove('drawn'));
+      document.getElementById('arch-conn-1').classList.remove('visible');
+      document.getElementById('arch-fan').classList.remove('visible');
+      document.getElementById('arch-api').classList.remove('visible');
+      document.querySelectorAll('.arch-client').forEach(c => c.classList.remove('visible'));
+
+      document.getElementById('analyse-input').value = '';
+    }
+
+    function startAnalysis(url) {
+      if (!url) return;
+      slide2Phase = 'analysing';
+
+      // Hide input, show results container
+      document.getElementById('analyse-input-wrap').classList.add('hidden');
+      const results = document.getElementById('case-results');
+      results.classList.add('active');
+
+      // 1. Discover modules one by one
+      const rects = document.querySelectorAll('.mod-node-rect');
+      const texts = document.querySelectorAll('.mod-node-text');
+      const nodeCount = rects.length;
+      const nodeDelay = 250;
+
+      rects.forEach((rect, i) => {
+        setTimeout(() => {
+          rect.classList.add('visible');
+          texts[i].classList.add('visible');
+        }, i * nodeDelay);
+      });
+
+      // 2. Draw connection lines after nodes
+      const afterNodes = nodeCount * nodeDelay + 150;
+      const links = document.querySelectorAll('.mod-link');
+      links.forEach((link, i) => {
+        setTimeout(() => link.classList.add('drawn'), afterNodes + i * 120);
+      });
+
+      // 3. Outline the graph + label + summary text
+      const afterLinks = afterNodes + links.length * 120 + 200;
+      setTimeout(() => {
+        document.getElementById('mod-graph').classList.add('outlined');
+        document.getElementById('mod-summary').classList.add('visible');
+      }, afterLinks);
+
+      // 4. Connector + API + Fan + Clients
+      setTimeout(() => document.getElementById('arch-conn-1').classList.add('visible'), afterLinks + 500);
+      setTimeout(() => document.getElementById('arch-api').classList.add('visible'), afterLinks + 700);
+      setTimeout(() => document.getElementById('arch-fan').classList.add('visible'), afterLinks + 1000);
+
+      const clients = document.querySelectorAll('.arch-client');
+      clients.forEach((c, i) => {
+        setTimeout(() => c.classList.add('visible'), afterLinks + 1200 + i * 150);
+      });
+
+      // 5. Mark done
+      const afterClients = afterLinks + 1200 + clients.length * 150 + 200;
+      setTimeout(() => { slide2Phase = 'done'; }, afterClients);
+    }
 
     // --- Slide 4: Web Booking ---
     const ROWS = 'ABCDEF';
