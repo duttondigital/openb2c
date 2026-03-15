@@ -752,21 +752,6 @@
       font-size: 0.9rem;
     }
 
-    .mcp-prompt {
-      margin-top: 1.5rem;
-      text-align: center;
-      font-size: 1.1rem;
-      color: var(--accent);
-      font-weight: 500;
-    }
-
-    .mcp-prompt-sub {
-      margin-top: 0.5rem;
-      text-align: center;
-      font-size: 0.85rem;
-      color: var(--muted);
-    }
-
     /* Navigation */
     .nav-hint {
       position: fixed;
@@ -931,16 +916,9 @@
     </div>
   </section>
 
-  <!-- Slide 3: Demo Intro -->
+  <!-- Slide 3: Web Booking -->
   <section class="slide" data-slide="3">
-    <h3>Live Demo</h3>
-    <p>Same backend. Two clients.</p>
-    <p style="margin-top: 1rem; color: var(--accent);">Let's book some tickets.</p>
-  </section>
-
-  <!-- Slide 4: Web Booking -->
-  <section class="slide" data-slide="4">
-    <h3>The Past</h3>
+    <h3>Web UI</h3>
     <div class="booking-layout">
       <!-- Left: performance + seat map -->
       <div class="booking-left">
@@ -1005,32 +983,28 @@
     </div>
   </section>
 
-  <!-- Slide 5: MCP Demo -->
-  <section class="slide" data-slide="5">
-    <h3>The Present</h3>
+  <!-- Slide 4: MCP Demo -->
+  <section class="slide" data-slide="4">
+    <h3>AI Agent</h3>
     <div class="feed-wrap">
       <div class="feed-header">Live Bookings</div>
       <div class="feed-list" id="feed-list-present">
         <div class="feed-empty">Waiting for bookings...</div>
       </div>
     </div>
-    <div class="mcp-prompt">Now book via MCP...</div>
-    <div class="mcp-prompt-sub">Use Claude or any AI client connected to the same backend</div>
   </section>
 
-  <!-- Slide 6: Future (joke + static feed copy) -->
-  <section class="slide" data-slide="6">
-    <h3>The Future</h3>
+  <!-- Slide 5: Future (joke + static feed copy) -->
+  <section class="slide" data-slide="5">
+    <h3>Neural implant?</h3>
     <div class="feed-wrap">
       <div class="feed-header">Live Bookings</div>
       <div class="feed-list" id="feed-list-future"></div>
     </div>
-    <div class="mcp-prompt">Booking via neural implant...</div>
-    <div class="mcp-prompt-sub">(Still just hits the same API)</div>
   </section>
 
-  <!-- Slide 7: Economics -->
-  <section class="slide" data-slide="7">
+  <!-- Slide 6: Economics -->
+  <section class="slide" data-slide="6">
     <h3>The Economics</h3>
     <div style="background: var(--surface); border-radius: 1rem; padding: 2rem; margin-top: 1rem;">
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
@@ -1045,15 +1019,15 @@
     <p style="margin-top: 2rem;">Small orgs can afford professional infrastructure.</p>
   </section>
 
-  <!-- Slide 8: Thesis -->
-  <section class="slide" data-slide="8">
+  <!-- Slide 7: Thesis -->
+  <section class="slide" data-slide="7">
     <h1>Build Local.<br>Interface Universal.</h1>
     <p style="margin-top: 2rem;">Stop predicting the future.</p>
     <p>Build systems that don't need you to.</p>
   </section>
 
-  <!-- Slide 9: Questions -->
-  <section class="slide" data-slide="9">
+  <!-- Slide 8: Questions -->
+  <section class="slide" data-slide="8">
     <h3>Questions?</h3>
     <p style="margin-top: 2rem; font-family: monospace;">github.com/louisdutton/duchyopera</p>
   </section>
@@ -1109,14 +1083,14 @@
         resetSlide2();
       }
 
-      // Copy feed snapshot to Future slide
-      if (index === 6) {
+      // Copy feed snapshot to ??? slide
+      if (index === 5) {
         document.getElementById('feed-list-future').innerHTML =
           document.getElementById('feed-list-present').innerHTML;
       }
 
-      // Start/stop polling on Present slide (5)
-      if (index === 5) {
+      // Start/stop polling on AI Agent slide (4)
+      if (index === 4) {
         startPolling();
       } else {
         stopPolling();
