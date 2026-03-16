@@ -765,9 +765,35 @@
       position: fixed;
       top: 0;
       left: 0;
+      right: 0;
       height: 3px;
+      display: flex;
+      z-index: 100;
+    }
+
+    .progress-seg {
+      flex: 1;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      transition: background 0.3s ease;
+      position: relative;
+    }
+
+    .progress-seg:not(:last-child) {
+      margin-right: 2px;
+    }
+
+    .progress-seg:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .progress-seg.active {
       background: var(--accent);
-      transition: width 0.3s ease;
+    }
+
+    .progress-seg.past {
+      background: rgba(255, 255, 255, 0.35);
     }
 
     /* Responsive */
@@ -804,6 +830,7 @@
     <div class="logo-text"><span>Dutton</span><span class="logo-stretch">Digital</span></div>
   </a>
   <div class="progress" id="progress"></div>
+
 
   <!-- Slide 0: Title -->
   <section class="slide" data-slide="0">
@@ -857,7 +884,7 @@
 
     <!-- Phase 1: URL input -->
     <div class="analyse-input-wrap" id="analyse-input-wrap">
-      <input type="text" class="analyse-input" id="analyse-input" placeholder="example.com" autocomplete="off" spellcheck="false" />
+      <input type="text" class="analyse-input" id="analyse-input" placeholder="duchyopera.co.uk" autocomplete="off" spellcheck="false" />
       <div class="analyse-hint">Enter a website to analyse</div>
     </div>
 
@@ -1041,6 +1068,15 @@
     const totalSlides = slides.length;
     const progress = document.getElementById('progress');
 
+    // Build segmented progress bar
+    for (let i = 0; i < totalSlides; i++) {
+      const seg = document.createElement('div');
+      seg.className = 'progress-seg';
+      seg.addEventListener('click', () => showSlide(i));
+      progress.appendChild(seg);
+    }
+    const progressSegs = progress.querySelectorAll('.progress-seg');
+
     // Sub-step state for slide 1 (problem → solutions reveal)
     let slide1Step = 0; // 0 = cards shown, 1 = solutions revealed
 
@@ -1052,7 +1088,10 @@
       if (index < 0 || index >= totalSlides) return;
 
       currentSlide = index;
-      progress.style.width = ((index + 1) / totalSlides * 100) + '%';
+      progressSegs.forEach((seg, i) => {
+        seg.classList.toggle('active', i === index);
+        seg.classList.toggle('past', i < index);
+      });
 
       slides.forEach((slide, i) => {
         slide.classList.toggle('visible', i === index);
@@ -1073,11 +1112,9 @@
         });
       }
 
-      // Slide 2: reset analysis state when entering, focus input
+      // Slide 2: reset analysis state when entering
       if (index === 2) {
-        if (slide2Phase === 'input') {
-          setTimeout(() => document.getElementById('analyse-input').focus(), 300);
-        }
+        // no autofocus — presenter clicks input when ready
       } else {
         // Reset slide 2 when leaving
         resetSlide2();
@@ -1098,21 +1135,37 @@
     }
 
     // Keyboard navigation
+    // Space: in-slide progression first, then advance
+    // Arrow keys: always strict cross-slide navigation
     document.addEventListener('keydown', (e) => {
-      // Block slide nav when analyse input is focused
-      const analyseInput = document.getElementById('analyse-input');
-      if (document.activeElement === analyseInput) {
+      const isInput = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON');
+
+      // Arrow keys: always navigate, blur any focused input first
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (isInput) document.activeElement.blur();
+        showSlide(currentSlide + 1);
+        return;
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (isInput) document.activeElement.blur();
+        showSlide(currentSlide - 1);
+        return;
+      }
+
+      // Enter on analyse input triggers analysis
+      if (isInput && document.activeElement.id === 'analyse-input') {
         if (e.key === 'Enter') {
           e.preventDefault();
-          startAnalysis(analyseInput.value.trim());
+          startAnalysis(document.activeElement.value.trim());
         }
         return; // don't intercept other keys while typing
       }
 
-      if (e.key === 'ArrowRight' || e.key === ' ') {
+      if (e.key === ' ') {
         e.preventDefault();
 
-        // Sub-step handling for slide 1
+        // Sub-step: reveal solutions on slide 1
         if (currentSlide === 1 && slide1Step === 0) {
           const cards = document.querySelectorAll('.failure-card');
           cards.forEach((card, i) => {
@@ -1122,16 +1175,13 @@
           return;
         }
 
-        // Block nav during slide 2 analysis animation
+        // Block during slide 2 analysis animation
         if (currentSlide === 2 && slide2Phase === 'analysing') return;
 
-        // On slide 2 with input still showing, don't advance
+        // Block on slide 2 with input still showing
         if (currentSlide === 2 && slide2Phase === 'input') return;
 
         showSlide(currentSlide + 1);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        showSlide(currentSlide - 1);
       }
     });
 
