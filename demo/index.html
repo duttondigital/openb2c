@@ -20,9 +20,7 @@
       --accent: #fff;
       --accent-dim: rgba(255, 255, 255, 0.06);
       --muted: #777;
-      --surface: #1e1e1e;
-      --success: #e8e8e8;
-      --error: #999;
+      --surface: #1c1c1c;
     }
 
     body {
@@ -30,12 +28,71 @@
       background: var(--bg);
       color: var(--fg);
       min-height: 100vh;
-      overflow-x: hidden;
+      overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Slides */
-    .slide {
+    /* Step indicator */
+    .steps {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: 1.1rem 2rem;
+      background: var(--bg);
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      transition: color 0.3s ease;
+      white-space: nowrap;
+      cursor: default;
+    }
+
+    .step.active { color: var(--fg); }
+    .step.completed { color: var(--fg); }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      border: 1.5px solid var(--muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
+    }
+
+    .step.active .step-num,
+    .step.completed .step-num {
+      border-color: var(--fg);
+      background: var(--fg);
+      color: var(--bg);
+    }
+
+    .step-line {
+      width: 3rem;
+      height: 1px;
+      background: var(--muted);
+      margin: 0 0.75rem;
+      transition: background 0.3s ease;
+    }
+
+    .step-line.completed { background: var(--fg); }
+
+    /* Panels */
+    .panel {
       position: fixed;
       inset: 0;
       display: flex;
@@ -49,34 +106,10 @@
       pointer-events: none;
     }
 
-    .slide.visible {
+    .panel.visible {
       opacity: 1;
       transform: translateY(0);
       pointer-events: auto;
-    }
-
-    .slide h1 {
-      font-size: 3.5rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-      text-align: center;
-      background: linear-gradient(135deg, var(--fg) 0%, var(--muted) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .slide h2 {
-      font-size: 1.5rem;
-      font-weight: 400;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .slide h3 {
-      font-size: 2rem;
-      font-weight: 600;
-      margin-bottom: 2rem;
-      color: var(--accent);
     }
 
     /* Logo */
@@ -84,7 +117,7 @@
       position: fixed;
       top: 1.5rem;
       left: 1.5rem;
-      z-index: 100;
+      z-index: 101;
       display: flex;
       align-items: center;
       gap: 0.6rem;
@@ -92,11 +125,7 @@
       text-decoration: none;
     }
 
-    .corner-logo svg {
-      height: 1.6em;
-      width: auto;
-      display: block;
-    }
+    .corner-logo svg { height: 1.6em; width: auto; display: block; }
 
     .corner-logo .logo-text {
       letter-spacing: 0.08em;
@@ -109,25 +138,9 @@
       flex-direction: column;
     }
 
-    .corner-logo .logo-stretch {
-      display: block;
-      letter-spacing: 0.12em;
-    }
+    .corner-logo .logo-stretch { display: block; letter-spacing: 0.12em; }
 
-    .slide p {
-      font-size: 1.25rem;
-      line-height: 1.8;
-      max-width: 600px;
-      text-align: center;
-      color: var(--muted);
-    }
-
-    .slide .highlight {
-      color: var(--fg);
-      font-weight: 500;
-    }
-
-    /* Slide 0: Analysis — interactive analysis */
+    /* ---- Step 0: Analysis ---- */
     .analyse-input-wrap {
       display: flex;
       flex-direction: column;
@@ -145,7 +158,7 @@
 
     .analyse-input {
       background: var(--surface);
-      border: 2px solid var(--surface);
+      border: 1px solid transparent;
       border-radius: 0.75rem;
       padding: 1rem 1.5rem;
       color: var(--fg);
@@ -154,17 +167,13 @@
       text-align: center;
       transition: border-color 0.2s;
       font-family: monospace;
+      outline: none;
     }
 
-    .analyse-input:focus { outline: none; border-color: var(--fg); }
+    .analyse-input:focus { border-color: #fff; }
     .analyse-input::placeholder { color: var(--muted); }
+    .analyse-hint { font-size: 0.8rem; color: var(--muted); }
 
-    .analyse-hint {
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    /* Results layout */
     .case-layout {
       display: flex;
       flex-direction: column;
@@ -184,7 +193,6 @@
       pointer-events: auto;
     }
 
-    /* Module graph SVG */
     .mod-graph {
       position: relative;
       border: 1px solid transparent;
@@ -201,21 +209,9 @@
     }
 
     .mod-graph-summary.visible { opacity: 1; }
-
-    .mod-graph-summary .summary-title {
-      font-size: 0.95rem;
-      color: var(--fg);
-      margin-bottom: 0.25rem;
-    }
-
-    .mod-graph-summary .summary-traits {
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .mod-graph.outlined {
-      border-color: rgba(255, 255, 255, 0.2);
-    }
+    .mod-graph-summary .summary-title { font-size: 0.95rem; color: var(--fg); margin-bottom: 0.25rem; }
+    .mod-graph-summary .summary-traits { font-size: 0.8rem; color: var(--muted); }
+    .mod-graph.outlined { border-color: rgba(255, 255, 255, 0.2); }
 
     .mod-graph-label {
       position: absolute;
@@ -232,333 +228,343 @@
       transition: opacity 0.5s ease;
     }
 
-    .mod-graph.outlined .mod-graph-label {
-      opacity: 1;
-    }
+    .mod-graph.outlined .mod-graph-label { opacity: 1; }
 
-    .mod-svg {
-      display: block;
-      width: 310px;
-      height: 110px;
-    }
-
-    .mod-node-rect {
-      fill: var(--surface);
-      opacity: 0;
-      transition: opacity 0.35s ease;
-    }
-
+    .mod-svg { display: block; width: 310px; height: 110px; }
+    .mod-node-rect { fill: var(--surface); opacity: 0; transition: opacity 0.35s ease; }
     .mod-node-rect.visible { opacity: 1; }
-
-    .mod-node-text {
-      fill: var(--muted);
-      font-family: monospace;
-      font-size: 11px;
-      text-anchor: middle;
-      dominant-baseline: middle;
-      opacity: 0;
-      transition: opacity 0.35s ease;
-    }
-
+    .mod-node-text { fill: var(--muted); font-family: monospace; font-size: 11px; text-anchor: middle; dominant-baseline: middle; opacity: 0; transition: opacity 0.35s ease; }
     .mod-node-text.visible { opacity: 1; }
-
-    .mod-link {
-      stroke: rgba(255, 255, 255, 0.15);
-      stroke-width: 1;
-      fill: none;
-      stroke-dasharray: 40;
-      stroke-dashoffset: 40;
-      transition: stroke-dashoffset 0.5s ease;
-    }
-
+    .mod-link { stroke: rgba(255, 255, 255, 0.15); stroke-width: 1; fill: none; stroke-dasharray: 40; stroke-dashoffset: 40; transition: stroke-dashoffset 0.5s ease; }
     .mod-link.drawn { stroke-dashoffset: 0; }
 
-    /* Architecture connectors — flowing dotted lines */
-    .arch-connector {
-      width: 1px;
-      height: 28px;
-      position: relative;
-      overflow: hidden;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-
+    .arch-connector { width: 1px; height: 28px; position: relative; overflow: hidden; opacity: 0; transition: opacity 0.3s ease; }
     .arch-connector.visible { opacity: 1; }
-
     .arch-connector::before {
       content: '';
       position: absolute;
-      top: -6px;
-      left: 0;
+      top: -6px; left: 0;
       width: 1px;
       height: calc(100% + 12px);
-      background: repeating-linear-gradient(
-        to bottom,
-        rgba(255, 255, 255, 0.5) 0 2px,
-        transparent 2px 6px
-      );
+      background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.5) 0 2px, transparent 2px 6px);
       animation: connFlow 0.4s linear infinite;
     }
 
-    @keyframes connFlow {
-      from { transform: translateY(0); }
-      to { transform: translateY(6px); }
-    }
+    @keyframes connFlow { from { transform: translateY(0); } to { transform: translateY(6px); } }
 
-    .arch-api {
+    .arch-api { background: var(--fg); color: var(--bg); padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; opacity: 0; transform: scale(0.9); transition: opacity 0.4s ease, transform 0.4s ease; }
+    .arch-api.visible { opacity: 1; transform: scale(1); }
+    .arch-fan { width: 240px; height: 28px; opacity: 0; transition: opacity 0.4s ease; }
+    .arch-fan.visible { opacity: 1; }
+    .arch-fan-line { stroke: rgba(255,255,255,0.4); stroke-width: 1; stroke-dasharray: 3 4; animation: fanFlow 0.5s linear infinite; }
+    @keyframes fanFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -7; } }
+    .arch-clients { display: flex; justify-content: space-around; width: 240px; }
+    .arch-client { background: var(--surface); padding: 0.4rem 0.75rem; border-radius: 0.4rem; color: var(--muted); font-size: 0.75rem; text-align: center; opacity: 0; transform: translateY(5px); transition: opacity 0.3s ease, transform 0.3s ease; }
+    .arch-client.visible { opacity: 1; transform: translateY(0); }
+
+    .get-started-btn {
+      margin-top: 2rem;
+      padding: 0.7rem 2rem;
       background: var(--fg);
       color: var(--bg);
-      padding: 0.5rem 1.5rem;
+      border: none;
       border-radius: 0.5rem;
+      font-size: 0.9rem;
       font-weight: 600;
-      font-size: 0.85rem;
+      cursor: pointer;
       opacity: 0;
-      transform: scale(0.9);
+      transform: translateY(10px);
       transition: opacity 0.4s ease, transform 0.4s ease;
+      pointer-events: none;
     }
 
-    .arch-api.visible {
-      opacity: 1;
-      transform: scale(1);
-    }
+    .get-started-btn.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .get-started-btn:hover { opacity: 0.9; }
 
-    /* Fan-out lines: API → clients */
-    .arch-fan {
-      width: 240px;
-      height: 28px;
-      opacity: 0;
-      transition: opacity 0.4s ease;
-    }
-
-    .arch-fan.visible { opacity: 1; }
-
-    .arch-fan-line {
-      stroke: rgba(255, 255, 255, 0.4);
-      stroke-width: 1;
-      stroke-dasharray: 3 4;
-      animation: fanFlow 0.5s linear infinite;
-    }
-
-    @keyframes fanFlow {
-      from { stroke-dashoffset: 0; }
-      to { stroke-dashoffset: -7; }
-    }
-
-    .arch-clients {
-      display: flex;
-      justify-content: space-around;
-      width: 240px;
-    }
-
-    .arch-client {
-      background: var(--surface);
-      padding: 0.4rem 0.75rem;
-      border-radius: 0.4rem;
-      color: var(--muted);
-      font-size: 0.75rem;
-      text-align: center;
-      opacity: 0;
-      transform: translateY(5px);
-      transition: opacity 0.3s ease, transform 0.3s ease;
-    }
-
-    .arch-client.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* Web Booking: full-width two-panel */
-    .booking-layout {
+    /* ---- Step 1: Dashboard (split screen) ---- */
+    .dashboard-layout {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 2rem;
-      max-width: 1100px;
       width: 100%;
-      margin-top: 1.5rem;
-      max-height: 75vh;
+      max-width: 1200px;
+      height: calc(100vh - 6rem);
+      padding-top: 1rem;
     }
 
-    .booking-left, .booking-right {
+    .dashboard-left,
+    .dashboard-right {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      min-height: 0;
     }
 
+    /* Feed (left side) */
+    .feed-wrap {
+      flex: 1;
+      border: 1px solid var(--surface);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      padding-top: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      position: relative;
+    }
+
+    .feed-header {
+      position: absolute;
+      top: -0.6em;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      padding: 0 0.75rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .live-dot {
+      position: relative;
+      width: 8px;
+      height: 8px;
+    }
+
+    .live-dot::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--fg);
+      border-radius: 50%;
+    }
+
+    .live-dot::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: var(--fg);
+      animation: livePing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes livePing {
+      0% { transform: scale(1); opacity: 0.6; }
+      75%, 100% { transform: scale(2); opacity: 0; }
+    }
+
+    .feed-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .booking-entry {
+      background: var(--surface);
+      border-radius: 0.5rem;
+      padding: 0.6rem 0.75rem;
+      animation: bookingIn 0.4s ease;
+    }
+
+    @keyframes bookingIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .booking-entry .be-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.15rem; }
+    .booking-entry .be-amount { font-weight: 600; font-size: 0.85rem; }
+    .booking-entry .be-time { font-size: 0.65rem; color: var(--muted); }
+    .booking-entry .be-email { font-size: 0.75rem; color: var(--muted); }
+    .booking-entry .be-client { display: inline-block; margin-top: 0.35rem; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.1rem 0.35rem; border-radius: 0.2rem; border: 1px solid var(--muted); color: var(--muted); }
+    .booking-entry .be-client.mcp { border-color: var(--fg); color: var(--fg); }
+    .booking-entry .be-client.unknown { border-color: var(--fg); color: var(--fg); }
+    .feed-empty { color: var(--muted); text-align: center; padding: 2rem; font-style: italic; font-size: 0.85rem; }
+
+    /* Booking UI (right side) */
+    .booking-wrap {
+      flex: 1;
+      border: 1px solid var(--surface);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      padding-top: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: visible;
+      position: relative;
+    }
+
+    .booking-inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .booking-title {
+      position: absolute;
+      top: -0.6em;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      padding: 0 0.75rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      white-space: nowrap;
+    }
+
+    /* Show list view */
+    .show-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .show-card {
+      background: var(--surface);
+      border: none;
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: filter 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .show-card:hover { filter: brightness(1.3); }
+
+    .show-card-info h5 { font-size: 0.9rem; margin-bottom: 0.15rem; }
+    .show-card-info .meta { font-size: 0.7rem; color: var(--muted); }
+    .show-card-price { font-size: 0.85rem; font-weight: 600; color: var(--fg); white-space: nowrap; }
+    .show-card-arrow { color: var(--muted); font-size: 1rem; margin-left: 0.75rem; }
+
+    /* Show detail view */
+    .show-detail { display: none; flex-direction: column; gap: 0.75rem; }
+    .show-detail.active { display: flex; }
+
+    .back-link {
+      font-size: 0.75rem;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: color 0.2s;
+      align-self: flex-start;
+    }
+
+    .back-link:hover { color: var(--fg); }
+
+    .show-detail-header h4 { font-size: 1rem; margin-bottom: 0.1rem; }
+    .show-detail-header .meta { font-size: 0.75rem; color: var(--muted); }
+
     .booking-label {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
 
-    /* Performance cards */
-    .perf-cards {
+    /* Seat tier legend */
+    .seat-legend {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
     }
 
-    .perf-card {
-      flex: 1;
-      background: var(--surface);
-      border: 2px solid transparent;
-      border-radius: 0.5rem;
-      padding: 0.6rem 0.75rem;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
+    .seat-legend-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.6rem; color: var(--muted); }
+    .seat-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+    .seat-legend-swatch.tier-premium { background: #4a3f2a; }
+    .seat-legend-swatch.tier-standard { background: var(--surface); }
+    .seat-legend-swatch.tier-rear { background: #1a1a2a; }
 
-    .perf-card:hover { border-color: var(--muted); }
-    .perf-card.selected { border-color: var(--fg); }
-
-    .perf-card h5 {
-      font-size: 0.8rem;
-      margin-bottom: 0.15rem;
-    }
-
-    .perf-card .meta {
-      font-size: 0.65rem;
-      color: var(--muted);
-    }
-
-    .perf-card .price {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--fg);
-      margin-top: 0.2rem;
-    }
-
-    /* Seat map */
-    .seat-map-wrap {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.5rem;
-    }
+    .seat-map-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
 
     .seat-map-stage {
       background: var(--surface);
       color: var(--muted);
-      font-size: 0.6rem;
+      font-size: 0.55rem;
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      padding: 0.25rem 2rem;
-      border-radius: 0 0 0.5rem 0.5rem;
+      padding: 0.2rem 1.5rem;
+      border-radius: 0 0 0.4rem 0.4rem;
       text-align: center;
     }
 
     .seat-map {
       display: grid;
       grid-template-columns: repeat(10, 1fr);
-      gap: 4px;
+      gap: 3px;
       width: 100%;
-      max-width: 360px;
+      max-width: 320px;
     }
 
     .seat {
       aspect-ratio: 1;
       background: var(--surface);
-      border: 1px solid transparent;
+      border: none;
       border-radius: 3px;
       cursor: pointer;
-      font-size: 0.5rem;
+      font-size: 0.45rem;
       color: var(--muted);
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.15s, border-color 0.15s;
+      transition: filter 0.15s;
       user-select: none;
     }
 
-    .seat:hover { border-color: var(--muted); }
-    .seat.selected { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-    .seat.taken { background: #333; color: #555; cursor: default; pointer-events: none; }
+    .seat:hover { filter: brightness(1.5); }
+    .seat.selected { background: var(--fg); color: var(--bg); filter: none; }
+    .seat.taken { background: #333; color: #555; cursor: default; pointer-events: none; filter: none; }
 
-    .seat-info {
-      font-size: 0.75rem;
-      color: var(--muted);
-      text-align: center;
-    }
+    .seat.tier-premium { background: #4a3f2a; }
+    .seat.tier-standard { background: var(--surface); }
+    .seat.tier-rear { background: #1a1a2a; }
 
+    .seat-info { font-size: 0.7rem; color: var(--muted); text-align: center; }
     .seat-info strong { color: var(--fg); }
 
-    /* Ticket type selector */
-    .ticket-types {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .ticket-type-btn {
-      flex: 1;
-      background: var(--surface);
-      border: 2px solid transparent;
-      border-radius: 0.5rem;
-      padding: 0.5rem;
-      cursor: pointer;
-      text-align: center;
-      transition: border-color 0.2s;
-      color: var(--fg);
-      font-size: 0.8rem;
-    }
-
-    .ticket-type-btn:hover { border-color: var(--muted); }
-    .ticket-type-btn.selected { border-color: var(--fg); }
-
-    .ticket-type-btn .type-label { font-weight: 500; }
-    .ticket-type-btn .type-mult {
-      font-size: 0.65rem;
-      color: var(--muted);
-      display: block;
-      margin-top: 0.15rem;
-    }
-
-    /* Booking summary */
+    /* Summary + checkout */
     .booking-summary {
       background: var(--surface);
       border-radius: 0.5rem;
-      padding: 1rem;
+      padding: 0.75rem;
     }
 
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-bottom: 0.4rem;
-    }
-
-    .summary-row.total {
-      color: var(--fg);
-      font-weight: 600;
-      font-size: 1rem;
-      border-top: 1px solid #333;
-      padding-top: 0.5rem;
-      margin-top: 0.5rem;
-      margin-bottom: 0;
-    }
+    .summary-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; }
+    .summary-row.total { color: var(--fg); font-weight: 600; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 0.4rem; margin-top: 0.4rem; margin-bottom: 0; }
 
     .booking-email {
       background: var(--surface);
-      border: 2px solid var(--surface);
+      border: 1px solid transparent;
       border-radius: 0.5rem;
-      padding: 0.6rem 0.75rem;
+      padding: 0.5rem 0.75rem;
       color: var(--fg);
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       transition: border-color 0.2s;
       width: 100%;
+      outline: none;
     }
 
-    .booking-email:focus { outline: none; border-color: var(--fg); }
+    .booking-email:focus { border-color: #fff; }
     .booking-email::placeholder { color: var(--muted); }
 
     .book-btn {
       width: 100%;
-      padding: 0.7rem;
+      padding: 0.6rem;
       background: var(--fg);
       color: var(--bg);
       border: none;
       border-radius: 0.5rem;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.2s;
@@ -571,173 +577,18 @@
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid var(--fg);
       border-radius: 0.5rem;
-      padding: 0.75rem;
+      padding: 0.6rem;
       color: var(--fg);
       text-align: center;
-      font-size: 0.85rem;
-      animation: bookingIn 0.3s ease;
-    }
-
-    /* MCP Feed slide */
-    .feed-wrap {
-      max-width: 700px;
-      width: 100%;
-      margin-top: 1rem;
-      border: 1px solid var(--surface);
-      border-radius: 1rem;
-      padding: 1.5rem;
-      max-height: 55vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .feed-header {
       font-size: 0.8rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .feed-header::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      background: var(--fg);
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .feed-list {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .booking-entry {
-      background: var(--surface);
-      border-radius: 0.5rem;
-      padding: 0.75rem 1rem;
-      animation: bookingIn 0.4s ease;
-    }
-
-    @keyframes bookingIn {
-      from { opacity: 0; transform: translateY(-8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .booking-entry .be-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 0.25rem;
-    }
-
-    .booking-entry .be-amount { font-weight: 600; }
-    .booking-entry .be-time { font-size: 0.7rem; color: var(--muted); }
-    .booking-entry .be-email { font-size: 0.8rem; color: var(--muted); }
-
-    .booking-entry .be-client {
-      display: inline-block;
-      margin-top: 0.5rem;
-      font-size: 0.6rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 0.15rem 0.4rem;
-      border-radius: 0.2rem;
-      border: 1px solid var(--muted);
-      color: var(--muted);
-    }
-
-    .booking-entry .be-client.mcp {
-      border-color: var(--fg);
-      color: var(--fg);
-    }
-
-    .feed-empty {
-      color: var(--muted);
-      text-align: center;
-      padding: 2rem;
-      font-style: italic;
-      font-size: 0.9rem;
-    }
-
-    /* Navigation */
-    .nav-hint {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      color: var(--muted);
-      font-size: 0.875rem;
-    }
-
-    .progress {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      display: flex;
-      z-index: 100;
-    }
-
-    .progress-seg {
-      flex: 1;
-      height: 100%;
-      background: rgba(255, 255, 255, 0.08);
-      cursor: pointer;
-      transition: background 0.3s ease;
-      position: relative;
-    }
-
-    .progress-seg:not(:last-child) {
-      margin-right: 2px;
-    }
-
-    .progress-seg:hover {
-      background: rgba(255, 255, 255, 0.25);
-    }
-
-    .progress-seg.active {
-      background: var(--accent);
-    }
-
-    .progress-seg.past {
-      background: rgba(255, 255, 255, 0.35);
+      animation: bookingIn 0.3s ease;
     }
 
     /* Responsive */
     @media (max-width: 768px) {
-      .slide {
-        padding: 2rem;
-      }
-
-      .slide h1 {
-        font-size: 2rem;
-      }
-
-      .failures {
-        grid-template-columns: 1fr;
-      }
-
-      .booking-layout {
-        grid-template-columns: 1fr;
-      }
-
-      .analyse-input {
-        width: 100%;
-        max-width: 300px;
-      }
+      .panel { padding: 2rem; }
+      .dashboard-layout { grid-template-columns: 1fr; }
+      .analyse-input { width: 100%; max-width: 300px; }
     }
   </style>
 </head>
@@ -749,318 +600,220 @@
     </svg>
     <div class="logo-text"><span>Dutton</span><span class="logo-stretch">Digital</span></div>
   </a>
-  <div class="progress" id="progress"></div>
 
+  <nav class="steps" id="steps">
+    <div class="step active" data-step="0">
+      <span class="step-num">1</span> Analyse
+    </div>
+    <div class="step-line" id="line-0"></div>
+    <div class="step" data-step="1">
+      <span class="step-num">2</span> Dashboard
+    </div>
+  </nav>
 
-  <!-- Slide 0: Analysis -->
-  <section class="slide" data-slide="0">
-    <!-- Phase 1: URL input -->
+  <!-- Step 0: Analysis -->
+  <section class="panel" data-panel="0">
     <div class="analyse-input-wrap" id="analyse-input-wrap">
       <input type="text" class="analyse-input" id="analyse-input" placeholder="duchyopera.co.uk" autocomplete="off" spellcheck="false" />
       <div class="analyse-hint">Enter a website to analyse</div>
     </div>
 
-    <!-- Results: module graph + architecture (centered) -->
     <div class="case-layout" id="case-results">
-        <div class="mod-graph" id="mod-graph">
-          <div class="mod-graph-label">Duchy Opera</div>
-          <div class="mod-graph-summary" id="mod-summary">
-            <div class="summary-title">Cornish charity opera company</div>
-            <div class="summary-traits">Seasonal tourism · Ageing audience · Charity budget</div>
-          </div>
-          <svg class="mod-svg" viewBox="0 0 310 110">
-            <!-- Domain connections (drawn behind nodes) -->
-            <!-- venue → performance: performances at venues -->
-            <line class="mod-link" x1="90" y1="25" x2="113" y2="25"/>
-            <!-- performance → artist: artists in performances -->
-            <line class="mod-link" x1="197" y1="25" x2="220" y2="25"/>
-            <!-- performance → ticket: tickets for performances -->
-            <line class="mod-link" x1="155" y1="41" x2="155" y2="69"/>
-            <!-- customer → ticket: customers buy tickets -->
-            <line class="mod-link" x1="90" y1="85" x2="113" y2="85"/>
-            <!-- ticket → transaction: transactions contain tickets -->
-            <line class="mod-link" x1="197" y1="85" x2="220" y2="85"/>
-            <!-- Row 1: venue, performance, artist -->
-            <rect class="mod-node-rect" x="6" y="9" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="48" y="26">venue</text>
-            <rect class="mod-node-rect" x="113" y="9" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="155" y="26">performance</text>
-            <rect class="mod-node-rect" x="220" y="9" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="262" y="26">artist</text>
-            <!-- Row 2: customer, ticket, transaction -->
-            <rect class="mod-node-rect" x="6" y="69" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="48" y="86">customer</text>
-            <rect class="mod-node-rect" x="113" y="69" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="155" y="86">ticket</text>
-            <rect class="mod-node-rect" x="220" y="69" width="84" height="32" rx="5"/>
-            <text class="mod-node-text" x="262" y="86">transaction</text>
-          </svg>
+      <div class="mod-graph" id="mod-graph">
+        <div class="mod-graph-label">Duchy Opera</div>
+        <div class="mod-graph-summary" id="mod-summary">
+          <div class="summary-title">Cornish charity opera company</div>
+          <div class="summary-traits">Seasonal tourism · Ageing audience · Charity budget</div>
         </div>
-        <!-- Connector: Duchy Opera → API -->
-        <div class="arch-connector" id="arch-conn-1"></div>
-        <!-- API box -->
-        <div class="arch-api" id="arch-api">REST + MCP</div>
-        <!-- Fan-out: API → all clients -->
-        <svg class="arch-fan" id="arch-fan" viewBox="0 0 240 28" fill="none">
-          <line class="arch-fan-line" x1="120" y1="0" x2="40" y2="28"/>
-          <line class="arch-fan-line" x1="120" y1="0" x2="120" y2="28"/>
-          <line class="arch-fan-line" x1="120" y1="0" x2="200" y2="28"/>
+        <svg class="mod-svg" viewBox="0 0 310 110">
+          <line class="mod-link" x1="90" y1="25" x2="113" y2="25"/>
+          <line class="mod-link" x1="197" y1="25" x2="220" y2="25"/>
+          <line class="mod-link" x1="155" y1="41" x2="155" y2="69"/>
+          <line class="mod-link" x1="90" y1="85" x2="113" y2="85"/>
+          <line class="mod-link" x1="197" y1="85" x2="220" y2="85"/>
+          <rect class="mod-node-rect" x="6" y="9" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="48" y="26">venue</text>
+          <rect class="mod-node-rect" x="113" y="9" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="155" y="26">performance</text>
+          <rect class="mod-node-rect" x="220" y="9" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="262" y="26">artist</text>
+          <rect class="mod-node-rect" x="6" y="69" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="48" y="86">customer</text>
+          <rect class="mod-node-rect" x="113" y="69" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="155" y="86">ticket</text>
+          <rect class="mod-node-rect" x="220" y="69" width="84" height="32" rx="5"/>
+          <text class="mod-node-text" x="262" y="86">transaction</text>
         </svg>
-        <!-- Client boxes -->
-        <div class="arch-clients">
-          <div class="arch-client" id="client-web">Web UI</div>
-          <div class="arch-client" id="client-ai">AI Agent</div>
-          <div class="arch-client" id="client-future">???</div>
-        </div>
+      </div>
+      <div class="arch-connector" id="arch-conn-1"></div>
+      <div class="arch-api" id="arch-api">REST + MCP</div>
+      <svg class="arch-fan" id="arch-fan" viewBox="0 0 240 28" fill="none">
+        <line class="arch-fan-line" x1="120" y1="0" x2="40" y2="28"/>
+        <line class="arch-fan-line" x1="120" y1="0" x2="120" y2="28"/>
+        <line class="arch-fan-line" x1="120" y1="0" x2="200" y2="28"/>
+      </svg>
+      <div class="arch-clients">
+        <div class="arch-client" id="client-web">Web UI</div>
+        <div class="arch-client" id="client-ai">AI Agent</div>
+        <div class="arch-client" id="client-future">???</div>
+      </div>
     </div>
+    <button class="get-started-btn" id="get-started-btn">Get Started</button>
   </section>
 
-  <!-- Slide 1: Web Booking -->
-  <section class="slide" data-slide="1">
-    <div class="booking-layout">
-      <!-- Left: performance + seat map -->
-      <div class="booking-left">
-        <div class="booking-label">Select Performance</div>
-        <div class="perf-cards">
-          <div class="perf-card" data-id="1" data-name="La Traviata" data-price="2500">
-            <h5>La Traviata</h5>
-            <div class="meta">Sat 22 Mar · Minack</div>
-            <div class="price">£25</div>
-          </div>
-          <div class="perf-card" data-id="2" data-name="The Marriage of Figaro" data-price="3000">
-            <h5>Marriage of Figaro</h5>
-            <div class="meta">Sun 23 Mar · Hall for Cornwall</div>
-            <div class="price">£30</div>
-          </div>
-          <div class="perf-card" data-id="3" data-name="Carmen" data-price="2800">
-            <h5>Carmen</h5>
-            <div class="meta">Fri 28 Mar · Truro Cathedral</div>
-            <div class="price">£28</div>
-          </div>
-        </div>
-
-        <div class="booking-label">Select Seats</div>
-        <div class="seat-map-wrap">
-          <div class="seat-map-stage">Stage</div>
-          <div class="seat-map" id="seat-map"></div>
-          <div class="seat-info" id="seat-info">Click seats to select</div>
+  <!-- Step 1: Dashboard (feed + booking side by side) -->
+  <section class="panel" data-panel="1">
+    <div class="dashboard-layout">
+      <!-- Left: live feed -->
+      <div class="dashboard-left">
+        <div class="feed-wrap">
+          <div class="feed-header"><span class="live-dot"></span>Live Bookings</div>
+          <div class="feed-list" id="feed-list"></div>
         </div>
       </div>
 
-      <!-- Right: ticket type, summary, checkout -->
-      <div class="booking-right">
-        <div class="booking-label">Ticket Type</div>
-        <div class="ticket-types">
-          <div class="ticket-type-btn selected" data-type="standard" data-mult="1">
-            <span class="type-label">Standard</span>
-            <span class="type-mult">1×</span>
+      <!-- Right: booking UI -->
+      <div class="dashboard-right">
+        <div class="booking-wrap">
+          <div class="booking-title">Web UI</div>
+          <div class="booking-inner">
+
+          <!-- Show list -->
+          <div class="show-list" id="show-list">
+            <div class="show-card" data-id="1" data-name="La Traviata" data-price="2500" data-meta="Sat 22 Mar · Minack Theatre">
+              <div class="show-card-info">
+                <h5>La Traviata</h5>
+                <div class="meta">Sat 22 Mar · Minack Theatre</div>
+              </div>
+              <div class="show-card-price">from £17.50</div>
+              <div class="show-card-arrow">›</div>
+            </div>
+            <div class="show-card" data-id="2" data-name="The Marriage of Figaro" data-price="3000" data-meta="Sun 23 Mar · Hall for Cornwall">
+              <div class="show-card-info">
+                <h5>Marriage of Figaro</h5>
+                <div class="meta">Sun 23 Mar · Hall for Cornwall</div>
+              </div>
+              <div class="show-card-price">from £21</div>
+              <div class="show-card-arrow">›</div>
+            </div>
+            <div class="show-card" data-id="3" data-name="Carmen" data-price="2800" data-meta="Fri 28 Mar · Truro Cathedral">
+              <div class="show-card-info">
+                <h5>Carmen</h5>
+                <div class="meta">Fri 28 Mar · Truro Cathedral</div>
+              </div>
+              <div class="show-card-price">from £19.60</div>
+              <div class="show-card-arrow">›</div>
+            </div>
           </div>
-          <div class="ticket-type-btn" data-type="vip" data-mult="1.5">
-            <span class="type-label">VIP</span>
-            <span class="type-mult">1.5×</span>
+
+          <!-- Show detail (seat selection + checkout) -->
+          <div class="show-detail" id="show-detail">
+            <div class="back-link" id="back-link">← All shows</div>
+            <div class="show-detail-header" id="show-detail-header">
+              <h4></h4>
+              <div class="meta"></div>
+            </div>
+
+            <div class="seat-legend">
+              <span class="seat-legend-item"><span class="seat-legend-swatch tier-premium"></span>Premium</span>
+              <span class="seat-legend-item"><span class="seat-legend-swatch tier-standard"></span>Standard</span>
+              <span class="seat-legend-item"><span class="seat-legend-swatch tier-rear"></span>Rear</span>
+            </div>
+            <div class="seat-map-wrap">
+              <div class="seat-map-stage">Stage</div>
+              <div class="seat-map" id="seat-map"></div>
+              <div class="seat-info" id="seat-info">Click seats to select</div>
+            </div>
+
+            <div class="booking-summary">
+              <div class="summary-row"><span>Seats</span><span id="sum-seats">—</span></div>
+              <div id="sum-breakdown"></div>
+              <div class="summary-row total"><span>Total</span><span id="sum-total">£0.00</span></div>
+            </div>
+
+            <input type="email" class="booking-email" id="booking-email" placeholder="Email address" />
+            <button class="book-btn" id="book-btn" disabled>Select seats</button>
+            <div id="booking-success" class="booking-success" style="display: none;"></div>
           </div>
-          <div class="ticket-type-btn" data-type="concession" data-mult="0.7">
-            <span class="type-label">Concession</span>
-            <span class="type-mult">0.7×</span>
           </div>
         </div>
-
-        <div class="booking-label">Summary</div>
-        <div class="booking-summary" id="booking-summary">
-          <div class="summary-row"><span>Performance</span><span id="sum-perf">—</span></div>
-          <div class="summary-row"><span>Seats</span><span id="sum-seats">—</span></div>
-          <div class="summary-row"><span>Type</span><span id="sum-type">Standard</span></div>
-          <div class="summary-row"><span>Price per seat</span><span id="sum-price-each">—</span></div>
-          <div class="summary-row total"><span>Total</span><span id="sum-total">£0.00</span></div>
-        </div>
-
-        <input type="email" class="booking-email" id="booking-email" placeholder="Email address" />
-        <button class="book-btn" id="book-btn" disabled>Select a performance & seats</button>
-        <div id="booking-success" class="booking-success" style="display: none;"></div>
       </div>
     </div>
   </section>
-
-  <!-- Slide 2: Live Feed -->
-  <section class="slide" data-slide="2">
-    <div class="feed-wrap">
-      <div class="feed-header">Live Bookings</div>
-      <div class="feed-list" id="feed-list-present">
-        <div class="feed-empty">Waiting for bookings...</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Slide 3: Brain booking (joke) -->
-  <section class="slide" data-slide="3">
-    <div class="feed-wrap">
-      <div class="feed-header">Live Bookings</div>
-      <div class="feed-list" id="feed-list-future"></div>
-    </div>
-  </section>
-
-  <div class="nav-hint">← → to navigate</div>
 
   <script>
     const API = 'http://localhost:3085/api';
-    let currentSlide = 0;
-    const slides = document.querySelectorAll('.slide');
-    const totalSlides = slides.length;
-    const progress = document.getElementById('progress');
+    let currentStep = 0;
+    const panels = document.querySelectorAll('.panel');
+    const stepEls = document.querySelectorAll('.steps .step');
+    const lineEl = document.getElementById('line-0');
 
-    // Build segmented progress bar
-    for (let i = 0; i < totalSlides; i++) {
-      const seg = document.createElement('div');
-      seg.className = 'progress-seg';
-      seg.addEventListener('click', () => showSlide(i));
-      progress.appendChild(seg);
-    }
-    const progressSegs = progress.querySelectorAll('.progress-seg');
+    let analysisPhase = 'input';
 
-    // Slide 0 analysis state: 'input' | 'analysing' | 'done'
-    let slide2Phase = 'input';
+    // --- Step navigation ---
+    function showStep(index) {
+      if (index < 0 || index > 1) return;
+      currentStep = index;
 
-    // Slide navigation
-    function showSlide(index) {
-      if (index < 0 || index >= totalSlides) return;
-
-      currentSlide = index;
-      progressSegs.forEach((seg, i) => {
-        seg.classList.toggle('active', i === index);
-        seg.classList.toggle('past', i < index);
+      panels.forEach((p, i) => p.classList.toggle('visible', i === index));
+      stepEls.forEach((s, i) => {
+        s.classList.remove('active', 'completed');
+        if (i < index) s.classList.add('completed');
+        else if (i === index) s.classList.add('active');
       });
+      lineEl.classList.toggle('completed', index > 0);
 
-      slides.forEach((slide, i) => {
-        slide.classList.toggle('visible', i === index);
-      });
-
-      // Slide 0: reset analysis state when leaving
-      if (index !== 0) {
-        resetSlide0();
-      }
-
-      // Copy feed snapshot to brain booking slide
-      if (index === 3) {
-        document.getElementById('feed-list-future').innerHTML =
-          document.getElementById('feed-list-present').innerHTML;
-      }
-
-      // Start/stop polling on live feed slide (2)
-      if (index === 2) {
-        startPolling();
-      } else {
-        stopPolling();
-      }
+      if (index === 1) startPolling();
+      else stopPolling();
     }
 
-    // Keyboard navigation
-    // Space: in-slide progression first, then advance
-    // Arrow keys: always strict cross-slide navigation
+    function nextStep() { showStep(currentStep + 1); }
+
+    // --- Keyboard ---
     document.addEventListener('keydown', (e) => {
-      const isInput = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'BUTTON');
+      const tag = document.activeElement?.tagName;
+      const isInput = tag === 'INPUT' || tag === 'BUTTON';
 
-      // Arrow keys: always navigate, blur any focused input first
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (isInput) document.activeElement.blur();
-        showSlide(currentSlide + 1);
-        return;
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (isInput) document.activeElement.blur();
-        showSlide(currentSlide - 1);
-        return;
-      }
-
-      // Enter on analyse input triggers analysis
       if (isInput && document.activeElement.id === 'analyse-input') {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          startAnalysis(document.activeElement.value.trim());
-        }
-        return; // don't intercept other keys while typing
+        if (e.key === 'Enter') { e.preventDefault(); startAnalysis(document.activeElement.value.trim()); }
+        return;
       }
 
-      if (e.key === ' ') {
+      // Space on dashboard injects brain booking
+      if (e.key === ' ' && currentStep === 1 && !isInput) {
         e.preventDefault();
-
-        // Block during slide 0 analysis animation
-        if (currentSlide === 0 && slide2Phase === 'analysing') return;
-
-        // Block on slide 0 with input still showing
-        if (currentSlide === 0 && slide2Phase === 'input') return;
-
-        showSlide(currentSlide + 1);
+        injectBrainBooking();
       }
     });
 
-    // Touch navigation
-    let touchStartX = 0;
-    document.addEventListener('touchstart', (e) => {
-      touchStartX = e.touches[0].clientX;
-    });
-    document.addEventListener('touchend', (e) => {
-      const diff = touchStartX - e.changedTouches[0].clientX;
-      if (Math.abs(diff) > 50) {
-        showSlide(currentSlide + (diff > 0 ? 1 : -1));
-      }
-    });
-
-    // --- Slide 2: Analysis animation ---
-    function resetSlide0() {
-      slide2Phase = 'input';
-      document.getElementById('analyse-input-wrap').classList.remove('hidden');
-      document.getElementById('case-results').classList.remove('active');
-      document.getElementById('mod-graph').classList.remove('outlined');
-      document.getElementById('mod-summary').classList.remove('visible');
-
-      document.querySelectorAll('.mod-node-rect, .mod-node-text').forEach(el => el.classList.remove('visible'));
-      document.querySelectorAll('.mod-link').forEach(el => el.classList.remove('drawn'));
-      document.getElementById('arch-conn-1').classList.remove('visible');
-      document.getElementById('arch-fan').classList.remove('visible');
-      document.getElementById('arch-api').classList.remove('visible');
-      document.querySelectorAll('.arch-client').forEach(c => c.classList.remove('visible'));
-
-      document.getElementById('analyse-input').value = '';
-    }
-
+    // --- Step 0: Analysis animation ---
     function startAnalysis(url) {
       if (!url) return;
-      slide2Phase = 'analysing';
+      analysisPhase = 'analysing';
 
-      // Hide input, show results container
       document.getElementById('analyse-input-wrap').classList.add('hidden');
-      const results = document.getElementById('case-results');
-      results.classList.add('active');
+      document.getElementById('case-results').classList.add('active');
 
-      // 1. Discover modules one by one
       const rects = document.querySelectorAll('.mod-node-rect');
       const texts = document.querySelectorAll('.mod-node-text');
-      const nodeCount = rects.length;
       const nodeDelay = 250;
 
       rects.forEach((rect, i) => {
-        setTimeout(() => {
-          rect.classList.add('visible');
-          texts[i].classList.add('visible');
-        }, i * nodeDelay);
+        setTimeout(() => { rect.classList.add('visible'); texts[i].classList.add('visible'); }, i * nodeDelay);
       });
 
-      // 2. Draw connection lines after nodes
-      const afterNodes = nodeCount * nodeDelay + 150;
+      const afterNodes = rects.length * nodeDelay + 150;
       const links = document.querySelectorAll('.mod-link');
       links.forEach((link, i) => {
         setTimeout(() => link.classList.add('drawn'), afterNodes + i * 120);
       });
 
-      // 3. Outline the graph + label + summary text
       const afterLinks = afterNodes + links.length * 120 + 200;
       setTimeout(() => {
         document.getElementById('mod-graph').classList.add('outlined');
         document.getElementById('mod-summary').classList.add('visible');
       }, afterLinks);
 
-      // 4. Connector + API + Fan + Clients
       setTimeout(() => document.getElementById('arch-conn-1').classList.add('visible'), afterLinks + 500);
       setTimeout(() => document.getElementById('arch-api').classList.add('visible'), afterLinks + 700);
       setTimeout(() => document.getElementById('arch-fan').classList.add('visible'), afterLinks + 1000);
@@ -1070,25 +823,40 @@
         setTimeout(() => c.classList.add('visible'), afterLinks + 1200 + i * 150);
       });
 
-      // 5. Mark done
-      const afterClients = afterLinks + 1200 + clients.length * 150 + 200;
-      setTimeout(() => { slide2Phase = 'done'; }, afterClients);
+      const afterClients = afterLinks + 1200 + clients.length * 150 + 300;
+      setTimeout(() => {
+        analysisPhase = 'done';
+        document.getElementById('get-started-btn').classList.add('visible');
+      }, afterClients);
     }
 
-    // --- Slide 1: Web Booking ---
+    document.getElementById('get-started-btn').addEventListener('click', nextStep);
+
+    // --- Step 1: Booking UI ---
     const ROWS = 'ABCDEF';
     const COLS = 10;
     let selectedPerf = null;
     let selectedSeats = new Set();
-    let selectedType = { type: 'standard', mult: 1 };
+
+    const TIER_MAP = {
+      A: { type: 'premium', mult: 1.5, label: 'Premium' },
+      B: { type: 'premium', mult: 1.5, label: 'Premium' },
+      C: { type: 'standard', mult: 1, label: 'Standard' },
+      D: { type: 'standard', mult: 1, label: 'Standard' },
+      E: { type: 'rear', mult: 0.7, label: 'Rear' },
+      F: { type: 'rear', mult: 0.7, label: 'Rear' },
+    };
+
+    function getTier(seatLabel) { return TIER_MAP[seatLabel[0]]; }
 
     // Build seat map
     const seatMap = document.getElementById('seat-map');
     for (let r = 0; r < ROWS.length; r++) {
       for (let c = 1; c <= COLS; c++) {
         const label = ROWS[r] + c;
+        const tier = TIER_MAP[ROWS[r]];
         const seat = document.createElement('div');
-        seat.className = 'seat';
+        seat.className = 'seat tier-' + tier.type;
         seat.textContent = label;
         seat.dataset.label = label;
         seat.addEventListener('click', () => toggleSeat(seat, label));
@@ -1098,67 +866,83 @@
 
     function toggleSeat(el, label) {
       if (el.classList.contains('taken')) return;
-      if (selectedSeats.has(label)) {
-        selectedSeats.delete(label);
-        el.classList.remove('selected');
-      } else {
-        selectedSeats.add(label);
-        el.classList.add('selected');
-      }
+      if (selectedSeats.has(label)) { selectedSeats.delete(label); el.classList.remove('selected'); }
+      else { selectedSeats.add(label); el.classList.add('selected'); }
       updateSummary();
     }
 
-    // Performance selection
-    document.querySelectorAll('.perf-card').forEach(el => {
+    // Show list → detail navigation
+    const showList = document.getElementById('show-list');
+    const showDetail = document.getElementById('show-detail');
+
+    document.querySelectorAll('.show-card').forEach(el => {
       el.addEventListener('click', () => {
-        document.querySelectorAll('.perf-card').forEach(e => e.classList.remove('selected'));
-        el.classList.add('selected');
         selectedPerf = {
           id: parseInt(el.dataset.id),
           name: el.dataset.name,
-          pricePence: parseInt(el.dataset.price)
+          pricePence: parseInt(el.dataset.price),
+          meta: el.dataset.meta,
         };
+
+        // Update detail header
+        const header = document.getElementById('show-detail-header');
+        header.querySelector('h4').textContent = selectedPerf.name;
+        header.querySelector('.meta').textContent = selectedPerf.meta;
+
+        // Reset seat selection
+        selectedSeats.clear();
+        seatMap.querySelectorAll('.seat.selected').forEach(s => s.classList.remove('selected'));
+        document.getElementById('booking-success').style.display = 'none';
         updateSummary();
+
+        // Swap views
+        showList.style.display = 'none';
+        showDetail.classList.add('active');
       });
     });
 
-    // Ticket type selection
-    document.querySelectorAll('.ticket-type-btn').forEach(el => {
-      el.addEventListener('click', () => {
-        document.querySelectorAll('.ticket-type-btn').forEach(e => e.classList.remove('selected'));
-        el.classList.add('selected');
-        selectedType = { type: el.dataset.type, mult: parseFloat(el.dataset.mult) };
-        updateSummary();
-      });
+    document.getElementById('back-link').addEventListener('click', () => {
+      showDetail.classList.remove('active');
+      showList.style.display = 'flex';
+      selectedPerf = null;
+      selectedSeats.clear();
+      seatMap.querySelectorAll('.seat.selected').forEach(s => s.classList.remove('selected'));
     });
 
     function updateSummary() {
-      const sumPerf = document.getElementById('sum-perf');
       const sumSeats = document.getElementById('sum-seats');
-      const sumType = document.getElementById('sum-type');
-      const sumPriceEach = document.getElementById('sum-price-each');
+      const sumBreakdown = document.getElementById('sum-breakdown');
       const sumTotal = document.getElementById('sum-total');
       const btn = document.getElementById('book-btn');
-
-      sumPerf.textContent = selectedPerf ? selectedPerf.name : '—';
-      sumSeats.textContent = selectedSeats.size > 0 ? Array.from(selectedSeats).join(', ') : '—';
-      sumType.textContent = selectedType.type.charAt(0).toUpperCase() + selectedType.type.slice(1);
-
       const seatInfo = document.getElementById('seat-info');
 
+      sumSeats.textContent = selectedSeats.size > 0 ? Array.from(selectedSeats).join(', ') : '—';
+
       if (selectedPerf && selectedSeats.size > 0) {
-        const pricePer = Math.round(selectedPerf.pricePence * selectedType.mult);
-        const total = pricePer * selectedSeats.size;
-        sumPriceEach.textContent = '£' + (pricePer / 100).toFixed(2);
-        sumTotal.textContent = '£' + (total / 100).toFixed(2);
+        const groups = {};
+        for (const label of selectedSeats) {
+          const tier = getTier(label);
+          if (!groups[tier.type]) groups[tier.type] = { tier, count: 0, total: 0 };
+          groups[tier.type].count++;
+          groups[tier.type].total += Math.round(selectedPerf.pricePence * tier.mult);
+        }
+
+        let html = '';
+        let grandTotal = 0;
+        for (const g of Object.values(groups)) {
+          html += `<div class="summary-row"><span>${g.count}× ${g.tier.label}</span><span>£${(g.total / 100).toFixed(2)}</span></div>`;
+          grandTotal += g.total;
+        }
+        sumBreakdown.innerHTML = html;
+        sumTotal.textContent = '£' + (grandTotal / 100).toFixed(2);
         seatInfo.innerHTML = '<strong>' + selectedSeats.size + '</strong> seat' + (selectedSeats.size !== 1 ? 's' : '') + ' selected';
-        btn.textContent = 'Book ' + selectedSeats.size + ' seat' + (selectedSeats.size !== 1 ? 's' : '') + ' — £' + (total / 100).toFixed(2);
+        btn.textContent = 'Book ' + selectedSeats.size + ' seat' + (selectedSeats.size !== 1 ? 's' : '') + ' — £' + (grandTotal / 100).toFixed(2);
         btn.disabled = false;
       } else {
-        sumPriceEach.textContent = '—';
+        sumBreakdown.innerHTML = '';
         sumTotal.textContent = '£0.00';
-        seatInfo.textContent = selectedSeats.size > 0 ? selectedSeats.size + ' selected' : 'Click seats to select';
-        btn.textContent = !selectedPerf ? 'Select a performance & seats' : 'Select seats';
+        seatInfo.textContent = 'Click seats to select';
+        btn.textContent = 'Select seats';
         btn.disabled = true;
       }
     }
@@ -1173,12 +957,11 @@
       btn.textContent = 'Booking...';
 
       try {
-        // 1. Find or create customer
         let customerId;
         const custRes = await fetch(`${API}/customers?email=${encodeURIComponent(email)}`);
         const custData = await custRes.json();
 
-        if (custData.items && custData.items.length > 0) {
+        if (custData.items?.length > 0) {
           customerId = custData.items[0].id;
         } else {
           const createRes = await fetch(`${API}/customers`, {
@@ -1186,82 +969,62 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: email.split('@')[0], email })
           });
-          const created = await createRes.json();
-          customerId = created.id;
+          customerId = (await createRes.json()).id;
         }
 
-        const pricePer = Math.round(selectedPerf.pricePence * selectedType.mult);
-        const totalPence = pricePer * selectedSeats.size;
         const seatLabels = Array.from(selectedSeats);
+        let totalPence = 0;
+        for (const s of seatLabels) totalPence += Math.round(selectedPerf.pricePence * getTier(s).mult);
 
-        // 2. Create transaction (pending)
-        const txRes = await fetch(`${API}/transactions`, {
+        const tx = await (await fetch(`${API}/transactions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: customerId,
-            amount_pence: totalPence,
-            type: 'purchase',
-            status: 'pending',
-            client: 'web'
-          })
-        });
-        const tx = await txRes.json();
+          body: JSON.stringify({ customer_id: customerId, amount_pence: totalPence, type: 'purchase', status: 'pending', client: 'web' })
+        })).json();
 
-        // 3. Create tickets (one per seat)
         const ticketIds = [];
         for (const seat of seatLabels) {
-          const ticketRes = await fetch(`${API}/tickets`, {
+          const tier = getTier(seat);
+          const ticket = await (await fetch(`${API}/tickets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              performance_id: selectedPerf.id,
-              customer_id: customerId,
-              seat_label: seat,
-              price_pence: pricePer,
-              ticket_type: selectedType.type
-            })
-          });
-          const ticket = await ticketRes.json();
+            body: JSON.stringify({ performance_id: selectedPerf.id, customer_id: customerId, seat_label: seat, price_pence: Math.round(selectedPerf.pricePence * tier.mult), ticket_type: tier.type })
+          })).json();
           ticketIds.push(ticket.id);
         }
 
-        // 4. Link tickets to transaction
         for (const ticketId of ticketIds) {
           await fetch(`${API}/transaction-tickets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: tx.id,
-              ticket_id: ticketId
-            })
+            body: JSON.stringify({ transaction_id: tx.id, ticket_id: ticketId })
           });
         }
 
-        // 5. Complete transaction
         await fetch(`${API}/transactions/${tx.id}/complete`, { method: 'POST' });
 
-        // Show success
         const successEl = document.getElementById('booking-success');
         successEl.style.display = 'block';
-        successEl.textContent = `Booked! ${seatLabels.length} × ${selectedType.type} for ${selectedPerf.name} (${seatLabels.join(', ')})`;
+        successEl.textContent = `Booked! ${seatLabels.length} seat${seatLabels.length !== 1 ? 's' : ''} for ${selectedPerf.name}`;
         btn.textContent = 'Booked!';
 
-        // Mark booked seats as taken
         seatLabels.forEach(label => {
           const seatEl = seatMap.querySelector(`[data-label="${label}"]`);
-          if (seatEl) {
-            seatEl.classList.remove('selected');
-            seatEl.classList.add('taken');
-          }
+          if (seatEl) { seatEl.classList.remove('selected'); seatEl.classList.add('taken'); }
         });
         selectedSeats.clear();
 
+        // Immediately refresh feed
+        pollBookings();
+
         setTimeout(() => {
-          btn.disabled = false;
           successEl.style.display = 'none';
+          // Return to show list
+          showDetail.classList.remove('active');
+          showList.style.display = 'flex';
+          selectedPerf = null;
           updateSummary();
-        }, 3000);
+        }, 2000);
 
       } catch (err) {
         console.error(err);
@@ -1270,7 +1033,7 @@
       }
     });
 
-    // --- Slide 2: Live bookings feed ---
+    // --- Live bookings feed ---
     let knownBookings = new Set();
     let pollInterval = null;
 
@@ -1281,58 +1044,59 @@
     }
 
     function stopPolling() {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
     }
 
     async function pollBookings() {
       try {
         const res = await fetch(`${API}/transactions?sort=id&order=desc&limit=20`);
         const data = await res.json();
-
-        const container = document.getElementById('feed-list-present');
+        const container = document.getElementById('feed-list');
 
         if (data.items.length === 0) {
-          container.innerHTML = '<div class="feed-empty">Waiting for bookings...</div>';
+          if (!container.querySelector('.booking-entry')) {
+            container.innerHTML = '<div class="feed-empty">Waiting for bookings...</div>';
+          }
           return;
         }
 
-        const newBookings = data.items.filter(b => !knownBookings.has(b.id));
+        // Check if anything changed
+        const ids = data.items.map(b => b.id);
+        const hasNew = ids.some(id => !knownBookings.has(id));
+        const isEmpty = container.querySelector('.feed-empty') || container.children.length === 0;
 
-        if (newBookings.length > 0 || container.querySelector('.feed-empty')) {
-          container.innerHTML = '';
+        if (!hasNew && !isEmpty) return;
 
-          for (const booking of data.items) {
-            knownBookings.add(booking.id);
+        // Preserve brain bookings
+        const brainEntries = [...container.querySelectorAll('.booking-entry[data-brain]')];
+        container.innerHTML = '';
+        brainEntries.forEach(e => container.appendChild(e));
 
-            let customerEmail = 'Unknown';
-            if (booking.customer_id) {
-              try {
-                const custRes = await fetch(`${API}/customers/${booking.customer_id}`);
-                const cust = await custRes.json();
-                customerEmail = cust.email || cust.name;
-              } catch {}
-            }
+        for (const booking of data.items) {
+          knownBookings.add(booking.id);
 
-            const card = document.createElement('div');
-            card.className = 'booking-entry';
-
-            const client = booking.client || 'web';
-            const clientClass = client === 'mcp' ? 'be-client mcp' : 'be-client';
-
-            card.innerHTML = `
-              <div class="be-header">
-                <span class="be-amount">\u00a3${(booking.amount_pence / 100).toFixed(2)}</span>
-                <span class="be-time">${formatTime(booking.created_at)}</span>
-              </div>
-              <div class="be-email">${customerEmail}</div>
-              <span class="${clientClass}">${client}</span>
-            `;
-
-            container.appendChild(card);
+          let customerEmail = 'Unknown';
+          if (booking.customer_id) {
+            try {
+              const cust = await (await fetch(`${API}/customers/${booking.customer_id}`)).json();
+              customerEmail = cust.email || cust.name;
+            } catch {}
           }
+
+          const card = document.createElement('div');
+          card.className = 'booking-entry';
+          const client = booking.client || 'web';
+          const clientClass = client === 'mcp' ? 'be-client mcp' : 'be-client';
+
+          card.innerHTML = `
+            <div class="be-header">
+              <span class="be-amount">\u00a3${(booking.amount_pence / 100).toFixed(2)}</span>
+              <span class="be-time">${formatTime(booking.created_at)}</span>
+            </div>
+            <div class="be-email">${customerEmail}</div>
+            <span class="${clientClass}">${client}</span>
+          `;
+          container.appendChild(card);
         }
       } catch (err) {
         console.error('Poll error:', err);
@@ -1341,12 +1105,33 @@
 
     function formatTime(ts) {
       if (!ts) return 'just now';
-      const d = new Date(ts);
-      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Brain booking
+    function injectBrainBooking() {
+      const container = document.getElementById('feed-list');
+      const empty = container.querySelector('.feed-empty');
+      if (empty) empty.remove();
+
+      const card = document.createElement('div');
+      card.className = 'booking-entry';
+      card.dataset.brain = 'true';
+      const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+      card.innerHTML = `
+        <div class="be-header">
+          <span class="be-amount">\u00a325.00</span>
+          <span class="be-time">${time}</span>
+        </div>
+        <div class="be-email">cerebral_cortex</div>
+        <span class="be-client unknown">???</span>
+      `;
+      container.prepend(card);
     }
 
     // Initialize
-    showSlide(0);
+    showStep(0);
   </script>
 </body>
 </html>
