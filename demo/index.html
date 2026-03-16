@@ -127,87 +127,7 @@
       font-weight: 500;
     }
 
-    /* Failure cards */
-    .failures {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2rem;
-      max-width: 1000px;
-      margin-top: 2rem;
-    }
-
-    .failure-card {
-      background: var(--surface);
-      border-radius: 1rem;
-      padding: 2rem;
-      text-align: center;
-      opacity: 0;
-      transform: translateY(30px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
-    }
-
-    .failure-card.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .failure-card .number {
-      font-size: 3rem;
-      font-weight: 700;
-      color: var(--accent);
-      margin-bottom: 1rem;
-    }
-
-    .failure-card h4 {
-      font-size: 1.25rem;
-      margin-bottom: 1rem;
-    }
-
-    .failure-card p {
-      font-size: 1rem;
-      color: var(--muted);
-    }
-
-    /* Card solutions (hidden by default, revealed on sub-step) */
-    .card-solution {
-      overflow: hidden;
-      max-height: 0;
-      opacity: 0;
-      transition: max-height 0.5s ease, opacity 0.5s ease, margin-top 0.5s ease;
-      margin-top: 0;
-    }
-
-    .failure-card.revealed .card-solution {
-      max-height: 120px;
-      opacity: 1;
-      margin-top: 1.25rem;
-    }
-
-    .card-solution .sol-divider {
-      border: none;
-      border-top: 1px solid #333;
-      margin-bottom: 0.75rem;
-    }
-
-    .card-solution .sol-problem {
-      color: var(--muted);
-      text-decoration: line-through;
-      font-size: 0.9rem;
-    }
-
-    .card-solution .sol-arrow {
-      color: var(--accent);
-      font-size: 1.25rem;
-      margin: 0.25rem 0;
-    }
-
-    .card-solution .sol-answer {
-      color: var(--fg);
-      font-weight: 500;
-      font-size: 0.95rem;
-    }
-
-    /* Slide 2: The Solution — interactive analysis */
+    /* Slide 0: Analysis — interactive analysis */
     .analyse-input-wrap {
       display: flex;
       flex-direction: column;
@@ -832,56 +752,8 @@
   <div class="progress" id="progress"></div>
 
 
-  <!-- Slide 0: Title -->
+  <!-- Slide 0: Analysis -->
   <section class="slide" data-slide="0">
-    <h1>OpenB2C</h1>
-    <h2>Open-source, client-agnostic commerce for small business</h2>
-  </section>
-
-  <!-- Slide 1: Problem + Failures + Solutions (merged) -->
-  <section class="slide" data-slide="1">
-    <h3>The Problem</h3>
-    <div class="failures">
-      <div class="failure-card" data-delay="0">
-        <div class="number">1</div>
-        <h4>One-Size-Fits-All</h4>
-        <p>Seasonal pricing? Integration with your tools? Too niche. 10% please.</p>
-        <div class="card-solution">
-          <hr class="sol-divider">
-          <div class="sol-problem">One-size-fits-all</div>
-          <div class="sol-arrow">→</div>
-          <div class="sol-answer">Local problems, local solutions</div>
-        </div>
-      </div>
-      <div class="failure-card" data-delay="200">
-        <div class="number">2</div>
-        <h4>One Client Fits All</h4>
-        <p>Screen readers. AI assistants. If you're not average, you're an afterthought.</p>
-        <div class="card-solution">
-          <hr class="sol-divider">
-          <div class="sol-problem">One client fits all</div>
-          <div class="sol-arrow">→</div>
-          <div class="sol-answer">Any client, all equal</div>
-        </div>
-      </div>
-      <div class="failure-card" data-delay="400">
-        <div class="number">3</div>
-        <h4>Built For Today</h4>
-        <p>Yesterday websites. Today apps. Tomorrow AI. Systems break when paradigms shift.</p>
-        <div class="card-solution">
-          <hr class="sol-divider">
-          <div class="sol-problem">Built for today</div>
-          <div class="sol-arrow">→</div>
-          <div class="sol-answer">Backend-first, clients come and go</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Slide 2: The Solution — interactive analysis -->
-  <section class="slide" data-slide="2">
-    <h3>The Solution</h3>
-
     <!-- Phase 1: URL input -->
     <div class="analyse-input-wrap" id="analyse-input-wrap">
       <input type="text" class="analyse-input" id="analyse-input" placeholder="duchyopera.co.uk" autocomplete="off" spellcheck="false" />
@@ -943,9 +815,8 @@
     </div>
   </section>
 
-  <!-- Slide 3: Web Booking -->
-  <section class="slide" data-slide="3">
-    <h3>Web UI</h3>
+  <!-- Slide 1: Web Booking -->
+  <section class="slide" data-slide="1">
     <div class="booking-layout">
       <!-- Left: performance + seat map -->
       <div class="booking-left">
@@ -1010,9 +881,8 @@
     </div>
   </section>
 
-  <!-- Slide 4: MCP Demo -->
-  <section class="slide" data-slide="4">
-    <h3>AI Agent</h3>
+  <!-- Slide 2: Live Feed -->
+  <section class="slide" data-slide="2">
     <div class="feed-wrap">
       <div class="feed-header">Live Bookings</div>
       <div class="feed-list" id="feed-list-present">
@@ -1021,42 +891,12 @@
     </div>
   </section>
 
-  <!-- Slide 5: Future (joke + static feed copy) -->
-  <section class="slide" data-slide="5">
-    <h3>Neural implant?</h3>
+  <!-- Slide 3: Brain booking (joke) -->
+  <section class="slide" data-slide="3">
     <div class="feed-wrap">
       <div class="feed-header">Live Bookings</div>
       <div class="feed-list" id="feed-list-future"></div>
     </div>
-  </section>
-
-  <!-- Slide 6: Economics -->
-  <section class="slide" data-slide="6">
-    <h3>The Economics</h3>
-    <div style="background: var(--surface); border-radius: 1rem; padding: 2rem; margin-top: 1rem;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
-        <div style="color: var(--muted);">Eventbrite</div>
-        <div style="color: var(--muted); text-decoration: line-through;">10% per ticket</div>
-        <div style="color: var(--muted);">Custom SaaS</div>
-        <div style="color: var(--muted); text-decoration: line-through;">£100s/month</div>
-        <div style="color: var(--fg); font-weight: 600;">Self-hosted</div>
-        <div style="color: var(--fg); font-weight: 600;">£5/month</div>
-      </div>
-    </div>
-    <p style="margin-top: 2rem;">Small orgs can afford professional infrastructure.</p>
-  </section>
-
-  <!-- Slide 7: Thesis -->
-  <section class="slide" data-slide="7">
-    <h1>Build Local.<br>Interface Universal.</h1>
-    <p style="margin-top: 2rem;">Stop predicting the future.</p>
-    <p>Build systems that don't need you to.</p>
-  </section>
-
-  <!-- Slide 8: Questions -->
-  <section class="slide" data-slide="8">
-    <h3>Questions?</h3>
-    <p style="margin-top: 2rem; font-family: monospace;">github.com/duttondigital/openb2c</p>
   </section>
 
   <div class="nav-hint">← → to navigate</div>
@@ -1077,10 +917,7 @@
     }
     const progressSegs = progress.querySelectorAll('.progress-seg');
 
-    // Sub-step state for slide 1 (problem → solutions reveal)
-    let slide1Step = 0; // 0 = cards shown, 1 = solutions revealed
-
-    // Slide 2 analysis state: 'input' | 'analysing' | 'done'
+    // Slide 0 analysis state: 'input' | 'analysing' | 'done'
     let slide2Phase = 'input';
 
     // Slide navigation
@@ -1097,37 +934,19 @@
         slide.classList.toggle('visible', i === index);
       });
 
-      // Trigger child animations
-      const el = slides[index];
-      el.querySelectorAll('.failure-card').forEach((card) => {
-        setTimeout(() => card.classList.add('visible'), parseInt(card.dataset.delay) || 0);
-      });
-
-      // Reset slide 1 sub-step when leaving
-      if (index !== 1) {
-        slide1Step = 0;
-        // Remove revealed class from failure cards
-        document.querySelectorAll('.failure-card').forEach(card => {
-          card.classList.remove('revealed');
-        });
+      // Slide 0: reset analysis state when leaving
+      if (index !== 0) {
+        resetSlide0();
       }
 
-      // Slide 2: reset analysis state when entering
-      if (index === 2) {
-        // no autofocus — presenter clicks input when ready
-      } else {
-        // Reset slide 2 when leaving
-        resetSlide2();
-      }
-
-      // Copy feed snapshot to ??? slide
-      if (index === 5) {
+      // Copy feed snapshot to brain booking slide
+      if (index === 3) {
         document.getElementById('feed-list-future').innerHTML =
           document.getElementById('feed-list-present').innerHTML;
       }
 
-      // Start/stop polling on AI Agent slide (4)
-      if (index === 4) {
+      // Start/stop polling on live feed slide (2)
+      if (index === 2) {
         startPolling();
       } else {
         stopPolling();
@@ -1165,21 +984,11 @@
       if (e.key === ' ') {
         e.preventDefault();
 
-        // Sub-step: reveal solutions on slide 1
-        if (currentSlide === 1 && slide1Step === 0) {
-          const cards = document.querySelectorAll('.failure-card');
-          cards.forEach((card, i) => {
-            setTimeout(() => card.classList.add('revealed'), i * 150);
-          });
-          slide1Step = 1;
-          return;
-        }
+        // Block during slide 0 analysis animation
+        if (currentSlide === 0 && slide2Phase === 'analysing') return;
 
-        // Block during slide 2 analysis animation
-        if (currentSlide === 2 && slide2Phase === 'analysing') return;
-
-        // Block on slide 2 with input still showing
-        if (currentSlide === 2 && slide2Phase === 'input') return;
+        // Block on slide 0 with input still showing
+        if (currentSlide === 0 && slide2Phase === 'input') return;
 
         showSlide(currentSlide + 1);
       }
@@ -1198,7 +1007,7 @@
     });
 
     // --- Slide 2: Analysis animation ---
-    function resetSlide2() {
+    function resetSlide0() {
       slide2Phase = 'input';
       document.getElementById('analyse-input-wrap').classList.remove('hidden');
       document.getElementById('case-results').classList.remove('active');
@@ -1266,7 +1075,7 @@
       setTimeout(() => { slide2Phase = 'done'; }, afterClients);
     }
 
-    // --- Slide 4: Web Booking ---
+    // --- Slide 1: Web Booking ---
     const ROWS = 'ABCDEF';
     const COLS = 10;
     let selectedPerf = null;
@@ -1461,7 +1270,7 @@
       }
     });
 
-    // --- Slide 5: Live bookings feed ---
+    // --- Slide 2: Live bookings feed ---
     let knownBookings = new Set();
     let pollInterval = null;
 
