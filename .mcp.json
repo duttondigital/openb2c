@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "openb2c": {
+      "command": "bun",
+      "args": ["mcp"],
+      "cwd": "/Users/louis/projects/openb2c"
+    }
+  }
+}
