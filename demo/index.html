@@ -32,65 +32,6 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Step indicator */
-    .steps {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-      padding: 1.1rem 2rem;
-      background: var(--bg);
-    }
-
-    .step {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.8rem;
-      color: var(--muted);
-      transition: color 0.3s ease;
-      white-space: nowrap;
-      cursor: default;
-    }
-
-    .step.active { color: var(--fg); }
-    .step.completed { color: var(--fg); }
-
-    .step-num {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 1.6rem;
-      height: 1.6rem;
-      border-radius: 50%;
-      border: 1.5px solid var(--muted);
-      font-size: 0.7rem;
-      font-weight: 600;
-      transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
-    }
-
-    .step.active .step-num,
-    .step.completed .step-num {
-      border-color: var(--fg);
-      background: var(--fg);
-      color: var(--bg);
-    }
-
-    .step-line {
-      width: 3rem;
-      height: 1px;
-      background: var(--muted);
-      margin: 0 0.75rem;
-      transition: background 0.3s ease;
-    }
-
-    .step-line.completed { background: var(--fg); }
-
     /* Panels */
     .panel {
       position: fixed;
@@ -496,6 +437,7 @@
       padding: 0.2rem 1.5rem;
       border-radius: 0 0 0.4rem 0.4rem;
       text-align: center;
+      width: 320px;
     }
 
     .seat-map {
@@ -523,7 +465,7 @@
 
     .seat:hover { filter: brightness(1.5); }
     .seat.selected { background: var(--fg); color: var(--bg); filter: none; }
-    .seat.taken { background: #333; color: #555; cursor: default; pointer-events: none; filter: none; }
+    .seat.taken { cursor: default; pointer-events: none; filter: none; opacity: 25% }
 
     .seat.tier-premium { background: #4a3f2a; }
     .seat.tier-standard { background: var(--surface); }
@@ -600,16 +542,6 @@
     </svg>
     <div class="logo-text"><span>Dutton</span><span class="logo-stretch">Digital</span></div>
   </a>
-
-  <nav class="steps" id="steps">
-    <div class="step active" data-step="0">
-      <span class="step-num">1</span> Analyse
-    </div>
-    <div class="step-line" id="line-0"></div>
-    <div class="step" data-step="1">
-      <span class="step-num">2</span> Dashboard
-    </div>
-  </nav>
 
   <!-- Step 0: Analysis -->
   <section class="panel" data-panel="0">
