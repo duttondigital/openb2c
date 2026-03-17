@@ -464,12 +464,13 @@
     }
 
     .seat:hover { filter: brightness(1.5); }
-    .seat.selected { background: var(--fg); color: var(--bg); filter: none; }
-    .seat.taken { cursor: default; pointer-events: none; filter: none; opacity: 25% }
 
     .seat.tier-premium { background: #4a3f2a; }
     .seat.tier-standard { background: var(--surface); }
     .seat.tier-rear { background: #1a1a2a; }
+
+    .seat.selected { background: #fff; color: #0b0b0b; filter: none; font-weight: 600; }
+    .seat.taken { cursor: default; pointer-events: none; filter: none; opacity: 25% }
 
     .seat-info { font-size: 0.7rem; color: var(--muted); text-align: center; }
     .seat-info strong { color: var(--fg); }
