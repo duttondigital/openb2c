@@ -7,6 +7,8 @@
     "codegen": "nix eval --json -f schema/default.nix | bun schema/codegen.ts",
     "dev": "bun ./src/generated/server.ts",
     "mcp": "bun ./src/generated/mcp.ts",
+    "mcp:http": "bun ./src/generated/mcp.ts --http",
+    "tunnel": "bash tunnel.sh",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "build": "bun build src/generated/server.ts --outdir dist",

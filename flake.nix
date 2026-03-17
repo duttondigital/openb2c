@@ -34,6 +34,9 @@
               # database
               sqlite
 
+              # tunnel
+              cloudflared
+
               # nix
               nixd
               alejandra

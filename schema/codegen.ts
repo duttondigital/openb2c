@@ -1817,7 +1817,7 @@ function handleRequest(req: McpRequest): McpResponse {
         jsonrpc: "2.0",
         id: req.id,
         result: {
-          protocolVersion: "2024-11-05",
+          protocolVersion: "2025-03-26",
           serverInfo: SERVER_INFO,
           capabilities: { tools: {} },
         },
@@ -1857,36 +1857,108 @@ ${handlers.join("\n")}
   }
 }
 
-// Stdio transport
-async function main() {
-  const decoder = new TextDecoder();
-  let buffer = "";
+const MCP_PORT = parseInt(process.env.MCP_PORT || "3086");
 
-  for await (const chunk of Bun.stdin.stream()) {
-    buffer += decoder.decode(chunk);
+if (process.argv.includes("--http")) {
+  // Streamable HTTP transport (MCP 2025-03-26)
+  const sessions = new Map<string, boolean>();
 
-    // Parse JSON-RPC messages (newline delimited)
-    const lines = buffer.split("\\n");
-    buffer = lines.pop() || "";
+  const CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id",
+    "Access-Control-Expose-Headers": "Mcp-Session-Id",
+  };
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const req = JSON.parse(line) as McpRequest;
-        const res = handleRequest(req);
-        console.log(JSON.stringify(res));
-      } catch (e) {
-        console.log(JSON.stringify({
-          jsonrpc: "2.0",
-          id: null,
-          error: { code: -32700, message: "Parse error" },
-        }));
+  Bun.serve({
+    port: MCP_PORT,
+    fetch(req) {
+      const url = new URL(req.url);
+      if (url.pathname !== "/mcp") {
+        return new Response("Not found", { status: 404 });
+      }
+
+      if (req.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: CORS_HEADERS });
+      }
+
+      if (req.method !== "POST") {
+        return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+      }
+
+      return (async () => {
+        const body = await req.json() as McpRequest;
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...CORS_HEADERS,
+        };
+
+        // JSON-RPC notifications have no id — acknowledge with 202
+        if (body.id === undefined) {
+          // Still validate session for non-initialize notifications
+          if (body.method !== "initialize") {
+            const sessionId = req.headers.get("Mcp-Session-Id");
+            if (!sessionId || !sessions.has(sessionId)) {
+              return new Response(null, { status: 400, headers: CORS_HEADERS });
+            }
+          }
+          return new Response(null, { status: 202, headers: CORS_HEADERS });
+        }
+
+        if (body.method === "initialize") {
+          const sessionId = crypto.randomUUID();
+          sessions.set(sessionId, true);
+          headers["Mcp-Session-Id"] = sessionId;
+        } else {
+          const sessionId = req.headers.get("Mcp-Session-Id");
+          if (!sessionId || !sessions.has(sessionId)) {
+            return new Response(JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id,
+              error: { code: -32600, message: "Invalid or missing session ID" },
+            }), { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+          }
+        }
+
+        const res = handleRequest(body);
+        return new Response(JSON.stringify(res), { headers });
+      })();
+    },
+  });
+
+  console.error(\`MCP HTTP server listening on http://localhost:\${MCP_PORT}/mcp\`);
+} else {
+  // Stdio transport
+  async function main() {
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for await (const chunk of Bun.stdin.stream()) {
+      buffer += decoder.decode(chunk);
+
+      const lines = buffer.split("\\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const req = JSON.parse(line) as McpRequest;
+          const res = handleRequest(req);
+          console.log(JSON.stringify(res));
+        } catch (e) {
+          console.log(JSON.stringify({
+            jsonrpc: "2.0",
+            id: null,
+            error: { code: -32700, message: "Parse error" },
+          }));
+        }
       }
     }
   }
-}
 
-main();
+  main();
+}
 `;
 }
 
