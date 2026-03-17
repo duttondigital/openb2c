@@ -611,33 +611,8 @@
           <div class="booking-title">Web UI</div>
           <div class="booking-inner">
 
-          <!-- Show list -->
-          <div class="show-list" id="show-list">
-            <div class="show-card" data-id="1" data-name="La Traviata" data-price="2500" data-meta="Sat 22 Mar · Minack Theatre">
-              <div class="show-card-info">
-                <h5>La Traviata</h5>
-                <div class="meta">Sat 22 Mar · Minack Theatre</div>
-              </div>
-              <div class="show-card-price">from £17.50</div>
-              <div class="show-card-arrow">›</div>
-            </div>
-            <div class="show-card" data-id="2" data-name="The Marriage of Figaro" data-price="3000" data-meta="Sun 23 Mar · Hall for Cornwall">
-              <div class="show-card-info">
-                <h5>Marriage of Figaro</h5>
-                <div class="meta">Sun 23 Mar · Hall for Cornwall</div>
-              </div>
-              <div class="show-card-price">from £21</div>
-              <div class="show-card-arrow">›</div>
-            </div>
-            <div class="show-card" data-id="3" data-name="Carmen" data-price="2800" data-meta="Fri 28 Mar · Truro Cathedral">
-              <div class="show-card-info">
-                <h5>Carmen</h5>
-                <div class="meta">Fri 28 Mar · Truro Cathedral</div>
-              </div>
-              <div class="show-card-price">from £19.60</div>
-              <div class="show-card-arrow">›</div>
-            </div>
-          </div>
+          <!-- Show list (loaded from API) -->
+          <div class="show-list" id="show-list"></div>
 
           <!-- Show detail (seat selection + checkout) -->
           <div class="show-detail" id="show-detail">
@@ -679,7 +654,7 @@
     let currentStep = 0;
     const panels = document.querySelectorAll('.panel');
     const stepEls = document.querySelectorAll('.steps .step');
-    const lineEl = document.getElementById('line-0');
+    const lineEl = document.getElementById('line-0');  // may not exist
 
     let analysisPhase = 'input';
 
@@ -694,9 +669,9 @@
         if (i < index) s.classList.add('completed');
         else if (i === index) s.classList.add('active');
       });
-      lineEl.classList.toggle('completed', index > 0);
+      if (lineEl) lineEl.classList.toggle('completed', index > 0);
 
-      if (index === 1) startPolling();
+      if (index === 1) { loadPerformances(); startPolling(); }
       else stopPolling();
     }
 
@@ -771,6 +746,9 @@
     let selectedPerf = null;
     let selectedSeats = new Set();
 
+    // Base price in pence — tier multipliers applied on top
+    const BASE_PRICE_PENCE = 2500;
+
     const TIER_MAP = {
       A: { type: 'premium', mult: 1.5, label: 'Premium' },
       B: { type: 'premium', mult: 1.5, label: 'Premium' },
@@ -808,31 +786,89 @@
     const showList = document.getElementById('show-list');
     const showDetail = document.getElementById('show-detail');
 
-    document.querySelectorAll('.show-card').forEach(el => {
-      el.addEventListener('click', () => {
-        selectedPerf = {
-          id: parseInt(el.dataset.id),
-          name: el.dataset.name,
-          pricePence: parseInt(el.dataset.price),
-          meta: el.dataset.meta,
-        };
+    // Venue cache
+    const venueCache = {};
+    async function getVenue(id) {
+      if (venueCache[id]) return venueCache[id];
+      const res = await fetch(`${API}/venues/${id}`);
+      const v = await res.json();
+      venueCache[id] = v;
+      return v;
+    }
 
-        // Update detail header
-        const header = document.getElementById('show-detail-header');
-        header.querySelector('h4').textContent = selectedPerf.name;
-        header.querySelector('.meta').textContent = selectedPerf.meta;
+    function formatDate(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
 
-        // Reset seat selection
-        selectedSeats.clear();
-        seatMap.querySelectorAll('.seat.selected').forEach(s => s.classList.remove('selected'));
-        document.getElementById('booking-success').style.display = 'none';
-        updateSummary();
+    async function loadPerformances() {
+      showList.innerHTML = '<div class="feed-empty">Loading performances...</div>';
+      try {
+        const res = await fetch(`${API}/performances?status=scheduled`);
+        const data = await res.json();
+        if (!data.items || data.items.length === 0) {
+          showList.innerHTML = '<div class="feed-empty">No performances scheduled</div>';
+          return;
+        }
+        showList.innerHTML = '';
+        for (const perf of data.items) {
+          const venue = await getVenue(perf.venue_id);
+          const meta = `${formatDate(perf.date)} · ${venue.name}`;
+          const card = document.createElement('div');
+          card.className = 'show-card';
+          card.dataset.id = perf.id;
+          card.dataset.name = perf.title;
+          card.dataset.meta = meta;
+          card.innerHTML = `
+            <div class="show-card-info">
+              <h5>${perf.title}</h5>
+              <div class="meta">${meta}</div>
+            </div>
+            <div class="show-card-arrow">›</div>
+          `;
+          card.addEventListener('click', () => openPerformance(perf, meta));
+          showList.appendChild(card);
+        }
+      } catch (err) {
+        console.error('Failed to load performances:', err);
+        showList.innerHTML = '<div class="feed-empty">Failed to load — is the API running?</div>';
+      }
+    }
 
-        // Swap views
-        showList.style.display = 'none';
-        showDetail.classList.add('active');
-      });
-    });
+    async function loadTakenSeats(performanceId) {
+      try {
+        seatMap.querySelectorAll('.seat.taken').forEach(s => s.classList.remove('taken'));
+        const res = await fetch(`${API}/tickets?performance_id=${performanceId}`);
+        const data = await res.json();
+        for (const ticket of (data.items || [])) {
+          if (ticket.status === 'cancelled') continue;
+          const el = seatMap.querySelector(`[data-label="${ticket.seat}"]`);
+          if (el) el.classList.add('taken');
+        }
+      } catch {}
+    }
+
+    function openPerformance(perf, meta) {
+      selectedPerf = { id: perf.id, name: perf.title, meta };
+
+      const header = document.getElementById('show-detail-header');
+      header.querySelector('h4').textContent = selectedPerf.name;
+      header.querySelector('.meta').textContent = selectedPerf.meta;
+
+      // Reset seat selection
+      selectedSeats.clear();
+      seatMap.querySelectorAll('.seat.selected').forEach(s => s.classList.remove('selected'));
+      seatMap.querySelectorAll('.seat.taken').forEach(s => s.classList.remove('taken'));
+      document.getElementById('booking-success').style.display = 'none';
+      updateSummary();
+
+      // Load taken seats from API
+      loadTakenSeats(perf.id);
+
+      // Swap views
+      showList.style.display = 'none';
+      showDetail.classList.add('active');
+    }
 
     document.getElementById('back-link').addEventListener('click', () => {
       showDetail.classList.remove('active');
@@ -840,6 +876,7 @@
       selectedPerf = null;
       selectedSeats.clear();
       seatMap.querySelectorAll('.seat.selected').forEach(s => s.classList.remove('selected'));
+      loadPerformances();
     });
 
     function updateSummary() {
@@ -857,7 +894,7 @@
           const tier = getTier(label);
           if (!groups[tier.type]) groups[tier.type] = { tier, count: 0, total: 0 };
           groups[tier.type].count++;
-          groups[tier.type].total += Math.round(selectedPerf.pricePence * tier.mult);
+          groups[tier.type].total += Math.round(BASE_PRICE_PENCE * tier.mult);
         }
 
         let html = '';
@@ -907,7 +944,7 @@
 
         const seatLabels = Array.from(selectedSeats);
         let totalPence = 0;
-        for (const s of seatLabels) totalPence += Math.round(selectedPerf.pricePence * getTier(s).mult);
+        for (const s of seatLabels) totalPence += Math.round(BASE_PRICE_PENCE * getTier(s).mult);
 
         const tx = await (await fetch(`${API}/transactions`, {
           method: 'POST',
@@ -921,13 +958,13 @@
           const ticket = await (await fetch(`${API}/tickets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ performance_id: selectedPerf.id, customer_id: customerId, seat_label: seat, price_pence: Math.round(selectedPerf.pricePence * tier.mult), ticket_type: tier.type })
+            body: JSON.stringify({ performance_id: selectedPerf.id, customer_id: customerId, seat: seat, price_pence: Math.round(BASE_PRICE_PENCE * tier.mult), ticket_type: tier.type })
           })).json();
           ticketIds.push(ticket.id);
         }
 
         for (const ticketId of ticketIds) {
-          await fetch(`${API}/transaction-tickets`, {
+          await fetch(`${API}/transaction_tickets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ transaction_id: tx.id, ticket_id: ticketId })
