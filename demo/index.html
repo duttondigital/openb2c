@@ -228,7 +228,7 @@
       gap: 2rem;
       width: 100%;
       max-width: 1200px;
-      height: calc(100vh - 6rem);
+      height: calc(100vh - 10rem);
       padding-top: 1rem;
     }
 
@@ -535,7 +535,7 @@
   </style>
 </head>
 <body>
-  <a class="corner-logo" href="https://dutton.digital">
+  <a class="corner-logo" href="#" id="fullscreen-toggle">
     <svg viewBox="-1 -1 23 23" fill="none" aria-hidden="true">
       <path d="M 1,0 L 8,0 C 15,0 15,14 8,14 L 1,14 A 1,1 0 0,1 0,13 L 0,1 A 1,1 0 0,1 1,0 Z" stroke="white" stroke-width="1.2" fill="none"/>
       <path d="M 7,7 L 14,7 C 21,7 21,21 14,21 L 7,21 A 1,1 0 0,1 6,20 L 6,8 A 1,1 0 0,1 7,7 Z" stroke="white" stroke-width="1.2" fill="none"/>
@@ -1098,6 +1098,13 @@
       `;
       container.prepend(card);
     }
+
+    // Fullscreen toggle
+    document.getElementById('fullscreen-toggle').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    });
 
     // Initialize
     showStep(0);
