@@ -19,6 +19,38 @@ for (const stmt of sql.split(/;\s*\n/).filter((s: string) => s.trim())) {
 
 const SERVER_INFO = { name: "duchy-opera-booking", version: "1.0.0" };
 
+// ── Seat map (must match demo/index.html) ───────────────────────────────
+const ROWS = "ABCDEF";
+const COLS = 10;
+const BASE_PRICE_PENCE = 2500;
+const TIER: Record<string, { type: string; mult: number; label: string }> = {
+  A: { type: "premium", mult: 1.5, label: "Premium" },
+  B: { type: "premium", mult: 1.5, label: "Premium" },
+  C: { type: "standard", mult: 1, label: "Standard" },
+  D: { type: "standard", mult: 1, label: "Standard" },
+  E: { type: "rear", mult: 0.7, label: "Rear" },
+  F: { type: "rear", mult: 0.7, label: "Rear" },
+};
+
+const ALL_SEATS: string[] = [];
+for (const row of ROWS) {
+  for (let c = 1; c <= COLS; c++) ALL_SEATS.push(`${row}${c}`);
+}
+
+function seatPrice(seat: string): number {
+  const tier = TIER[seat[0]];
+  return Math.round(BASE_PRICE_PENCE * (tier?.mult ?? 1));
+}
+
+function takenSeats(performanceId: number): Set<string> {
+  const tickets = S.findAllTickets(db, { filter: { performance_id: performanceId } });
+  const taken = new Set<string>();
+  for (const t of tickets) {
+    if ((t as any).status !== "cancelled" && (t as any).seat) taken.add((t as any).seat);
+  }
+  return taken;
+}
+
 const TOOLS = [
   {
     name: "list_performances",
@@ -49,18 +81,26 @@ const TOOLS = [
     },
   },
   {
+    name: "available_seats",
+    description: "Show available seats for a performance, grouped by tier with prices",
+    inputSchema: {
+      type: "object" as const,
+      properties: { performance_id: { type: "number", description: "Performance ID" } },
+      required: ["performance_id"],
+    },
+  },
+  {
     name: "book_tickets",
-    description: "Book one or more tickets for a performance. Creates or finds the customer by email, then reserves the tickets as a single booking.",
+    description: "Book specific seats for a performance. Use available_seats first to see what's free.",
     inputSchema: {
       type: "object" as const,
       properties: {
         email: { type: "string", description: "Customer email address" },
         name: { type: "string", description: "Customer name" },
         performance_id: { type: "number", description: "Performance to book" },
-        quantity: { type: "number", description: "Number of tickets (default 1)" },
-        ticket_type: { type: "string", description: "Ticket type: standard or concession", enum: ["standard", "concession"] },
+        seats: { type: "array", items: { type: "string" }, description: "Seat labels to book, e.g. [\"A1\", \"A2\"]" },
       },
-      required: ["email", "name", "performance_id"],
+      required: ["email", "name", "performance_id", "seats"],
     },
   },
   {
@@ -83,8 +123,6 @@ const TOOLS = [
   },
 ];
 
-const PRICE_PENCE = { standard: 2500, concession: 1500 };
-
 function callTool(name: string, args: Record<string, unknown>): { content: { type: string; text: string }[]; isError?: boolean } {
   switch (name) {
     case "list_performances":
@@ -101,27 +139,57 @@ function callTool(name: string, args: Record<string, unknown>): { content: { typ
       if (!v) return { content: [{ type: "text", text: "Venue not found" }], isError: true };
       return { content: [{ type: "text", text: JSON.stringify(v, null, 2) }] };
     }
+    case "available_seats": {
+      const perfId = args.performance_id as number;
+      const p = S.findPerformanceById(db, perfId);
+      if (!p) return { content: [{ type: "text", text: "Performance not found" }], isError: true };
+      const taken = takenSeats(perfId);
+      const available: Record<string, { seats: string[]; price: string }> = {};
+      for (const seat of ALL_SEATS) {
+        if (taken.has(seat)) continue;
+        const tier = TIER[seat[0]];
+        if (!available[tier.label]) available[tier.label] = { seats: [], price: `£${(seatPrice(seat) / 100).toFixed(2)}` };
+        available[tier.label].seats.push(seat);
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ performance_id: perfId, total_available: ALL_SEATS.length - taken.size, tiers: available }, null, 2) }] };
+    }
     case "book_tickets": {
+      const seats = args.seats as string[];
+      if (!seats || seats.length === 0) return { content: [{ type: "text", text: "At least one seat is required" }], isError: true };
+      if (seats.length > 10) return { content: [{ type: "text", text: "Maximum 10 seats per booking" }], isError: true };
+      const perfId = args.performance_id as number;
+      const p = S.findPerformanceById(db, perfId);
+      if (!p) return { content: [{ type: "text", text: "Performance not found" }], isError: true };
+      // Validate seats
+      for (const s of seats) {
+        if (!ALL_SEATS.includes(s)) return { content: [{ type: "text", text: `Invalid seat: ${s}` }], isError: true };
+      }
+      const taken = takenSeats(perfId);
+      const clashes = seats.filter(s => taken.has(s));
+      if (clashes.length > 0) return { content: [{ type: "text", text: `Seats already taken: ${clashes.join(", ")}` }], isError: true };
+      // Create customer
       const customerId = S.ensureCustomer(db, args.email as string);
       S.updateCustomer(db, customerId, { name: args.name as string });
-      const ticketType = (args.ticket_type as string) || "standard";
-      const price = PRICE_PENCE[ticketType as keyof typeof PRICE_PENCE] ?? PRICE_PENCE.standard;
-      const qty = Math.max(1, Math.min(10, (args.quantity as number) || 1));
+      // Create tickets with seat assignments
+      let totalPence = 0;
       const ticketIds: number[] = [];
-      for (let i = 0; i < qty; i++) {
+      for (const seat of seats) {
+        const price = seatPrice(seat);
+        totalPence += price;
         const r = S.createTicket(db, {
           customer_id: customerId,
-          performance_id: args.performance_id as number,
+          performance_id: perfId,
           price_pence: price,
-          ticket_type: ticketType,
+          ticket_type: TIER[seat[0]].type,
+          seat,
         });
         if (!r.ok) return { content: [{ type: "text", text: r.error }], isError: true };
         ticketIds.push(r.data.id);
       }
-      // Single transaction for the whole booking
+      // Single transaction
       const txResult = S.createTransaction(db, {
         customer_id: customerId,
-        amount_pence: price * qty,
+        amount_pence: totalPence,
         type: "purchase",
         status: "pending",
         client: "mcp",
@@ -133,7 +201,7 @@ function callTool(name: string, args: Record<string, unknown>): { content: { typ
         S.completeTransaction(db, txResult.data.id);
       }
       const tickets = ticketIds.map(id => S.findTicketById(db, id));
-      return { content: [{ type: "text", text: JSON.stringify({ tickets, transaction_id: txResult.ok ? txResult.data.id : null }, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ tickets, total: `£${(totalPence / 100).toFixed(2)}`, transaction_id: txResult.ok ? txResult.data.id : null }, null, 2) }] };
     }
     case "get_ticket": {
       const t = S.findTicketById(db, args.id as number);
