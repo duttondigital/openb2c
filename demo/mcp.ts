@@ -49,14 +49,15 @@ const TOOLS = [
     },
   },
   {
-    name: "book_ticket",
-    description: "Book a ticket for a performance. Creates or finds the customer by email, then reserves a ticket.",
+    name: "book_tickets",
+    description: "Book one or more tickets for a performance. Creates or finds the customer by email, then reserves the tickets as a single booking.",
     inputSchema: {
       type: "object" as const,
       properties: {
         email: { type: "string", description: "Customer email address" },
         name: { type: "string", description: "Customer name" },
         performance_id: { type: "number", description: "Performance to book" },
+        quantity: { type: "number", description: "Number of tickets (default 1)" },
         ticket_type: { type: "string", description: "Ticket type: standard or concession", enum: ["standard", "concession"] },
       },
       required: ["email", "name", "performance_id"],
@@ -100,32 +101,39 @@ function callTool(name: string, args: Record<string, unknown>): { content: { typ
       if (!v) return { content: [{ type: "text", text: "Venue not found" }], isError: true };
       return { content: [{ type: "text", text: JSON.stringify(v, null, 2) }] };
     }
-    case "book_ticket": {
+    case "book_tickets": {
       const customerId = S.ensureCustomer(db, args.email as string);
       S.updateCustomer(db, customerId, { name: args.name as string });
       const ticketType = (args.ticket_type as string) || "standard";
       const price = PRICE_PENCE[ticketType as keyof typeof PRICE_PENCE] ?? PRICE_PENCE.standard;
-      const ticketResult = S.createTicket(db, {
-        customer_id: customerId,
-        performance_id: args.performance_id as number,
-        price_pence: price,
-        ticket_type: ticketType,
-      });
-      if (!ticketResult.ok) return { content: [{ type: "text", text: ticketResult.error }], isError: true };
-      // Create transaction so the booking appears in the live feed
+      const qty = Math.max(1, Math.min(10, (args.quantity as number) || 1));
+      const ticketIds: number[] = [];
+      for (let i = 0; i < qty; i++) {
+        const r = S.createTicket(db, {
+          customer_id: customerId,
+          performance_id: args.performance_id as number,
+          price_pence: price,
+          ticket_type: ticketType,
+        });
+        if (!r.ok) return { content: [{ type: "text", text: r.error }], isError: true };
+        ticketIds.push(r.data.id);
+      }
+      // Single transaction for the whole booking
       const txResult = S.createTransaction(db, {
         customer_id: customerId,
-        amount_pence: price,
+        amount_pence: price * qty,
         type: "purchase",
         status: "pending",
         client: "mcp",
       });
       if (txResult.ok) {
-        S.createTransactionTicket(db, { transaction_id: txResult.data.id, ticket_id: ticketResult.data.id });
+        for (const tid of ticketIds) {
+          S.createTransactionTicket(db, { transaction_id: txResult.data.id, ticket_id: tid });
+        }
         S.completeTransaction(db, txResult.data.id);
       }
-      const ticket = S.findTicketById(db, ticketResult.data.id);
-      return { content: [{ type: "text", text: JSON.stringify(ticket, null, 2) }] };
+      const tickets = ticketIds.map(id => S.findTicketById(db, id));
+      return { content: [{ type: "text", text: JSON.stringify({ tickets, transaction_id: txResult.ok ? txResult.data.id : null }, null, 2) }] };
     }
     case "get_ticket": {
       const t = S.findTicketById(db, args.id as number);
