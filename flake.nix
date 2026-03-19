@@ -63,7 +63,7 @@
 
             # Run from project root
             cd "$project_root"
-            ${nix}/bin/nix eval --json -f "$composition_path" | ${bun}/bin/bun schema/codegen.ts "$output_dir"
+            ${nix}/bin/nix eval --json -f "$composition_path" | ${bun}/bin/bun schema/codegen/index.ts "$output_dir"
           '';
         in {
           default = mkShell {

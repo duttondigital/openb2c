@@ -1,0 +1,579 @@
+import type { Column, Operation, Schema, Tables } from "./types";
+import { pascalCase, camelCase } from "./utils";
+import { compileExpr, extractRelations } from "./expr";
+
+function genServiceImports(): string {
+  return `import { Database } from "bun:sqlite";
+import type * as T from "./types";
+
+export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict";
+
+export type Result<D> =
+  | { ok: true; data: D }
+  | { ok: false; error: string; code: ErrorCode };
+
+export interface ApiError {
+  error: string;
+  code: ErrorCode;
+  details?: Record<string, string>;
+}
+
+export function errorResponse(error: string, code: ErrorCode, status: number, details?: Record<string, string>): Response {
+  const body: ApiError = { error, code };
+  if (details) body.details = details;
+  return Response.json(body, { status });
+}
+
+export interface Effect {
+  type: "emit" | "notify" | "call";
+  payload: unknown;
+}
+
+export interface OpResult<D> extends Result<D> {
+  effects?: Effect[];
+}
+
+export interface ListOptions {
+  limit?: number;
+  offset?: number;
+  sort?: string;      // column name
+  order?: "asc" | "desc";
+  filter?: Record<string, unknown>;  // column: value filters
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+const EMAIL_RE = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+const UK_POSTCODE_RE = /^[A-Z]{1,2}[0-9][0-9A-Z]?\\s?[0-9][A-Z]{2}$/i;
+const UK_PHONE_RE = /^(\\+44|0)[0-9]{10,11}$/;
+const DATE_RE = /^\\d{4}-\\d{2}-\\d{2}$/;
+const TIME_RE = /^\\d{2}:\\d{2}(:\\d{2})?$/;
+
+export function validateEmail(v: string): boolean { return EMAIL_RE.test(v); }
+export function validatePostcode(v: string): boolean { return UK_POSTCODE_RE.test(v); }
+export function validatePhone(v: string): boolean { return UK_PHONE_RE.test(v.replace(/\\s/g, "")); }
+export function validateDate(v: string): boolean { return DATE_RE.test(v); }
+export function validateTime(v: string): boolean { return TIME_RE.test(v); }
+
+function validate(input: Record<string, unknown>): string | null {
+  if (input.email !== undefined && typeof input.email === "string" && !validateEmail(input.email)) {
+    return "invalid email format";
+  }
+  if (input.postcode !== undefined && typeof input.postcode === "string" && !validatePostcode(input.postcode)) {
+    return "invalid UK postcode";
+  }
+  if (input.phone !== undefined && typeof input.phone === "string" && !validatePhone(input.phone)) {
+    return "invalid UK phone number";
+  }
+  if (input.date !== undefined && typeof input.date === "string" && !validateDate(input.date)) {
+    return "invalid date format (YYYY-MM-DD)";
+  }
+  if (input.time !== undefined && typeof input.time === "string" && !validateTime(input.time)) {
+    return "invalid time format (HH:MM)";
+  }
+  return null;
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+
+export interface AuthContext {
+  keyId: number;
+  userId: number | null;
+  scopes: string[];
+}
+
+export function generateApiKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return "do_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function hashApiKey(key: string): Promise<string> {
+  return Bun.password.hash(key, { algorithm: "bcrypt", cost: 10 });
+}
+
+export async function verifyApiKey(db: Database, key: string): Promise<AuthContext | null> {
+  // Use key prefix to narrow candidates, then bcrypt verify
+  const prefix = key.slice(0, 11);
+  const rows = db.query(\`
+    SELECT id, user_id, scopes, active, expires_at, key_hash
+    FROM api_key WHERE active = 1 AND key_prefix = ?
+  \`).all(prefix) as { id: number; user_id: number | null; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
+
+  for (const row of rows) {
+    if (row.expires_at && new Date(row.expires_at) < new Date()) continue;
+    const valid = await Bun.password.verify(key, row.key_hash);
+    if (valid) {
+      // Update last_used_at
+      db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
+      return {
+        keyId: row.id,
+        userId: row.user_id,
+        scopes: row.scopes.split(",").map(s => s.trim()),
+      };
+    }
+  }
+  return null;
+}
+
+export function hasScope(ctx: AuthContext, required: string): boolean {
+  return ctx.scopes.includes("*") || ctx.scopes.includes(required);
+}
+
+// ============================================================================
+// Identity (Federated Auth)
+// ============================================================================
+
+export interface Certificate {
+  email: string;
+  publicKey: string;
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
+export interface IdentityContext {
+  email: string;
+  publicKey: string;
+  certificate: Certificate;
+  userId: number;
+}
+
+// Ensure user exists for identity, create if not
+export function ensureUser(db: Database, email: string): number {
+  const existing = db.query("SELECT id FROM user WHERE email = ?").get(email) as { id: number } | null;
+  if (existing) return existing.id;
+
+  // Auto-create user on first authenticated request
+  const result = db.query(\`
+    INSERT INTO user (name, email)
+    VALUES (?, ?)
+    RETURNING id
+  \`).get(email, email) as { id: number };
+
+  return result.id;
+}
+
+// Registry keypair - in production, load from secure storage
+let registryPrivateKey: CryptoKey | null = null;
+let registryPublicKey: CryptoKey | null = null;
+
+export async function initRegistryKeys(privateKeyHex?: string): Promise<string> {
+  if (privateKeyHex) {
+    // Import existing key
+    const keyData = hexToBytes(privateKeyHex);
+    registryPrivateKey = await crypto.subtle.importKey(
+      "raw", keyData, { name: "Ed25519" }, false, ["sign"]
+    );
+    // Derive public key (Ed25519 public key is last 32 bytes of 64-byte private key or derived)
+    const publicKeyData = keyData.slice(32);
+    registryPublicKey = await crypto.subtle.importKey(
+      "raw", publicKeyData, { name: "Ed25519" }, true, ["verify"]
+    );
+    return bytesToHex(publicKeyData);
+  } else {
+    // Generate new keypair
+    const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    registryPrivateKey = keypair.privateKey;
+    registryPublicKey = keypair.publicKey;
+    const pubKeyBytes = await crypto.subtle.exportKey("raw", keypair.publicKey);
+    return bytesToHex(new Uint8Array(pubKeyBytes));
+  }
+}
+
+export async function getRegistryPublicKey(): Promise<string> {
+  if (!registryPublicKey) throw new Error("Registry keys not initialized");
+  const bytes = await crypto.subtle.exportKey("raw", registryPublicKey);
+  return bytesToHex(new Uint8Array(bytes));
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function generateOTP(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(3)))
+    .map(b => (b % 10).toString()).join("").padStart(6, "0");
+}
+
+export async function createChallenge(
+  db: Database,
+  email: string,
+  publicKey: string
+): Promise<{ challengeId: number; code: string }> {
+  const code = generateOTP();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+
+  const result = db.query(\`
+    INSERT INTO identity_challenge (email, code, public_key, expires_at)
+    VALUES (?, ?, ?, ?) RETURNING id
+  \`).get(email, code, publicKey, expiresAt) as { id: number };
+
+  return { challengeId: result.id, code };
+}
+
+export async function verifyChallenge(
+  db: Database,
+  challengeId: number,
+  code: string,
+  signature: string  // signature of the code, proves key ownership
+): Promise<Result<Certificate>> {
+  const challenge = db.query(\`
+    SELECT * FROM identity_challenge WHERE id = ? AND used = 0
+  \`).get(challengeId) as { email: string; code: string; public_key: string; expires_at: string } | null;
+
+  if (!challenge) {
+    return { ok: false, error: "invalid or used challenge", code: "invalid" };
+  }
+
+  if (new Date(challenge.expires_at) < new Date()) {
+    return { ok: false, error: "challenge expired", code: "invalid" };
+  }
+
+  if (challenge.code !== code) {
+    return { ok: false, error: "incorrect code", code: "invalid" };
+  }
+
+  // Verify signature proves ownership of private key
+  const publicKeyBytes = hexToBytes(challenge.public_key);
+  const publicKey = await crypto.subtle.importKey(
+    "raw", publicKeyBytes, { name: "Ed25519" }, false, ["verify"]
+  );
+
+  const valid = await crypto.subtle.verify(
+    "Ed25519", publicKey,
+    hexToBytes(signature),
+    new TextEncoder().encode(code)
+  );
+
+  if (!valid) {
+    return { ok: false, error: "invalid signature", code: "invalid" };
+  }
+
+  // Mark challenge as used
+  db.query("UPDATE identity_challenge SET used = 1 WHERE id = ?").run(challengeId);
+
+  // Upsert to registry
+  db.query(\`
+    INSERT INTO identity_registry (email, public_key)
+    VALUES (?, ?)
+    ON CONFLICT(email) DO UPDATE SET public_key = ?, verified_at = CURRENT_TIMESTAMP, revoked = 0
+  \`).run(challenge.email, challenge.public_key, challenge.public_key);
+
+  // Issue certificate
+  const cert = await issueCertificate(challenge.email, challenge.public_key);
+
+  return { ok: true, data: cert };
+}
+
+export async function issueCertificate(email: string, publicKey: string): Promise<Certificate> {
+  if (!registryPrivateKey) throw new Error("Registry keys not initialized");
+
+  const issuedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year
+
+  const payload = JSON.stringify({ email, publicKey, issuedAt, expiresAt });
+  const signature = await crypto.subtle.sign(
+    "Ed25519", registryPrivateKey,
+    new TextEncoder().encode(payload)
+  );
+
+  return {
+    email,
+    publicKey,
+    issuedAt,
+    expiresAt,
+    signature: bytesToHex(new Uint8Array(signature)),
+  };
+}
+
+export async function verifyCertificate(cert: Certificate, registryPubKeyHex: string): Promise<boolean> {
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      "raw", hexToBytes(registryPubKeyHex), { name: "Ed25519" }, false, ["verify"]
+    );
+
+    const payload = JSON.stringify({
+      email: cert.email,
+      publicKey: cert.publicKey,
+      issuedAt: cert.issuedAt,
+      expiresAt: cert.expiresAt,
+    });
+
+    const valid = await crypto.subtle.verify(
+      "Ed25519", publicKey,
+      hexToBytes(cert.signature),
+      new TextEncoder().encode(payload)
+    );
+
+    if (!valid) return false;
+    if (new Date(cert.expiresAt) < new Date()) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyRequest(
+  cert: Certificate,
+  registryPubKeyHex: string,
+  method: string,
+  path: string,
+  timestamp: string,
+  signature: string
+): Promise<IdentityContext | null> {
+  // 1. Verify certificate is valid and signed by registry
+  const certValid = await verifyCertificate(cert, registryPubKeyHex);
+  if (!certValid) return null;
+
+  // 2. Verify request signature using user's public key from cert
+  try {
+    const userPubKey = await crypto.subtle.importKey(
+      "raw", hexToBytes(cert.publicKey), { name: "Ed25519" }, false, ["verify"]
+    );
+
+    const message = \`\${method} \${path} \${timestamp}\`;
+    const valid = await crypto.subtle.verify(
+      "Ed25519", userPubKey,
+      hexToBytes(signature),
+      new TextEncoder().encode(message)
+    );
+
+    if (!valid) return null;
+
+    // 3. Check timestamp is recent (5 min window)
+    const ts = parseInt(timestamp);
+    const now = Date.now();
+    if (Math.abs(now - ts) > 5 * 60 * 1000) return null;
+
+    return { email: cert.email, publicKey: cert.publicKey, certificate: cert };
+  } catch {
+    return null;
+  }
+}
+`;
+}
+
+function genCrudService(entity: string, cols: Record<string, Column>): string {
+  const Entity = pascalCase(entity);
+  const tableName = entity === "transaction" ? "[transaction]" : entity;
+
+  const colNames = Object.keys(cols);
+  const inputCols = colNames.filter(c => !(cols[c].pk && cols[c].auto));
+  const requiredCols = inputCols.filter(c => cols[c].required);
+
+  return `
+// ============================================================================
+// ${Entity} CRUD
+// ============================================================================
+
+export function find${Entity}ById(db: Database, id: number): T.${Entity} | null {
+  return db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
+}
+
+const ${entity}Cols = new Set(${JSON.stringify(colNames)});
+
+export function findAll${Entity}s(db: Database, opts: ListOptions = {}): T.${Entity}[] {
+  const limit = opts.limit ?? 100;
+  const offset = opts.offset ?? 0;
+  const sort = opts.sort && ${entity}Cols.has(opts.sort) ? opts.sort : "id";
+  const order = opts.order === "desc" ? "DESC" : "ASC";
+
+  let where = "";
+  const params: unknown[] = [];
+  if (opts.filter) {
+    const clauses: string[] = [];
+    for (const [k, v] of Object.entries(opts.filter)) {
+      if (${entity}Cols.has(k) && v !== undefined) {
+        clauses.push(\`\${k} = ?\`);
+        params.push(v);
+      }
+    }
+    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
+  }
+
+  params.push(limit, offset);
+  return db.query(\`SELECT * FROM ${tableName} \${where} ORDER BY \${sort} \${order} LIMIT ? OFFSET ?\`).all(...params) as T.${Entity}[];
+}
+
+export function count${Entity}s(db: Database, filter?: Record<string, unknown>): number {
+  let where = "";
+  const params: unknown[] = [];
+  if (filter) {
+    const clauses: string[] = [];
+    for (const [k, v] of Object.entries(filter)) {
+      if (${entity}Cols.has(k) && v !== undefined) {
+        clauses.push(\`\${k} = ?\`);
+        params.push(v);
+      }
+    }
+    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
+  }
+  return (db.query(\`SELECT COUNT(*) as n FROM ${tableName} \${where}\`).get(...params) as { n: number }).n;
+}
+
+export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{ id: number }> {
+  ${requiredCols.length > 0 ? `// Validate required fields
+  ${requiredCols.map(c => `if (input.${c} === undefined) return { ok: false, error: "${c} is required", code: "invalid" };`).join("\n  ")}` : ""}
+
+  // Validate formats
+  const validationError = validate(input as Record<string, unknown>);
+  if (validationError) return { ok: false, error: validationError, code: "invalid" };
+
+  // Build dynamic insert - only include provided fields, let DB handle defaults
+  const cols: string[] = [];
+  const vals: unknown[] = [];
+  ${inputCols.map(c => `if (input.${c} !== undefined) { cols.push("${c}"); vals.push(input.${c}); }`).join("\n  ")}
+
+  const result = db.query(\`
+    INSERT INTO ${tableName} (\${cols.join(", ")})
+    VALUES (\${cols.map(() => "?").join(", ")})
+    RETURNING id
+  \`).get(...vals) as { id: number };
+
+  return { ok: true, data: { id: result.id } };
+}
+
+export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>): Result<{ id: number }> {
+  const existing = find${Entity}ById(db, id);
+  if (!existing) return { ok: false, error: "not found", code: "not_found" };
+
+  // Validate formats
+  const validationError = validate(input as Record<string, unknown>);
+  if (validationError) return { ok: false, error: validationError, code: "invalid" };
+
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  ${inputCols.map(c => `if (input.${c} !== undefined) { sets.push("${c} = ?"); vals.push(input.${c}); }`).join("\n  ")}
+
+  if (sets.length > 0) {
+    vals.push(id);
+    db.query(\`UPDATE ${tableName} SET \${sets.join(", ")} WHERE id = ?\`).run(...vals);
+  }
+
+  return { ok: true, data: { id } };
+}
+
+export function delete${Entity}(db: Database, id: number): Result<{ deleted: true }> {
+  const existing = find${Entity}ById(db, id);
+  if (!existing) return { ok: false, error: "not found", code: "not_found" };
+
+  db.query("DELETE FROM ${tableName} WHERE id = ?").run(id);
+  return { ok: true, data: { deleted: true } };
+}
+`;
+}
+
+function genOperationService(entity: string, opName: string, op: Operation, tables: Tables): string {
+  const Entity = pascalCase(entity);
+  const OpName = camelCase(opName);
+  const tableName = entity === "transaction" ? "[transaction]" : entity;
+
+  const relations = extractRelations(op.guard);
+  const guardCode = op.guard ? compileExpr(op.guard, entity) : "true";
+
+  // Generate relation loading
+  const relLoads = relations.map(rel => {
+    // Find FK column
+    const fkCol = `${rel}_id`;
+    return `  const _rel_${rel} = db.query("SELECT * FROM ${rel} WHERE id = ?").get(${entity}.${fkCol}) as T.${pascalCase(rel)} | null;
+  if (!_rel_${rel}) return { ok: false, error: "${rel} not found", code: "invalid" };`;
+  }).join("\n");
+
+  // Generate set clause
+  const setEntries = Object.entries(op.set);
+  const setCode = setEntries.length > 0
+    ? `db.query("UPDATE ${tableName} SET ${setEntries.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?").run(${setEntries.map(([_, v]) => JSON.stringify(v)).join(", ")}, id);`
+    : "// No fields to set";
+
+  // Generate cascade updates
+  const cascadeCode = op.cascade.map(c => {
+    // Use single quotes for SQL string literals
+    const setClause = Object.entries(c.set).map(([k, v]) => `${k} = '${v}'`).join(", ");
+    if (c.via) {
+      // Check if via is a junction table (contains underscore and exists as table)
+      // or a direct FK column name
+      if (c.via.includes("_") && c.via !== `${entity}_id`) {
+        // Junction table: via = "transaction_ticket"
+        return `  db.query(\`UPDATE ${c.entity} SET ${setClause} WHERE id IN (SELECT ${c.entity}_id FROM ${c.via} WHERE ${entity}_id = ?)\`).run(id);`;
+      } else {
+        // Direct FK column: via = "performance_id"
+        return `  db.query("UPDATE ${c.entity} SET ${setClause} WHERE ${c.via} = ?").run(id);`;
+      }
+    } else {
+      // Default: FK on target entity named {entity}_id
+      return `  db.query("UPDATE ${c.entity} SET ${setClause} WHERE ${entity}_id = ?").run(id);`;
+    }
+  }).join("\n");
+
+  // Generate effects
+  const effectsCode = op.effects.map(e => {
+    if (e.emit) return `    { type: "emit", payload: { event: ${JSON.stringify(e.emit)}, ${entity} } }`;
+    if (e.notify) return `    { type: "notify", payload: ${JSON.stringify(e.notify)} }`;
+    if (e.call) return `    { type: "call", payload: ${JSON.stringify(e.call)} }`;
+    return "";
+  }).filter(Boolean).join(",\n");
+
+  return `
+export function ${OpName}${Entity}(db: Database, id: number): OpResult<{ id: number; status: string }> {
+  const ${entity} = find${Entity}ById(db, id);
+  if (!${entity}) return { ok: false, error: "not found", code: "not_found" };
+
+${relLoads}
+
+  // Guard: ${op.guard ? "check preconditions" : "none"}
+  if (!(${guardCode})) {
+    return { ok: false, error: "precondition failed for ${opName}", code: "bad_state" };
+  }
+
+  // Execute in transaction
+  const run = db.transaction(() => {
+    ${setCode}
+${cascadeCode}
+  });
+  run();
+
+  return {
+    ok: true,
+    data: { id, status: ${setEntries.find(([k]) => k === "status") ? JSON.stringify(setEntries.find(([k]) => k === "status")![1]) : '"updated"'} },
+    effects: [
+${effectsCode}
+    ],
+  };
+}
+`;
+}
+
+export function genServices(schema: Schema): string {
+  const chunks: string[] = [
+    "// Generated by schema/codegen.ts — do not edit\n",
+    genServiceImports(),
+  ];
+
+  // Generate CRUD for each entity
+  for (const [entity, cols] of Object.entries(schema.tables)) {
+    chunks.push(genCrudService(entity, cols));
+  }
+
+  // Generate operations
+  for (const [entity, ops] of Object.entries(schema.operations)) {
+    for (const [opName, op] of Object.entries(ops)) {
+      chunks.push(genOperationService(entity, opName, op, schema.tables));
+    }
+  }
+
+  return chunks.join("\n");
+}
