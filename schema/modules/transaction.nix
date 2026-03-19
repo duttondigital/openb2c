@@ -5,7 +5,7 @@ in
 {
   tables.transaction = {
     id = { type = "integer"; pk = true; auto = true; };
-    customer_id = { type = "integer"; required = true; references = "customer(id)"; };
+    user_id = { type = "integer"; required = true; references = "user(id)"; };
     amount_pence = { type = "integer"; required = true; };
     type = { type = "text"; required = true; };  # purchase, refund, donation
     status = { type = "text"; default = "'pending'"; };  # pending, completed, failed, refunded

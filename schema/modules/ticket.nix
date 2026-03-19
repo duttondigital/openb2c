@@ -6,7 +6,7 @@ in
   tables.ticket = {
     id = { type = "integer"; pk = true; auto = true; };
     performance_id = { type = "integer"; required = true; references = "performance(id)"; };
-    customer_id = { type = "integer"; required = true; references = "customer(id)"; };
+    user_id = { type = "integer"; required = true; references = "user(id)"; };
     seat = { type = "text"; };
     price_pence = { type = "integer"; required = true; };
     ticket_type = { type = "text"; default = "'standard'"; };  # standard, vip, concession

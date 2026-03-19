@@ -6,10 +6,11 @@ let
   modules = lib.evalModules {
     modules = [
       ../../schema/base.nix
+      ../../schema/modules/identity.nix
+      ../../schema/modules/user.nix
+      ../../schema/modules/user_b2c.nix  # Adds customer_type to user
       ../../schema/modules/api_key.nix
       ../../schema/modules/artist.nix
-      ../../schema/modules/customer.nix
-      ../../schema/modules/identity.nix
       ../../schema/modules/performance.nix
       ../../schema/modules/ticket.nix
       ../../schema/modules/transaction.nix

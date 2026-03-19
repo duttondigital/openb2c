@@ -79,7 +79,7 @@ function quoteReserved(name: string): string {
   return reserved.includes(name.toLowerCase()) ? `[${name}]` : name;
 }
 
-export function sqlType(col: Column): string {
+export function sqlType(col: Column, availableTables?: string[]): string {
   const parts = [col.type.toUpperCase()];
   if (col.pk) parts.push("PRIMARY KEY");
   if (col.auto) parts.push("AUTOINCREMENT");
@@ -87,6 +87,15 @@ export function sqlType(col: Column): string {
   if (col.unique) parts.push("UNIQUE");
   if (col.default !== null) parts.push(`DEFAULT ${col.default}`);
   if (col.references !== null) {
+    // Validate that referenced table exists
+    const match = col.references.match(/^(\w+)\(/);
+    if (availableTables && match && !availableTables.includes(match[1])) {
+      throw new Error(
+        `Foreign key reference to non-existent table: ${col.references}\n` +
+        `Available tables: ${availableTables.join(", ")}\n` +
+        `Either include the referenced table's module or remove the foreign key.`
+      );
+    }
     // Quote table name in references if reserved
     const ref = col.references.replace(/^(\w+)/, (_, table) => quoteReserved(table));
     parts.push(`REFERENCES ${ref}`);
@@ -126,7 +135,7 @@ export function genSQL(tables: Tables): string {
     if (!cols) continue;
     const defs: string[] = [];
     for (const [col, c] of Object.entries(cols)) {
-      defs.push(`    ${col} ${sqlType(c)}`);
+      defs.push(`    ${col} ${sqlType(c, tableNames)}`);
     }
     const tableName = quoteReserved(table);
     stmts.push(`CREATE TABLE IF NOT EXISTS ${tableName} (\n${defs.join(",\n")}\n);`);
@@ -925,7 +934,7 @@ const db = new Database(DB_PATH);
 db.run("PRAGMA journal_mode = WAL");
 db.run("PRAGMA foreign_keys = ON");
 
-const sql = fs.readFileSync("src/generated/schema.sql", "utf-8");
+const sql = fs.readFileSync(new URL("./schema.sql", import.meta.url), "utf-8");
 const statements = sql.split(/;\\s*\\n/).filter((s: string) => s.trim());
 for (const stmt of statements) {
   if (stmt.trim()) db.run(stmt);
@@ -1138,8 +1147,9 @@ function genIntegrationTests(schema: Schema): string {
     if (added.has(entity)) return;
     const cols = schema.tables[entity];
     for (const [col, c] of Object.entries(cols)) {
-      if (col.endsWith("_id") && c.references) {
-        const dep = col.replace("_id", "");
+      if (c.references) {
+        // Extract table name from references (e.g., "user(id)" -> "user")
+        const dep = c.references.split("(")[0];
         if (schema.tables[dep]) addWithDeps(dep, added);
       }
     }
@@ -1275,7 +1285,7 @@ import { spawn, type Subprocess } from "bun";
 import { unlinkSync } from "fs";
 
 const BASE_URL = "http://localhost:3086";
-const TEST_DB = "test-integration.db";
+const TEST_DB = ":memory:";
 
 // HTTP client helper
 const api = {
@@ -1376,12 +1386,12 @@ let mcpProc: Subprocess;
 let mcp: McpClient;
 
 beforeAll(async () => {
-  // Clean test db
-  try { unlinkSync(TEST_DB); } catch {}
+  // Using in-memory database
 
   // Start HTTP server on test port (auth disabled for tests)
   httpServer = spawn({
-    cmd: ["bun", "run", "src/generated/server.ts"],
+    cmd: ["bun", "run", "./server.ts"],
+    cwd: import.meta.dir,
     env: { ...process.env, PORT: "3086", DB_PATH: TEST_DB, AUTH_ENABLED: "false" },
     stdout: "pipe",
     stderr: "pipe",
@@ -1392,7 +1402,8 @@ beforeAll(async () => {
 
   // Start MCP server
   mcpProc = spawn({
-    cmd: ["bun", "run", "src/generated/mcp.ts"],
+    cmd: ["bun", "run", "./mcp.ts"],
+    cwd: import.meta.dir,
     env: { ...process.env, DB_PATH: TEST_DB },
     stdin: "pipe",
     stdout: "pipe",
@@ -1408,7 +1419,6 @@ ${setupCalls}
 afterAll(() => {
   httpServer?.kill();
   mcp?.close();
-  try { unlinkSync(TEST_DB); } catch {}
 });
 
 describe("REST API", () => {
@@ -1420,7 +1430,7 @@ describe("REST API", () => {
   });
 
   test("pagination", async () => {
-    const res = await api.get("/customers?limit=1&offset=0");
+    const res = await api.get("/${entities[0]}s?limit=1&offset=0");
     expect(res.items.length).toBeLessThanOrEqual(1);
     expect(typeof res.total).toBe("number");
     expect(res.limit).toBe(1);
@@ -1428,8 +1438,8 @@ describe("REST API", () => {
   });
 
   test("sorting", async () => {
-    const asc = await api.get("/customers?sort=id&order=asc");
-    const desc = await api.get("/customers?sort=id&order=desc");
+    const asc = await api.get("/${entities[0]}s?sort=id&order=asc");
+    const desc = await api.get("/${entities[0]}s?sort=id&order=desc");
     if (asc.items.length > 1) {
       expect(asc.items[0].id).toBeLessThan(asc.items[asc.items.length - 1].id);
       expect(desc.items[0].id).toBeGreaterThan(desc.items[desc.items.length - 1].id);
@@ -1437,8 +1447,12 @@ describe("REST API", () => {
   });
 
   test("filtering", async () => {
-    const created = await api.post("/venues", { name: "Filter Test", address: "1 St", city: "Town", postcode: "TR1 1AA", capacity: 50 });
-    const filtered = await api.get(\`/venues?name=Filter%20Test\`);
+    // Test filtering on first entity
+    const entity = "${entities[0]}";
+    const filterField = "${Object.keys(schema.tables[entities[0]] || {}).find(c => schema.tables[entities[0]][c].type === "text" && !c.includes("_id")) || "name"}";
+    const testData = ${JSON.stringify({ ...sampleData[entities[0]], [Object.keys(schema.tables[entities[0]] || {}).find(c => schema.tables[entities[0]][c].type === "text" && !c.includes("_id")) || "name"]: "FilterTest" })};
+    const created = await api.post(\`/\${entity}s\`, testData);
+    const filtered = await api.get(\`/\${entity}s?\${filterField}=FilterTest\`);
     expect(filtered.items.some((v: { id: number }) => v.id === created.id)).toBe(true);
   });
 ${httpTests.join("")}
@@ -1448,7 +1462,7 @@ describe("MCP Protocol", () => {
   test("tools/list returns all tools", async () => {
     const result = await mcp.listTools();
     expect(result.length).toBeGreaterThan(0);
-    expect(result.some(t => t.name === "list_customers")).toBe(true);
+    expect(result.some(t => t.name.startsWith("list_"))).toBe(true);
   });
 ${mcpTests.join("")}
 });
@@ -1468,7 +1482,8 @@ describe("Identity Auth", () => {
 
     // Start auth-enabled server
     authServer = spawn({
-      cmd: ["bun", "run", "src/generated/server.ts"],
+      cmd: ["bun", "run", "./server.ts"],
+      cwd: import.meta.dir,
       env: { ...process.env, PORT: "3087", DB_PATH: "test-auth.db", AUTH_ENABLED: "true" },
       stdout: "pipe",
       stderr: "pipe",
@@ -1781,7 +1796,7 @@ const db = new Database(DB_PATH);
 db.run("PRAGMA journal_mode = WAL");
 db.run("PRAGMA foreign_keys = ON");
 
-const sql = fs.readFileSync("src/generated/schema.sql", "utf-8");
+const sql = fs.readFileSync(new URL("./schema.sql", import.meta.url), "utf-8");
 const statements = sql.split(/;\\s*\\n/).filter((s: string) => s.trim());
 for (const stmt of statements) {
   if (stmt.trim()) db.run(stmt);
@@ -2160,7 +2175,8 @@ if (import.meta.main) {
   const input = await Bun.stdin.text();
   const schema: Schema = JSON.parse(input);
 
-  const outDir = join(import.meta.dir, "..", "src", "generated");
+  // Accept output directory as first argument, default to src/generated for backward compatibility
+  const outDir = Bun.argv[2] || join(import.meta.dir, "..", "src", "generated");
   mkdirSync(outDir, { recursive: true });
 
   writeFileSync(join(outDir, "schema.sql"), genSQL(schema.tables));
@@ -2172,12 +2188,12 @@ if (import.meta.main) {
   writeFileSync(join(outDir, "mcp.ts"), genMcpServer(schema));
   writeFileSync(join(outDir, "openapi.json"), genOpenAPI(schema));
 
-  console.log("wrote src/generated/schema.sql");
-  console.log("wrote src/generated/types.ts");
-  console.log("wrote src/generated/services.ts");
-  console.log("wrote src/generated/effects.ts");
-  console.log("wrote src/generated/server.ts");
-  console.log("wrote src/generated/integration.test.ts");
-  console.log("wrote src/generated/mcp.ts");
-  console.log("wrote src/generated/openapi.json");
+  console.log(`wrote ${outDir}/schema.sql`);
+  console.log(`wrote ${outDir}/types.ts`);
+  console.log(`wrote ${outDir}/services.ts`);
+  console.log(`wrote ${outDir}/effects.ts`);
+  console.log(`wrote ${outDir}/server.ts`);
+  console.log(`wrote ${outDir}/integration.test.ts`);
+  console.log(`wrote ${outDir}/mcp.ts`);
+  console.log(`wrote ${outDir}/openapi.json`);
 }
