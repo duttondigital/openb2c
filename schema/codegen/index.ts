@@ -14,9 +14,10 @@ export { genRoutes } from "./server";
 export { genMcpServer } from "./mcp";
 export { genEffectsInterface } from "./effects";
 export { genOpenAPI } from "./openapi";
+export { genAppShell } from "./ui";
 
 import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import type { Schema } from "./types";
 import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
@@ -25,6 +26,7 @@ import { genEffectsInterface } from "./effects";
 import { genRoutes } from "./server";
 import { genMcpServer } from "./mcp";
 import { genOpenAPI } from "./openapi";
+import { genAppShell } from "./ui";
 
 if (import.meta.main) {
   const input = await Bun.stdin.text();
@@ -49,4 +51,26 @@ if (import.meta.main) {
   console.log(`wrote ${outDir}/server.ts`);
   console.log(`wrote ${outDir}/mcp.ts`);
   console.log(`wrote ${outDir}/openapi.json`);
+
+  // Generate UI
+  const uiDir = join(outDir, "ui");
+  mkdirSync(uiDir, { recursive: true });
+  writeFileSync(join(uiDir, "index.html"), genAppShell(schema));
+  writeFileSync(join(uiDir, "openapi.json"), genOpenAPI(schema));
+
+  // Bundle web components
+  const uiEntry = resolve(import.meta.dir, "..", "ui", "index.ts");
+  const result = await Bun.build({
+    entrypoints: [uiEntry],
+    outdir: uiDir,
+    naming: "app.js",
+    minify: true,
+  });
+  if (!result.success) {
+    console.error("UI bundle failed:", result.logs);
+    process.exit(1);
+  }
+
+  console.log(`wrote ${uiDir}/index.html`);
+  console.log(`wrote ${uiDir}/app.js`);
 }
