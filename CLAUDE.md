@@ -102,7 +102,7 @@ compose <composition.nix>    # Evaluate composition and generate code
 bun test                     # All tests
 
 
-Note: `compose` is available in your PATH when in the nix shell (via direnv).
+Note: `compose` is a Nix-packaged tool available in the dev shell. It finds the project root automatically, so you can run it from any subdirectory.
 
 ## Tech
 
