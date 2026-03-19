@@ -41,6 +41,10 @@
               nixd
               alejandra
             ];
+
+            shellHook = ''
+              export PATH="$PWD/scripts:$PATH"
+            '';
           };
         }
     );

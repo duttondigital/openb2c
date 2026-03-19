@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Evaluate a composition file and generate code
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "Usage: compose <composition.nix>"
+  echo "Example: compose examples/duchyopera/composition.nix"
+  exit 1
+fi
+
+nix eval --json -f "$1" | bun schema/codegen.ts
