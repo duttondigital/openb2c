@@ -31,7 +31,6 @@ in
         set = { status = "confirmed"; };
       }];
       effects = [
-        { emit = "transaction.completed"; }
         { notify = { channel = "email"; template = "receipt"; }; }
         { call = { service = "analytics"; action = "track_purchase"; }; }
       ];
@@ -45,9 +44,6 @@ in
         via = "transaction_ticket";
         set = { status = "cancelled"; };
       }];
-      effects = [
-        { emit = "transaction.failed"; }
-      ];
     };
 
     refund = {
@@ -59,7 +55,6 @@ in
         set = { status = "cancelled"; };
       }];
       effects = [
-        { emit = "transaction.refunded"; }
         { notify = { channel = "email"; template = "refund_confirmation"; }; }
         { call = { service = "payment"; action = "process_refund"; }; }
       ];

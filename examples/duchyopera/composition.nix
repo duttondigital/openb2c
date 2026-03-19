@@ -1,6 +1,7 @@
 # Duchy Opera composition: imports modules and evaluates schema
 let
   lib = import <nixpkgs/lib>;
+  composeLib = import ../../schema/lib/compose.nix { inherit lib; };
 
   modules = lib.evalModules {
     modules = [
@@ -18,5 +19,5 @@ let
 
 in {
   tables = modules.config.tables;
-  operations = modules.config.operations;
+  operations = composeLib.processOperations modules.config.operations;
 }

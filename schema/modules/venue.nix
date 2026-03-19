@@ -18,17 +18,11 @@ in
     deactivate = {
       guard = E.eq (E.f "active") (E.lit 1);
       set = { active = "0"; };
-      effects = [
-        { emit = "venue.deactivated"; }
-      ];
     };
 
     activate = {
       guard = E.eq (E.f "active") (E.lit 0);
       set = { active = "1"; };
-      effects = [
-        { emit = "venue.activated"; }
-      ];
     };
   };
 }

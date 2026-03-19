@@ -23,7 +23,6 @@ in
         customer_type = "patron";
       };
       effects = [
-        { emit = "customer.upgraded"; }
         { notify = { channel = "email"; template = "patron_welcome"; }; }
       ];
     };

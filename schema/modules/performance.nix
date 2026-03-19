@@ -33,7 +33,6 @@ in
         set = { status = "cancelled"; };
       }];
       effects = [
-        { emit = "performance.cancelled"; }
         { notify = { channel = "email"; template = "performance_cancelled"; to = "ticket_holders"; }; }
       ];
     };
@@ -41,9 +40,6 @@ in
     complete = {
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "completed"; };
-      effects = [
-        { emit = "performance.completed"; }
-      ];
     };
 
     reschedule = {
@@ -51,7 +47,6 @@ in
       # Note: actual date/time comes from input, not hardcoded
       set = {};  # Fields set from input
       effects = [
-        { emit = "performance.rescheduled"; }
         { notify = { channel = "email"; template = "performance_rescheduled"; to = "ticket_holders"; }; }
       ];
     };

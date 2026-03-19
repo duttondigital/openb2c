@@ -18,7 +18,6 @@ in {
     revoke = {
       guard = E.eq (E.f "active") (E.lit 1);
       set = { active = "0"; };
-      effects = [{ emit = "api_key.revoked"; }];
     };
   };
 }

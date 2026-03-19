@@ -22,7 +22,6 @@ in
         (E.ne (E.rel "performance" "status") (E.lit "cancelled"));
       set = { status = "confirmed"; };
       effects = [
-        { emit = "ticket.confirmed"; }
         { notify = { channel = "email"; template = "ticket_confirmation"; }; }
       ];
     };
@@ -32,9 +31,6 @@ in
         (E.eq (E.f "status") (E.lit "reserved"))
         (E.eq (E.f "status") (E.lit "confirmed"));
       set = { status = "cancelled"; };
-      effects = [
-        { emit = "ticket.cancelled"; }
-      ];
     };
 
     use = {
@@ -42,9 +38,6 @@ in
         (E.eq (E.f "status") (E.lit "confirmed"))
         (E.eq (E.rel "performance" "status") (E.lit "scheduled"));
       set = { status = "used"; };
-      effects = [
-        { emit = "ticket.used"; }
-      ];
     };
 
     upgrade = {
@@ -52,9 +45,6 @@ in
         (E.eq (E.f "ticket_type") (E.lit "standard"))
         (E.eq (E.f "status") (E.lit "confirmed"));
       set = { ticket_type = "vip"; };
-      effects = [
-        { emit = "ticket.upgraded"; }
-      ];
     };
   };
 }

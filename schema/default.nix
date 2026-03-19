@@ -2,6 +2,7 @@
 # Production examples should use their own composition.nix files
 let
   lib = import <nixpkgs/lib>;
+  composeLib = import ./lib/compose.nix { inherit lib; };
 
   # Auto-discover all modules
   moduleFiles =
@@ -16,5 +17,5 @@ let
 
 in {
   tables = modules.config.tables;
-  operations = modules.config.operations;
+  operations = composeLib.processOperations modules.config.operations;
 }
