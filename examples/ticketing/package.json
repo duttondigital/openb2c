@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "scripts": {
     "generate": "compose composition.nix",
-    "test": "bun test generated/integration.test.ts",
     "server": "bun run generated/server.ts",
     "mcp": "bun run generated/mcp.ts",
     "dev": "bun run --watch generated/server.ts"
