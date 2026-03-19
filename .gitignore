@@ -5,8 +5,8 @@ result
 node_modules
 bun.lock
 example/public
-opera.db
-opera.db-wal
-opera.db-shm
-src/generated
+*.db
+*.db-wal
+*.db-shm
+**/generated
 test-*.db*

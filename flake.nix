@@ -57,9 +57,13 @@
               composition_path="$PWD/$composition_path"
             fi
 
+            # Determine output directory (same directory as composition.nix, in generated/)
+            composition_dir="$(dirname "$composition_path")"
+            output_dir="$composition_dir/generated"
+
             # Run from project root
             cd "$project_root"
-            ${nix}/bin/nix eval --json -f "$composition_path" | ${bun}/bin/bun schema/codegen.ts
+            ${nix}/bin/nix eval --json -f "$composition_path" | ${bun}/bin/bun schema/codegen.ts "$output_dir"
           '';
         in {
           default = mkShell {
