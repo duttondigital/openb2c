@@ -4,6 +4,7 @@
  * Usage: nix eval --json -f schema/default.nix | bun schema/codegen.ts
  */
 
+import assert from "assert/strict";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -89,13 +90,13 @@ export function sqlType(col: Column, availableTables?: string[]): string {
   if (col.references !== null) {
     // Validate that referenced table exists
     const match = col.references.match(/^(\w+)\(/);
-    if (availableTables && match && !availableTables.includes(match[1])) {
-      throw new Error(
-        `Foreign key reference to non-existent table: ${col.references}\n` +
-        `Available tables: ${availableTables.join(", ")}\n` +
-        `Either include the referenced table's module or remove the foreign key.`
-      );
-    }
+    const targetTable = match?.[1];
+    assert(
+      !availableTables || !targetTable || availableTables.includes(targetTable),
+      `Foreign key reference to non-existent table: ${col.references}\n` +
+      `Available tables: ${availableTables?.join(", ")}\n` +
+      `Either include the referenced table's module or remove the foreign key.`
+    );
     // Quote table name in references if reserved
     const ref = col.references.replace(/^(\w+)/, (_, table) => quoteReserved(table));
     parts.push(`REFERENCES ${ref}`);
