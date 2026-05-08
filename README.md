@@ -8,6 +8,8 @@ OpenB2C lets a small team stitch together an extremely specific operating system
 
 That ontology is the source of truth for the whole system. OpenB2C evaluates the Nix composition and generates the database schema, TypeScript runtime services, REST API, MCP tools, OpenAPI spec, and web client from the same definition. The goal is to let a user compose standard modules, add a few bespoke rules, and avoid hand-maintaining separate backend, API, AI-tool, and web-client contracts.
 
+Authentication uses a fixed platform foundation with configurable domain authorization. OpenB2C standardizes credential handling and the generated `AuthContext`, while each composition can declare domain roles, scopes, ownership rules, and operation permissions. See [Authentication And Authorization Principles](./docs/auth-and-authorization.md).
+
 ## Features
 
 - **Declarative Schema**: Define tables, operations, guards, and effects in Nix

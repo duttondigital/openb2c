@@ -40,7 +40,7 @@ export class ObOperationBtn extends HTMLElement {
     msg.className = "msg";
 
     try {
-      const res = await fetch(ObApi.instance!.url(`/api/${entity}s/${id}/${op}`), { method: "POST" });
+      const res = await ObApi.instance!.request(`/api/${entity}s/${id}/${op}`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
         msg.textContent = err.error || "Failed";

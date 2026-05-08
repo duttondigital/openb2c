@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.artist = {
@@ -22,6 +23,37 @@ in
     activate = {
       guard = E.eq (E.f "active") (E.lit 0);
       set = { active = "1"; };
+    };
+  };
+
+  authorization.artist = {
+    read.allow = [
+      A.public
+      A.operator
+      A.service
+      (A.scopedAny [ "artist.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      (A.scopedAny [ "artist.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      (A.scopedAny [ "artist.update" "write" ])
+    ];
+    delete.allow = [
+      A.admin
+      (A.scopedAny [ "artist.delete" ])
+    ];
+    operations = {
+      deactivate.allow = [
+        A.operator
+        (A.scopedAny [ "artist.deactivate" ])
+      ];
+      activate.allow = [
+        A.operator
+        (A.scopedAny [ "artist.activate" ])
+      ];
     };
   };
 }

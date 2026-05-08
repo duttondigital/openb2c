@@ -2,11 +2,47 @@ import type { Column, Operation, Schema, Tables } from "./types";
 import { pascalCase, camelCase } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
-function genServiceImports(): string {
-  return `import { Database } from "bun:sqlite";
-import type * as T from "./types";
+function genServiceImports(schema: Schema): string {
+  const policy = JSON.stringify(schema.authorization ?? {}, null, 2);
+  const userCols = schema.tables.user;
+  const userSelectCols = userCols
+    ? ["id", userCols.role ? "role" : null, userCols.status ? "status" : null, userCols.customer_type ? "customer_type" : null]
+      .filter(Boolean)
+      .join(", ")
+    : "";
+  const userAuthAttributes = userCols ? `
+export function getUserAuthAttributes(db: Database, userId: number | null): UserAuthAttributes {
+  const attrs = emptyUserAuthAttributes();
+  if (userId === null) return attrs;
 
-export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict";
+  const row = db.query("SELECT ${userSelectCols} FROM user WHERE id = ?").get(userId) as ${`{ id: number${userCols.role ? "; role: string | null" : ""}${userCols.status ? "; status: string | null" : ""}${userCols.customer_type ? "; customer_type: string | null" : ""} }`} | null;
+  if (!row) return attrs;
+
+  addPrincipal(attrs.principals, "user");
+  attrs.claims.userId = userId;
+${userCols.status ? `  if (row.status) attrs.claims.status = row.status;
+` : ""}${userCols.role ? `  if (row.role) {
+    addRole(attrs.roles, row.role);
+    attrs.claims.role = row.role;
+    addPrincipal(attrs.principals, "staff");
+    if (row.role === "admin") addPrincipal(attrs.principals, "admin");
+  }
+` : ""}${userCols.customer_type ? `  if (row.customer_type) {
+    addRole(attrs.roles, row.customer_type);
+    attrs.claims.customerType = row.customer_type;
+    addPrincipal(attrs.principals, "customer");
+  }
+` : ""}  return attrs;
+}
+` : `
+export function getUserAuthAttributes(_db: Database, _userId: number | null): UserAuthAttributes {
+  return emptyUserAuthAttributes();
+}
+`;
+  return `import { Database } from "bun:sqlite";
+import * as T from "./types";
+
+export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict" | "unauthorized" | "forbidden";
 
 export type Result<D> =
   | { ok: true; data: D }
@@ -80,12 +116,6 @@ function validate(input: Record<string, unknown>): string | null {
 // Auth
 // ============================================================================
 
-export interface AuthContext {
-  keyId: number;
-  userId: number | null;
-  scopes: string[];
-}
-
 export function generateApiKey(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -96,7 +126,7 @@ export async function hashApiKey(key: string): Promise<string> {
   return Bun.password.hash(key, { algorithm: "bcrypt", cost: 10 });
 }
 
-export async function verifyApiKey(db: Database, key: string): Promise<AuthContext | null> {
+export async function verifyApiKey(db: Database, key: string): Promise<T.ApiKeyAuthContext | null> {
   // Use key prefix to narrow candidates, then bcrypt verify
   const prefix = key.slice(0, 11);
   const rows = db.query(\`
@@ -110,37 +140,166 @@ export async function verifyApiKey(db: Database, key: string): Promise<AuthConte
     if (valid) {
       // Update last_used_at
       db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
+      const userAttrs = getUserAuthAttributes(db, row.user_id);
       return {
+        kind: "api_key",
+        provider: "api_key",
+        subject: \`api_key:\${row.id}\`,
         keyId: row.id,
         userId: row.user_id,
-        scopes: row.scopes.split(",").map(s => s.trim()),
+        principals: uniquePrincipals(["service", ...userAttrs.principals]),
+        roles: userAttrs.roles,
+        scopes: row.scopes.split(",").map(s => s.trim()).filter(Boolean),
+        claims: { ...userAttrs.claims, keyId: row.id, userId: row.user_id },
       };
     }
   }
   return null;
 }
 
-export function hasScope(ctx: AuthContext, required: string): boolean {
+export function hasScope(ctx: T.AuthContext, required: string): boolean {
   return ctx.scopes.includes("*") || ctx.scopes.includes(required);
+}
+
+export interface UserAuthAttributes {
+  principals: T.PlatformPrincipal[];
+  roles: string[];
+  claims: Record<string, unknown>;
+}
+
+function emptyUserAuthAttributes(): UserAuthAttributes {
+  return { principals: [], roles: [], claims: {} };
+}
+
+function addPrincipal(principals: T.PlatformPrincipal[], principal: T.PlatformPrincipal): void {
+  if (!principals.includes(principal)) principals.push(principal);
+}
+
+function addRole(roles: string[], role: string): void {
+  if (!roles.includes(role)) roles.push(role);
+}
+
+function uniquePrincipals(principals: T.PlatformPrincipal[]): T.PlatformPrincipal[] {
+  return [...new Set(principals)];
+}
+
+${userAuthAttributes}
+
+// ============================================================================
+// Authorization
+// ============================================================================
+
+const AUTHORIZATION_POLICY = ${policy} as Record<string, T.EntityAuthorizationPolicy>;
+
+export type AuthorizationAction = "read" | "create" | "update" | "delete" | \`operation:\${string}\`;
+
+export interface AuthorizationScope {
+  denied: boolean;
+  unrestricted: boolean;
+  ownerFields: string[];
+}
+
+function getActionPolicy(entity: string, action: AuthorizationAction): T.ActionAuthorizationPolicy | null {
+  const entityPolicy = AUTHORIZATION_POLICY[entity];
+  if (!entityPolicy) return null;
+  if (action.startsWith("operation:")) {
+    return entityPolicy.operations?.[action.slice("operation:".length)] ?? null;
+  }
+  return entityPolicy[action] ?? null;
+}
+
+function hasAny<T>(actual: readonly T[], expected: readonly T[] | undefined): boolean {
+  return !expected?.length || expected.some(v => actual.includes(v));
+}
+
+function nonOwnerRuleMatches(rule: T.AuthorizationRule, auth: T.AuthContext): boolean {
+  if (!hasAny(auth.principals, rule.principals)) return false;
+  if (!hasAny(auth.roles, rule.roles)) return false;
+  if (rule.scopes?.length && !rule.scopes.some(scope => hasScope(auth, scope))) return false;
+  return true;
+}
+
+function ownerFieldsForRule(rule: T.AuthorizationRule, entityPolicy: T.EntityAuthorizationPolicy): string[] {
+  return rule.ownerFields?.length ? rule.ownerFields : entityPolicy.ownerFields ?? [];
+}
+
+function ownerMatches(rule: T.AuthorizationRule, entityPolicy: T.EntityAuthorizationPolicy, auth: T.AuthContext, record?: Record<string, unknown>): boolean {
+  if (!rule.owner) return true;
+  if (auth.userId === null || !record) return false;
+  const fields = ownerFieldsForRule(rule, entityPolicy);
+  return fields.some(field => Number(record[field]) === auth.userId);
+}
+
+export function can(entity: string, action: AuthorizationAction, auth: T.AuthContext, record?: Record<string, unknown>): boolean {
+  const entityPolicy = AUTHORIZATION_POLICY[entity];
+  if (!entityPolicy) return true;
+  const policy = getActionPolicy(entity, action);
+  const rules = policy?.allow ?? [];
+  if (rules.length === 0) return false;
+  return rules.some(rule =>
+    nonOwnerRuleMatches(rule, auth) && ownerMatches(rule, entityPolicy, auth, record)
+  );
+}
+
+export function authorizationScope(entity: string, action: AuthorizationAction, auth: T.AuthContext): AuthorizationScope {
+  const entityPolicy = AUTHORIZATION_POLICY[entity];
+  if (!entityPolicy) return { denied: false, unrestricted: true, ownerFields: [] };
+  const policy = getActionPolicy(entity, action);
+  const rules = policy?.allow ?? [];
+  if (rules.length === 0) return { denied: true, unrestricted: false, ownerFields: [] };
+
+  if (rules.some(rule => !rule.owner && nonOwnerRuleMatches(rule, auth))) {
+    return { denied: false, unrestricted: true, ownerFields: [] };
+  }
+
+  if (auth.userId !== null) {
+    const ownerFields = [
+      ...new Set(rules
+        .filter(rule => rule.owner && nonOwnerRuleMatches(rule, auth))
+        .flatMap(rule => ownerFieldsForRule(rule, entityPolicy)))
+    ];
+    if (ownerFields.length > 0) {
+      return { denied: false, unrestricted: false, ownerFields };
+    }
+  }
+
+  return { denied: true, unrestricted: false, ownerFields: [] };
+}
+
+export function authorizationError<D>(entity: string, action: AuthorizationAction, auth: T.AuthContext): Result<D> {
+  const code: ErrorCode = auth.kind === "anonymous" ? "unauthorized" : "forbidden";
+  const verb = action.startsWith("operation:") ? action.slice("operation:".length) : action;
+  return { ok: false, error: \`not authorized to \${verb} \${entity}\`, code };
+}
+
+export function authorizeCollection(entity: string, action: AuthorizationAction, auth: T.AuthContext): Result<true> {
+  const scope = authorizationScope(entity, action, auth);
+  if (scope.denied) return authorizationError(entity, action, auth);
+  return { ok: true, data: true };
+}
+
+export function statusForResult(result: Result<unknown>): number {
+  if (result.ok) return 200;
+  switch (result.code) {
+    case "unauthorized": return 401;
+    case "forbidden": return 403;
+    case "not_found": return 404;
+    case "conflict": return 409;
+    case "bad_state": return 409;
+    case "invalid":
+    default:
+      return 400;
+  }
 }
 
 // ============================================================================
 // Identity (Federated Auth)
 // ============================================================================
 
-export interface Certificate {
+export interface VerifiedIdentity {
   email: string;
   publicKey: string;
-  issuedAt: string;
-  expiresAt: string;
-  signature: string;
-}
-
-export interface IdentityContext {
-  email: string;
-  publicKey: string;
-  certificate: Certificate;
-  userId: number;
+  certificate: T.Certificate;
 }
 
 // Ensure user exists for identity, create if not
@@ -229,7 +388,7 @@ export async function verifyChallenge(
   challengeId: number,
   code: string,
   signature: string  // signature of the code, proves key ownership
-): Promise<Result<Certificate>> {
+): Promise<Result<T.Certificate>> {
   const challenge = db.query(\`
     SELECT * FROM identity_challenge WHERE id = ? AND used = 0
   \`).get(challengeId) as { email: string; code: string; public_key: string; expires_at: string } | null;
@@ -278,7 +437,7 @@ export async function verifyChallenge(
   return { ok: true, data: cert };
 }
 
-export async function issueCertificate(email: string, publicKey: string): Promise<Certificate> {
+export async function issueCertificate(email: string, publicKey: string): Promise<T.Certificate> {
   if (!registryPrivateKey) throw new Error("Registry keys not initialized");
 
   const issuedAt = new Date().toISOString();
@@ -299,7 +458,7 @@ export async function issueCertificate(email: string, publicKey: string): Promis
   };
 }
 
-export async function verifyCertificate(cert: Certificate, registryPubKeyHex: string): Promise<boolean> {
+export async function verifyCertificate(cert: T.Certificate, registryPubKeyHex: string): Promise<boolean> {
   try {
     const publicKey = await crypto.subtle.importKey(
       "raw", hexToBytes(registryPubKeyHex), { name: "Ed25519" }, false, ["verify"]
@@ -328,13 +487,13 @@ export async function verifyCertificate(cert: Certificate, registryPubKeyHex: st
 }
 
 export async function verifyRequest(
-  cert: Certificate,
+  cert: T.Certificate,
   registryPubKeyHex: string,
   method: string,
   path: string,
   timestamp: string,
   signature: string
-): Promise<IdentityContext | null> {
+): Promise<VerifiedIdentity | null> {
   // 1. Verify certificate is valid and signed by registry
   const certValid = await verifyCertificate(cert, registryPubKeyHex);
   if (!certValid) return null;
@@ -380,52 +539,80 @@ function genCrudService(entity: string, cols: Record<string, Column>): string {
 // ${Entity} CRUD
 // ============================================================================
 
-export function find${Entity}ById(db: Database, id: number): T.${Entity} | null {
-  return db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
+export function find${Entity}ById(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): T.${Entity} | null {
+  const row = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
+  if (!row) return null;
+  return can("${entity}", "read", auth, row as Record<string, unknown>) ? row : null;
 }
 
 const ${entity}Cols = new Set(${JSON.stringify(colNames)});
 
-export function findAll${Entity}s(db: Database, opts: ListOptions = {}): T.${Entity}[] {
+export function findAll${Entity}s(db: Database, opts: ListOptions = {}, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): T.${Entity}[] {
   const limit = opts.limit ?? 100;
   const offset = opts.offset ?? 0;
   const sort = opts.sort && ${entity}Cols.has(opts.sort) ? opts.sort : "id";
   const order = opts.order === "desc" ? "DESC" : "ASC";
+  const authz = authorizationScope("${entity}", "read", auth);
+  if (authz.denied) return [];
 
   let where = "";
   const params: unknown[] = [];
+  const clauses: string[] = [];
+  if (!authz.unrestricted) {
+    const ownerClauses = authz.ownerFields
+      .filter(field => ${entity}Cols.has(field))
+      .map(field => \`\${field} = ?\`);
+    if (!ownerClauses.length) return [];
+    clauses.push(\`(\${ownerClauses.join(" OR ")})\`);
+    for (let i = 0; i < ownerClauses.length; i++) params.push(auth.userId);
+  }
   if (opts.filter) {
-    const clauses: string[] = [];
     for (const [k, v] of Object.entries(opts.filter)) {
       if (${entity}Cols.has(k) && v !== undefined) {
         clauses.push(\`\${k} = ?\`);
         params.push(v);
       }
     }
-    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
   }
+  if (clauses.length) where = "WHERE " + clauses.join(" AND ");
 
   params.push(limit, offset);
-  return db.query(\`SELECT * FROM ${tableName} \${where} ORDER BY \${sort} \${order} LIMIT ? OFFSET ?\`).all(...params) as T.${Entity}[];
+  const rows = db.query(\`SELECT * FROM ${tableName} \${where} ORDER BY \${sort} \${order} LIMIT ? OFFSET ?\`).all(...params) as T.${Entity}[];
+  return rows.filter(row => can("${entity}", "read", auth, row as Record<string, unknown>));
 }
 
-export function count${Entity}s(db: Database, filter?: Record<string, unknown>): number {
+export function count${Entity}s(db: Database, filter?: Record<string, unknown>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): number {
+  const authz = authorizationScope("${entity}", "read", auth);
+  if (authz.denied) return 0;
+
   let where = "";
   const params: unknown[] = [];
+  const clauses: string[] = [];
+  if (!authz.unrestricted) {
+    const ownerClauses = authz.ownerFields
+      .filter(field => ${entity}Cols.has(field))
+      .map(field => \`\${field} = ?\`);
+    if (!ownerClauses.length) return 0;
+    clauses.push(\`(\${ownerClauses.join(" OR ")})\`);
+    for (let i = 0; i < ownerClauses.length; i++) params.push(auth.userId);
+  }
   if (filter) {
-    const clauses: string[] = [];
     for (const [k, v] of Object.entries(filter)) {
       if (${entity}Cols.has(k) && v !== undefined) {
         clauses.push(\`\${k} = ?\`);
         params.push(v);
       }
     }
-    if (clauses.length) where = "WHERE " + clauses.join(" AND ");
   }
+  if (clauses.length) where = "WHERE " + clauses.join(" AND ");
   return (db.query(\`SELECT COUNT(*) as n FROM ${tableName} \${where}\`).get(...params) as { n: number }).n;
 }
 
-export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{ id: number }> {
+export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ id: number }> {
+  if (!can("${entity}", "create", auth, input as Record<string, unknown>)) {
+    return authorizationError("${entity}", "create", auth);
+  }
+
   ${requiredCols.length > 0 ? `// Validate required fields
   ${requiredCols.map(c => `if (input.${c} === undefined) return { ok: false, error: "${c} is required", code: "invalid" };`).join("\n  ")}` : ""}
 
@@ -447,9 +634,12 @@ export function create${Entity}(db: Database, input: T.${Entity}Input): Result<{
   return { ok: true, data: { id: result.id } };
 }
 
-export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>): Result<{ id: number }> {
-  const existing = find${Entity}ById(db, id);
+export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ id: number }> {
+  const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
+  if (!can("${entity}", "update", auth, existing as Record<string, unknown>)) {
+    return authorizationError("${entity}", "update", auth);
+  }
 
   // Validate formats
   const validationError = validate(input as Record<string, unknown>);
@@ -467,9 +657,12 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
   return { ok: true, data: { id } };
 }
 
-export function delete${Entity}(db: Database, id: number): Result<{ deleted: true }> {
-  const existing = find${Entity}ById(db, id);
+export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ deleted: true }> {
+  const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
+  if (!can("${entity}", "delete", auth, existing as Record<string, unknown>)) {
+    return authorizationError("${entity}", "delete", auth);
+  }
 
   db.query("DELETE FROM ${tableName} WHERE id = ?").run(id);
   return { ok: true, data: { deleted: true } };
@@ -528,9 +721,12 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
   }).filter(Boolean).join(",\n");
 
   return `
-export function ${OpName}${Entity}(db: Database, id: number): OpResult<{ id: number; status: string }> {
-  const ${entity} = find${Entity}ById(db, id);
+export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<{ id: number; status: string }> {
+  const ${entity} = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!${entity}) return { ok: false, error: "not found", code: "not_found" };
+  if (!can("${entity}", "operation:${opName}", auth, ${entity} as Record<string, unknown>)) {
+    return authorizationError("${entity}", "operation:${opName}", auth);
+  }
 
 ${relLoads}
 
@@ -560,7 +756,7 @@ ${effectsCode}
 export function genServices(schema: Schema): string {
   const chunks: string[] = [
     "// Generated by schema/codegen.ts — do not edit\n",
-    genServiceImports(),
+    genServiceImports(schema),
   ];
 
   // Generate CRUD for each entity

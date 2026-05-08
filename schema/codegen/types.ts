@@ -36,6 +36,29 @@ export interface Operation {
 
 export type Operations = Record<string, Record<string, Operation>>;
 
+export interface AuthorizationRule {
+  principals: string[];
+  roles: string[];
+  scopes: string[];
+  owner: boolean;
+  ownerFields: string[];
+}
+
+export interface ActionAuthorization {
+  allow: AuthorizationRule[];
+}
+
+export interface EntityAuthorization {
+  ownerFields: string[];
+  read: ActionAuthorization;
+  create: ActionAuthorization;
+  update: ActionAuthorization;
+  delete: ActionAuthorization;
+  operations: Record<string, ActionAuthorization>;
+}
+
+export type Authorization = Record<string, EntityAuthorization>;
+
 export interface OrganizationMetadata {
   name: string;
   description: string;
@@ -58,4 +81,5 @@ export interface Schema {
   organization: OrganizationMetadata;
   tables: Tables;
   operations: Operations;
+  authorization?: Authorization;
 }

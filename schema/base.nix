@@ -92,6 +92,84 @@ let
     };
   };
 
+  # Authorization policy. Rules are ORed within an action; populated fields in a
+  # rule are ANDed. `owner` is evaluated against the entity owner fields and the
+  # authenticated `userId`, so it is policy metadata rather than an auth principal.
+  authorizationRuleType = lib.types.submodule {
+    options = {
+      principals = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Platform principals accepted by this rule.";
+      };
+      roles = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Domain roles accepted by this rule.";
+      };
+      scopes = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Permission scopes accepted by this rule.";
+      };
+      owner = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Require the record to be owned by auth.userId.";
+      };
+      ownerFields = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Rule-specific owner fields. Defaults to the entity ownerFields.";
+      };
+    };
+  };
+
+  actionAuthorizationType = lib.types.submodule {
+    options = {
+      allow = lib.mkOption {
+        type = lib.types.listOf authorizationRuleType;
+        default = [];
+        description = "Allow rules for this action.";
+      };
+    };
+  };
+
+  entityAuthorizationType = lib.types.submodule {
+    options = {
+      ownerFields = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Fields that identify the owning user for this entity.";
+      };
+      read = lib.mkOption {
+        type = actionAuthorizationType;
+        default = {};
+        description = "Read authorization policy.";
+      };
+      create = lib.mkOption {
+        type = actionAuthorizationType;
+        default = {};
+        description = "Create authorization policy.";
+      };
+      update = lib.mkOption {
+        type = actionAuthorizationType;
+        default = {};
+        description = "Update authorization policy.";
+      };
+      delete = lib.mkOption {
+        type = actionAuthorizationType;
+        default = {};
+        description = "Delete authorization policy.";
+      };
+      operations = lib.mkOption {
+        type = lib.types.attrsOf actionAuthorizationType;
+        default = {};
+        description = "Operation-specific authorization policies.";
+      };
+    };
+  };
+
 in {
   options = {
     organization = lib.mkOption {
@@ -110,6 +188,12 @@ in {
       type = lib.types.attrsOf (lib.types.attrsOf operationType);
       default = {};
       description = "Operations per entity (e.g., operations.ticket.confirm)";
+    };
+
+    authorization = lib.mkOption {
+      type = lib.types.attrsOf entityAuthorizationType;
+      default = {};
+      description = "Authorization policy per entity and operation.";
     };
   };
 }

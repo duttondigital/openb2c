@@ -42,7 +42,7 @@ export class ObEntityDetail extends HTMLElement {
 
     let record: any;
     try {
-      const res = await fetch(api.url(`/api/${this.entity}s/${this.recordId}`));
+      const res = await api.request(`/api/${this.entity}s/${this.recordId}`);
       if (!res.ok) {
         this.shadowRoot!.innerHTML = `<p>Not found</p>`;
         return;
@@ -99,7 +99,7 @@ export class ObEntityDetail extends HTMLElement {
     this.shadowRoot!.getElementById("delete-btn")?.addEventListener("click", async () => {
       if (!confirm(`Delete ${this.entity} #${this.recordId}?`)) return;
       const api = ObApi.instance!;
-      await fetch(api.url(`/api/${this.entity}s/${this.recordId}`), { method: "DELETE" });
+      await api.request(`/api/${this.entity}s/${this.recordId}`, { method: "DELETE" });
       location.hash = `#/${this.entity}s`;
     });
 

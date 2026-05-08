@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.transaction = {
@@ -59,5 +60,62 @@ in
         { call = { service = "payment"; action = "process_refund"; }; }
       ];
     };
+  };
+
+  authorization.transaction = {
+    ownerFields = [ "user_id" ];
+    read.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "transaction.read" "read" ])
+      (A.scopedAny [ "transaction.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "transaction.create" "write" ])
+      (A.scopedAny [ "transaction.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      (A.scopedAny [ "transaction.update" "write" ])
+    ];
+    delete.allow = [
+      A.admin
+      (A.scopedAny [ "transaction.delete" ])
+    ];
+    operations = {
+      complete.allow = [
+        A.operator
+        (A.scopedAny [ "transaction.complete" ])
+      ];
+      fail.allow = [
+        A.operator
+        (A.scopedAny [ "transaction.fail" ])
+      ];
+      refund.allow = [
+        A.operator
+        (A.scopedAny [ "transaction.refund" ])
+      ];
+    };
+  };
+
+  authorization.transaction_ticket = {
+    read.allow = [
+      A.operator
+      (A.scopedAny [ "transaction_ticket.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      (A.scopedAny [ "transaction_ticket.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      (A.scopedAny [ "transaction_ticket.update" "write" ])
+    ];
+    delete.allow = [
+      A.operator
+      (A.scopedAny [ "transaction_ticket.delete" "write" ])
+    ];
   };
 }

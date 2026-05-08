@@ -35,7 +35,9 @@ export function genMcpServer(schema: Schema): string {
       inputSchema: { type: "object", properties: {} },
     }`);
     handlers.push(`      case "list_${entity}s":
-        return { content: [{ type: "text", text: JSON.stringify(S.findAll${Entity}s(db), null, 2) }] };`);
+        const list${Entity}Authz = S.authorizeCollection("${entity}", "read", auth);
+        if (!list${Entity}Authz.ok) return { content: [{ type: "text", text: list${Entity}Authz.error }], isError: true };
+        return { content: [{ type: "text", text: JSON.stringify(S.findAll${Entity}s(db, {}, auth), null, 2) }] };`);
 
     // Get tool
     tools.push(`    {
@@ -48,7 +50,9 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
     handlers.push(`      case "get_${entity}":
-        const ${entity} = S.find${Entity}ById(db, args.id as number);
+        const get${Entity}Authz = S.authorizeCollection("${entity}", "read", auth);
+        if (!get${Entity}Authz.ok) return { content: [{ type: "text", text: get${Entity}Authz.error }], isError: true };
+        const ${entity} = S.find${Entity}ById(db, args.id as number, auth);
         if (!${entity}) return { content: [{ type: "text", text: "Not found" }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(${entity}, null, 2) }] };`);
 
@@ -63,7 +67,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
     handlers.push(`      case "create_${entity}":
-        const create${Entity}Result = S.create${Entity}(db, args as T.${Entity}Input);
+        const create${Entity}Result = S.create${Entity}(db, args as T.${Entity}Input, auth);
         if (!create${Entity}Result.ok) return { content: [{ type: "text", text: create${Entity}Result.error }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(create${Entity}Result.data) }] };`);
 
@@ -78,7 +82,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
     handlers.push(`      case "delete_${entity}":
-        const delete${Entity}Result = S.delete${Entity}(db, args.id as number);
+        const delete${Entity}Result = S.delete${Entity}(db, args.id as number, auth);
         if (!delete${Entity}Result.ok) return { content: [{ type: "text", text: delete${Entity}Result.error }], isError: true };
         return { content: [{ type: "text", text: "Deleted" }] };`);
 
@@ -95,7 +99,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
       handlers.push(`      case "${opName}_${entity}":
-        const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number);
+        const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number, auth);
         if (!${OpName}${Entity}Result.ok) return { content: [{ type: "text", text: ${OpName}${Entity}Result.error }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(${OpName}${Entity}Result.data) }] };`);
     }
@@ -128,6 +132,8 @@ const SERVER_INFO = {
   version: APP_CONFIG.version,
 };
 
+const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;
+
 const TOOLS = [
 ${tools.join(",\n")}
 ];
@@ -146,7 +152,7 @@ interface McpResponse {
   error?: { code: number; message: string };
 }
 
-function handleRequest(req: McpRequest): McpResponse {
+export function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CONTEXT): McpResponse {
   switch (req.method) {
     case "initialize":
       return {
@@ -168,7 +174,7 @@ function handleRequest(req: McpRequest): McpResponse {
 
     case "tools/call": {
       const { name, arguments: args = {} } = req.params as { name: string; arguments?: Record<string, unknown> };
-      const result = callTool(name, args);
+      const result = callTool(name, args, auth);
       return {
         jsonrpc: "2.0",
         id: req.id,
@@ -185,7 +191,7 @@ function handleRequest(req: McpRequest): McpResponse {
   }
 }
 
-function callTool(name: string, args: Record<string, unknown>): { content: { type: string; text: string }[]; isError?: boolean } {
+export function callTool(name: string, args: Record<string, unknown>, auth: T.AuthContext = MCP_AUTH_CONTEXT): { content: { type: string; text: string }[]; isError?: boolean } {
   switch (name) {
 ${handlers.join("\n")}
     default:
@@ -195,6 +201,7 @@ ${handlers.join("\n")}
 
 const MCP_PORT = parseInt(process.env.MCP_PORT || String(APP_CONFIG.defaultPorts.mcp), 10);
 
+if (import.meta.main) {
 if (process.argv.includes("--http")) {
   // Streamable HTTP transport (MCP 2025-03-26)
   const sessions = new Map<string, boolean>();
@@ -294,6 +301,7 @@ if (process.argv.includes("--http")) {
   }
 
   main();
+}
 }
 `;
 }

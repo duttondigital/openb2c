@@ -51,7 +51,7 @@ export class ObEntityForm extends HTMLElement {
     let record: any = {};
     if (this.mode === "edit" && this.recordId) {
       try {
-        const res = await fetch(api.url(`/api/${this.entity}s/${this.recordId}`));
+        const res = await api.request(`/api/${this.entity}s/${this.recordId}`);
         record = await res.json();
       } catch { /* empty */ }
     }
@@ -60,7 +60,7 @@ export class ObEntityForm extends HTMLElement {
     const fkOptions: Record<string, any[]> = {};
     for (const [col, ref] of Object.entries(fks)) {
       try {
-        const res = await fetch(api.url(`/api/${ref}s?limit=200`));
+        const res = await api.request(`/api/${ref}s?limit=200`);
         const data = await res.json();
         fkOptions[col] = data.items || [];
       } catch {
@@ -146,7 +146,7 @@ export class ObEntityForm extends HTMLElement {
         ? `/api/${this.entity}s/${this.recordId}`
         : `/api/${this.entity}s`;
       const method = this.mode === "edit" ? "PUT" : "POST";
-      const res = await fetch(api.url(path), {
+      const res = await api.request(path, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

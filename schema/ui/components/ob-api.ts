@@ -8,12 +8,87 @@ export interface OpenAPISpec {
   components: { schemas: Record<string, any> };
 }
 
+export interface Certificate {
+  email: string;
+  publicKey: string;
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
+export const PLATFORM_PRINCIPALS = [
+  "anonymous",
+  "user",
+  "customer",
+  "staff",
+  "admin",
+  "service",
+  "owner",
+] as const;
+
+export type PlatformPrincipal = typeof PLATFORM_PRINCIPALS[number];
+
+export const AUTHENTICATED_PLATFORM_PRINCIPALS: PlatformPrincipal[] = [
+  "user",
+  "customer",
+  "staff",
+  "admin",
+  "service",
+];
+
+// owner is resolved by authorization policy against a specific record.
+export const POLICY_ONLY_PLATFORM_PRINCIPALS: PlatformPrincipal[] = ["owner"];
+
+export type AuthProvider = "anonymous" | "api_key" | "certificate" | "system";
+export type DomainRole = string;
+export type PermissionScope = string;
+
+export interface BaseAuthContext {
+  provider: AuthProvider;
+  subject: string | null;
+  userId: number | null;
+  principals: PlatformPrincipal[];
+  roles: DomainRole[];
+  scopes: PermissionScope[];
+  claims: Record<string, unknown>;
+}
+
+export type AuthContext =
+  | (BaseAuthContext & { kind: "anonymous"; provider: "anonymous"; subject: null; userId: null; principals: ["anonymous"] })
+  | (BaseAuthContext & { kind: "api_key"; provider: "api_key"; keyId: number })
+  | (BaseAuthContext & { kind: "identity"; provider: "certificate"; subject: string; userId: number; email: string; publicKey: string; certificate: Certificate })
+  | (BaseAuthContext & { kind: "system"; provider: "system"; subject: "system"; userId: null; principals: ["service", "staff", "admin"] });
+
+export const ANONYMOUS_AUTH_CONTEXT: AuthContext = {
+  kind: "anonymous",
+  provider: "anonymous",
+  subject: null,
+  userId: null,
+  principals: ["anonymous"],
+  roles: [],
+  scopes: [],
+  claims: {},
+};
+
+export const SYSTEM_AUTH_CONTEXT: AuthContext = {
+  kind: "system",
+  provider: "system",
+  subject: "system",
+  userId: null,
+  principals: ["service", "staff", "admin"],
+  roles: ["system"],
+  scopes: ["*"],
+  claims: { system: true },
+};
+
 let _instance: ObApi | null = null;
 
 export class ObApi extends HTMLElement {
   spec: OpenAPISpec | null = null;
-  /** Base URL for API calls (e.g., "http://localhost:3085"). Empty string means same origin. */
+  authContext: AuthContext = ANONYMOUS_AUTH_CONTEXT;
+  /** Base URL for API calls (e.g., "http://localhost:<port>"). Empty string means same origin. */
   apiBase = "";
+  private _bearerToken = "";
   private _ready: Promise<void>;
   private _resolve!: () => void;
 
@@ -39,6 +114,24 @@ export class ObApi extends HTMLElement {
   /** Build a full API URL from a path like /api/issues */
   url(path: string): string {
     return this.apiBase + path;
+  }
+
+  setAuthContext(auth: AuthContext, bearerToken = "") {
+    this.authContext = auth;
+    this._bearerToken = bearerToken;
+    this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
+  }
+
+  clearAuthContext() {
+    this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
+  }
+
+  request(path: string, init: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(init.headers);
+    if (this._bearerToken && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${this._bearerToken}`);
+    }
+    return fetch(this.url(path), { ...init, headers });
   }
 
   ready(): Promise<void> {

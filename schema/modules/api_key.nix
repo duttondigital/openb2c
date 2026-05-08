@@ -1,5 +1,7 @@
 { config, lib, ... }:
-let E = import ../lib/expr.nix;
+let
+  E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in {
   tables.api_key = {
     id = { type = "integer"; pk = true; auto = true; };
@@ -19,5 +21,38 @@ in {
       guard = E.eq (E.f "active") (E.lit 1);
       set = { active = "0"; };
     };
+  };
+
+  authorization.api_key = {
+    ownerFields = [ "user_id" ];
+    read.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "api_key.read" "read" ])
+      (A.scopedAny [ "api_key.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      A.ownerUser
+      (A.scopedAny [ "api_key.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "api_key.update" "write" ])
+      (A.scopedAny [ "api_key.update" "write" ])
+    ];
+    delete.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "api_key.delete" "write" ])
+      (A.scopedAny [ "api_key.delete" "write" ])
+    ];
+    operations.revoke.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "api_key.revoke" "write" ])
+      (A.scopedAny [ "api_key.revoke" ])
+    ];
   };
 }

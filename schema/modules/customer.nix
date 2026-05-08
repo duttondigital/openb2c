@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.customer = {
@@ -26,5 +27,32 @@ in
         { notify = { channel = "email"; template = "patron_welcome"; }; }
       ];
     };
+  };
+
+  authorization.customer = {
+    read.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "customer.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "customer.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "customer.update" "write" ])
+    ];
+    delete.allow = [
+      A.admin
+      (A.scopedAny [ "customer.delete" ])
+    ];
+    operations.upgrade_to_patron.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "customer.upgrade_to_patron" ])
+    ];
   };
 }

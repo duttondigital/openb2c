@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.issue = {
@@ -80,6 +81,72 @@ in
       set = { priority = "urgent"; };
       effects = [
         { notify = { channel = "email"; template = "issue_escalated"; }; }
+      ];
+    };
+  };
+
+  authorization.issue = {
+    ownerFields = [ "creator_id" "assignee_id" ];
+    read.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "issue.read" "read" ])
+      (A.scopedAny [ "issue.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "issue.create" "write" ])
+      (A.scopedAny [ "issue.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      A.ownerUser
+      (A.ownerService [ "issue.update" "write" ])
+      (A.scopedAny [ "issue.update" "write" ])
+    ];
+    delete.allow = [
+      A.operator
+      (A.scopedAny [ "issue.delete" ])
+    ];
+    operations = {
+      start.allow = [
+        A.operator
+        A.ownerUser
+        (A.ownerService [ "issue.start" "write" ])
+        (A.scopedAny [ "issue.start" ])
+      ];
+      submit_for_review.allow = [
+        A.operator
+        A.ownerUser
+        (A.ownerService [ "issue.submit_for_review" "write" ])
+        (A.scopedAny [ "issue.submit_for_review" ])
+      ];
+      complete.allow = [
+        A.operator
+        A.ownerUser
+        (A.ownerService [ "issue.complete" "write" ])
+        (A.scopedAny [ "issue.complete" ])
+      ];
+      cancel.allow = [
+        A.operator
+        A.ownerUser
+        (A.ownerService [ "issue.cancel" "write" ])
+        (A.scopedAny [ "issue.cancel" ])
+      ];
+      reopen.allow = [
+        A.operator
+        A.ownerUser
+        (A.ownerService [ "issue.reopen" "write" ])
+        (A.scopedAny [ "issue.reopen" ])
+      ];
+      assign.allow = [
+        A.operator
+        (A.scopedAny [ "issue.assign" ])
+      ];
+      escalate.allow = [
+        A.operator
+        (A.scopedAny [ "issue.escalate" ])
       ];
     };
   };

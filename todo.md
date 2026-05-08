@@ -58,16 +58,16 @@ These must be complete before calling any generated app production-ready.
 
 ### Authentication And Authorization
 
-- [ ] Define an auth context type shared by generated REST handlers, services, MCP handlers, and UI clients.
-- [ ] Pass authenticated identity or API key context into generated route handlers.
-- [ ] Pass auth context into generated services and operation functions.
-- [ ] Add ontology support for per-entity read, create, update, delete, and operation permissions.
-- [ ] Add ontology support for owner-scoped rules such as `user_id == auth.userId`.
-- [ ] Enforce resource ownership for tickets, transactions, comments, issues, and any user-owned records.
-- [ ] Enforce operation-specific permissions, not only coarse `read` and `write` scopes.
-- [ ] Add service-level authorization tests for allowed and denied cases.
-- [ ] Add REST authorization tests for allowed and denied cases.
-- [ ] Add MCP authorization tests for allowed and denied cases.
+- [x] Define an auth context type shared by generated REST handlers, services, MCP handlers, and UI clients.
+- [x] Pass authenticated identity or API key context into generated route handlers.
+- [x] Pass auth context into generated services and operation functions.
+- [x] Add ontology support for per-entity read, create, update, delete, and operation permissions.
+- [x] Add ontology support for owner-scoped rules such as `user_id == auth.userId`.
+- [x] Enforce resource ownership for tickets, transactions, comments, issues, and any user-owned records.
+- [x] Enforce operation-specific permissions, not only coarse `read` and `write` scopes.
+- [x] Add service-level authorization tests for allowed and denied cases.
+- [x] Add REST authorization tests for allowed and denied cases.
+- [x] Add MCP authorization tests for allowed and denied cases.
 
 ### Identity Hardening
 

@@ -19,4 +19,5 @@ in {
   organization = modules.config.organization;
   tables = modules.config.tables;
   operations = composeLib.processOperations modules.config.operations;
+  authorization = modules.config.authorization;
 }

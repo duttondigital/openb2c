@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.label = {
@@ -21,4 +22,44 @@ in
   };
 
   operations.label = { };
+
+  authorization.label = {
+    read.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "label.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      (A.scopedAny [ "label.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      (A.scopedAny [ "label.update" "write" ])
+    ];
+    delete.allow = [
+      A.operator
+      (A.scopedAny [ "label.delete" "write" ])
+    ];
+  };
+
+  authorization.issue_label = {
+    read.allow = [
+      A.operator
+      A.service
+      (A.scopedAny [ "issue_label.read" "read" ])
+    ];
+    create.allow = [
+      A.operator
+      (A.scopedAny [ "issue_label.create" "write" ])
+    ];
+    update.allow = [
+      A.operator
+      (A.scopedAny [ "issue_label.update" "write" ])
+    ];
+    delete.allow = [
+      A.operator
+      (A.scopedAny [ "issue_label.delete" "write" ])
+    ];
+  };
 }

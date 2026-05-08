@@ -2,6 +2,7 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
+  A = import ../lib/auth.nix;
 in
 {
   tables.user = {
@@ -19,4 +20,11 @@ in
       ];
     };
   };
+
+  authorization.user.operations.upgrade_to_patron.allow = [
+    A.operator
+    A.ownerUser
+    (A.ownerService [ "user.upgrade_to_patron" "write" ])
+    (A.scopedAny [ "user.upgrade_to_patron" ])
+  ];
 }

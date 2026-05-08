@@ -68,7 +68,7 @@ export class ObEntityList extends HTMLElement {
 
     let items: any[] = [];
     try {
-      const res = await fetch(api.url(`/api/${this.entity}s?${params}`));
+      const res = await api.request(`/api/${this.entity}s?${params}`);
       const data = await res.json();
       items = data.items || [];
       this._total = data.total || 0;
