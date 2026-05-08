@@ -1,0 +1,3 @@
+[mcp_servers.openb2c]
+args = ["mcp"]
+command = "bun"
