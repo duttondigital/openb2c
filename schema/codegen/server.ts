@@ -93,8 +93,6 @@ const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
 const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
 
-let registryPubKey: string;
-
 // Structured logging
 function log(level: string, msg: string, data?: Record<string, unknown>) {
   if (level === "debug" && LOG_LEVEL !== "debug") return;
@@ -125,19 +123,22 @@ for (const stmt of statements) {
   if (stmt.trim()) db.run(stmt);
 }
 
-// Initialize registry keys
-(async () => {
+async function initRegistryPublicKey(): Promise<string> {
   if (REGISTRY_PRIVATE_KEY) {
-    registryPubKey = await S.initRegistryKeys(REGISTRY_PRIVATE_KEY);
+    const publicKey = await S.initRegistryKeys(REGISTRY_PRIVATE_KEY);
     log("info", "loaded registry keys");
+    return publicKey;
   } else if (!REGISTRY_PUBLIC_KEY) {
-    registryPubKey = await S.initRegistryKeys();
-    log("info", "generated ephemeral registry keys", { publicKey: registryPubKey });
+    const publicKey = await S.initRegistryKeys();
+    log("info", "generated ephemeral registry keys", { publicKey });
+    return publicKey;
   } else {
-    registryPubKey = REGISTRY_PUBLIC_KEY;
     log("info", "using external registry");
+    return REGISTRY_PUBLIC_KEY;
   }
-})();
+}
+
+const registryPubKey = await initRegistryPublicKey();
 
 type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext) => Response | Promise<Response>;
 
