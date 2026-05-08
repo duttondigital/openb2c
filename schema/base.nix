@@ -2,6 +2,22 @@
 { lib, ... }:
 
 let
+  # Organization metadata describes the top-level entity the generated app belongs to.
+  organizationType = lib.types.submodule {
+    options = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        default = "OpenB2C";
+        description = "Human-readable organization or product name.";
+      };
+      description = lib.mkOption {
+        type = lib.types.str;
+        default = "Generated OpenB2C organization";
+        description = "Organization or product description.";
+      };
+    };
+  };
+
   # Column definition
   columnType = lib.types.submodule {
     options = {
@@ -78,6 +94,12 @@ let
 
 in {
   options = {
+    organization = lib.mkOption {
+      type = organizationType;
+      default = {};
+      description = "Top-level organization or product metadata.";
+    };
+
     tables = lib.mkOption {
       type = lib.types.attrsOf (lib.types.attrsOf columnType);
       default = {};

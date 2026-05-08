@@ -1,7 +1,12 @@
 import type { Schema } from "./types";
-import { pascalCase, camelCase } from "./utils";
+import { getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase } from "./utils";
 
 export function genRoutes(schema: Schema): string {
+  const app = getAppMetadata(schema);
+  const appConfig = {
+    ...app,
+    databasePath: getDefaultDatabasePath(app),
+  };
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -73,8 +78,10 @@ import { Database } from "bun:sqlite";
 import * as fs from "fs";
 import * as S from "./services";
 
-const DB_PATH = process.env.DB_PATH || "opera.db";
-const PORT = parseInt(process.env.PORT || "3085");
+const APP_CONFIG = ${JSON.stringify(appConfig, null, 2)} as const;
+
+const DB_PATH = process.env.DB_PATH || APP_CONFIG.databasePath;
+const PORT = parseInt(process.env.PORT || String(APP_CONFIG.defaultPorts.server), 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -213,7 +220,7 @@ const server = Bun.serve({
 
     // Health check (no auth)
     if (url.pathname === "/health") {
-      return corsResponse({ status: "ok", db: DB_PATH, auth: AUTH_ENABLED });
+      return corsResponse({ status: "ok", app: APP_CONFIG.slug, db: DB_PATH, auth: AUTH_ENABLED });
     }
 
     // Skip auth for identity endpoints
@@ -276,6 +283,6 @@ const server = Bun.serve({
   },
 });
 
-log("info", "server started", { port: server.port, db: DB_PATH, auth: AUTH_ENABLED });
+log("info", "server started", { app: APP_CONFIG.slug, port: server.port, db: DB_PATH, auth: AUTH_ENABLED });
 `;
 }

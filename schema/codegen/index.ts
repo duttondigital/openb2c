@@ -4,8 +4,8 @@
  * Usage: nix eval --json -f schema/default.nix | bun schema/codegen/index.ts
  */
 
-export type { Column, Tables, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
-export { pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
+export type { AppMetadata, OrganizationMetadata, Column, Tables, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
+export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
 export { sqlType, genSQL } from "./sql";
 export { tsType, genRowInterface, genInputInterface, genTypes } from "./typescript";
 export { compileExpr, extractRelations } from "./expr";

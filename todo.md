@@ -49,12 +49,12 @@ These must be complete before calling any generated app production-ready.
 
 ### Remove Example-Specific Assumptions
 
-- [ ] Add top-level application metadata to the ontology, including app name, slug, API title, description, version, default ports, and generated UI title.
-- [ ] Remove hard-coded Duchy Opera names from generated MCP server metadata.
-- [ ] Remove hard-coded Duchy Opera names from generated OpenAPI metadata.
-- [ ] Replace default `opera.db` database path with generated app-specific defaults.
-- [ ] Make generated server, MCP, OpenAPI, and UI config derive from composition metadata.
-- [ ] Add tests that generate both example apps and assert app metadata does not leak across examples.
+- [x] Add top-level organization metadata to the ontology, with slugs, ports, versions, and generated app/API/MCP/UI metadata handled by codegen/system defaults.
+- [x] Remove hard-coded Duchy Opera names from generated MCP server metadata.
+- [x] Remove hard-coded Duchy Opera names from generated OpenAPI metadata.
+- [x] Replace default `opera.db` database path with generated app-specific defaults.
+- [x] Make generated server, MCP, OpenAPI, and UI config derive from organization metadata plus system defaults.
+- [x] Add tests that generate both example apps and assert app metadata does not leak across examples.
 
 ### Authentication And Authorization
 

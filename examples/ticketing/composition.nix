@@ -6,6 +6,12 @@ let
   modules = lib.evalModules {
     modules = [
       ../../schema/base.nix
+      {
+        organization = {
+          name = "OpenB2C";
+          description = "OpenB2C framework examples";
+        };
+      }
       ../../schema/modules/identity.nix
       ../../schema/modules/user.nix
       ../../schema/modules/user_internal.nix  # Adds role, status to user
@@ -18,6 +24,7 @@ let
   };
 
 in {
+  organization = modules.config.organization;
   tables = modules.config.tables;
   operations = composeLib.processOperations modules.config.operations;
 }

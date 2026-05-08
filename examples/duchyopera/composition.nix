@@ -6,6 +6,12 @@ let
   modules = lib.evalModules {
     modules = [
       ../../schema/base.nix
+      {
+        organization = {
+          name = "Duchy Opera";
+          description = "Cornish charity opera company";
+        };
+      }
       ../../schema/modules/identity.nix
       ../../schema/modules/user.nix
       ../../schema/modules/user_b2c.nix  # Adds customer_type to user
@@ -19,6 +25,7 @@ let
   };
 
 in {
+  organization = modules.config.organization;
   tables = modules.config.tables;
   operations = composeLib.processOperations modules.config.operations;
 }

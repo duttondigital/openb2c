@@ -36,7 +36,26 @@ export interface Operation {
 
 export type Operations = Record<string, Record<string, Operation>>;
 
+export interface OrganizationMetadata {
+  name: string;
+  description: string;
+}
+
+export interface AppMetadata {
+  name: string;
+  slug: string;
+  apiTitle: string;
+  description: string;
+  version: string;
+  defaultPorts: {
+    server: number;
+    mcp: number;
+  };
+  uiTitle: string;
+}
+
 export interface Schema {
+  organization: OrganizationMetadata;
   tables: Tables;
   operations: Operations;
 }

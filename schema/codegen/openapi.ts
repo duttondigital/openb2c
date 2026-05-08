@@ -1,7 +1,8 @@
 import type { Schema } from "./types";
-import { pascalCase } from "./utils";
+import { getAppMetadata, pascalCase } from "./utils";
 
 export function genOpenAPI(schema: Schema): string {
+  const app = getAppMetadata(schema);
   const paths: Record<string, unknown> = {};
   const schemas: Record<string, unknown> = {};
 
@@ -133,11 +134,11 @@ export function genOpenAPI(schema: Schema): string {
   const spec = {
     openapi: "3.0.3",
     info: {
-      title: "Duchy Opera API",
-      version: "1.0.0",
-      description: "REST API for Duchy Opera charity event platform",
+      title: app.apiTitle,
+      version: app.version,
+      description: app.description,
     },
-    servers: [{ url: "http://localhost:3085" }],
+    servers: [{ url: `http://localhost:${app.defaultPorts.server}` }],
     paths,
     components: { schemas },
   };
