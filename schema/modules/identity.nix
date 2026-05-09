@@ -6,7 +6,7 @@
   tables.identity_challenge = {
     id = { type = "integer"; pk = true; auto = true; };
     email = { type = "text"; required = true; };
-    code = { type = "text"; required = true; };
+    code_hash = { type = "text"; required = true; };
     public_key = { type = "text"; required = true; };
     ip_address = { type = "text"; required = false; };
     created_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };

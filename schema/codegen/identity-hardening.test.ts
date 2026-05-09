@@ -17,7 +17,7 @@ const schema: Schema = {
     identity_challenge: {
       id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
       email: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
-      code: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      code_hash: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       public_key: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       ip_address: { type: "text", pk: false, auto: false, required: false, unique: false, default: null, references: null },
       created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
@@ -61,12 +61,16 @@ function createDb(): Database {
   return db;
 }
 
-async function signRequest(privateKey: CryptoKey, method: string, path: string, timestamp: string): Promise<string> {
+async function signText(privateKey: CryptoKey, text: string): Promise<string> {
   return bytesToHex(await crypto.subtle.sign(
     "Ed25519",
     privateKey,
-    new TextEncoder().encode(`${method} ${path} ${timestamp}`)
+    new TextEncoder().encode(text)
   ));
+}
+
+async function signRequest(privateKey: CryptoKey, method: string, path: string, timestamp: string): Promise<string> {
+  return signText(privateKey, `${method} ${path} ${timestamp}`);
 }
 
 describe("identity hardening generation", () => {
@@ -193,6 +197,33 @@ describe("identity hardening generation", () => {
     });
   });
 
+  test("identity challenge OTPs are stored as hashes and verify with the raw code", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+    await services.initRegistryKeys();
+
+    const userKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const userPublicKey = bytesToHex(await crypto.subtle.exportKey("raw", userKeys.publicKey));
+    const challenge = await services.createChallenge(db, "otp@example.com", userPublicKey, "10.0.4.1");
+    expect(challenge.ok).toBe(true);
+
+    const row = db.query("SELECT code_hash FROM identity_challenge WHERE id = ?").get(challenge.data.challengeId) as { code_hash: string };
+    expect(row.code_hash).not.toBe(challenge.data.code);
+    expect(row.code_hash).toStartWith("$2");
+    await expect(Bun.password.verify(challenge.data.code, row.code_hash)).resolves.toBe(true);
+
+    const signature = await signText(userKeys.privateKey, challenge.data.code);
+    const verified = await services.verifyChallenge(db, challenge.data.challengeId, challenge.data.code, signature);
+    expect(verified).toMatchObject({
+      ok: true,
+      data: {
+        email: "otp@example.com",
+        publicKey: userPublicKey,
+      },
+    });
+  });
+
   test("identity verification attempts are rate limited by challenge and email", async () => {
     const dir = writeGenerated();
     const services = await import(pathToFileURL(join(dir, "services.ts")).href);
@@ -212,11 +243,12 @@ describe("identity hardening generation", () => {
     });
 
     const emailDb = createDb();
+    const codeHash = await Bun.password.hash("123456", { algorithm: "bcrypt", cost: 4 });
     for (let i = 1; i <= 11; i++) {
       emailDb.query(`
-        INSERT INTO identity_challenge (id, email, code, public_key, expires_at)
+        INSERT INTO identity_challenge (id, email, code_hash, public_key, expires_at)
         VALUES (?, ?, ?, ?, ?)
-      `).run(i, "email-limit@example.com", "123456", `pk-${i}`, new Date(Date.now() + 60_000).toISOString());
+      `).run(i, "email-limit@example.com", codeHash, `pk-${i}`, new Date(Date.now() + 60_000).toISOString());
     }
     for (let i = 1; i <= 10; i++) {
       const result = await services.verifyChallenge(emailDb, i, "wrong", "00");

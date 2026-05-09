@@ -320,6 +320,10 @@ export function generateOTP(): string {
     .map(b => (b % 10).toString()).join("").padStart(6, "0");
 }
 
+export async function hashOTP(code: string): Promise<string> {
+  return Bun.password.hash(code, { algorithm: "bcrypt", cost: 10 });
+}
+
 const IDENTITY_CHALLENGE_LIMITS = {
   windowSeconds: 10 * 60,
   email: 3,
@@ -389,12 +393,13 @@ export async function createChallenge(
   if (!rateLimit.ok) return rateLimit;
 
   const code = generateOTP();
+  const codeHash = await hashOTP(code);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
   const result = db.query(\`
-    INSERT INTO identity_challenge (email, code, public_key, ip_address, expires_at)
+    INSERT INTO identity_challenge (email, code_hash, public_key, ip_address, expires_at)
     VALUES (?, ?, ?, ?, ?) RETURNING id
-  \`).get(email, code, publicKey, ipAddress, expiresAt) as { id: number };
+  \`).get(email, codeHash, publicKey, ipAddress, expiresAt) as { id: number };
 
   return { ok: true, data: { challengeId: result.id, code } };
 }
@@ -407,7 +412,7 @@ export async function verifyChallenge(
 ): Promise<Result<T.Certificate>> {
   const challenge = db.query(\`
     SELECT * FROM identity_challenge WHERE id = ? AND used = 0
-  \`).get(challengeId) as { email: string; code: string; public_key: string; expires_at: string } | null;
+  \`).get(challengeId) as { email: string; code_hash: string; public_key: string; expires_at: string } | null;
 
   if (!challenge) {
     return { ok: false, error: "invalid or used challenge", code: "invalid" };
@@ -421,7 +426,8 @@ export async function verifyChallenge(
     return { ok: false, error: "challenge expired", code: "invalid" };
   }
 
-  if (challenge.code !== code) {
+  const codeValid = await Bun.password.verify(code, challenge.code_hash);
+  if (!codeValid) {
     return { ok: false, error: "incorrect code", code: "invalid" };
   }
 

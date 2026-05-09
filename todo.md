@@ -76,7 +76,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Decide whether certificate verification needs local database state, external registry state, or both.
 - [x] Rate limit identity challenge creation by email, public key, IP, and time window.
 - [x] Rate limit identity verification attempts by challenge ID and email.
-- [ ] Store OTP hashes instead of plaintext OTP codes.
+- [x] Store OTP hashes instead of plaintext OTP codes.
 - [ ] Add challenge cleanup for expired and used challenges.
 - [ ] Add certificate rotation and re-issuance flow.
 - [ ] Add identity tests for expired, revoked, malformed, replayed, and wrong-key certificates.
