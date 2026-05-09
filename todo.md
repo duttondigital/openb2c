@@ -79,7 +79,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Store OTP hashes instead of plaintext OTP codes.
 - [x] Add challenge cleanup for expired and used challenges.
 - [x] Add certificate rotation and re-issuance flow.
-- [ ] Add identity tests for expired, revoked, malformed, replayed, and wrong-key certificates.
+- [x] Add identity tests for expired, revoked, malformed, replayed, and wrong-key certificates.
 
 ### Request Safety
 

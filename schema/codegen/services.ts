@@ -489,11 +489,11 @@ export function upsertIdentityRegistry(db: Database, email: string, publicKey: s
   };
 }
 
-export async function issueCertificate(email: string, publicKey: string): Promise<T.Certificate> {
+export async function issueCertificate(email: string, publicKey: string, validForMs = 365 * 24 * 60 * 60 * 1000): Promise<T.Certificate> {
   if (!registryPrivateKey) throw new Error("Registry keys not initialized");
 
   const issuedAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year
+  const expiresAt = new Date(Date.now() + validForMs).toISOString();
 
   const payload = JSON.stringify({ email, publicKey, issuedAt, expiresAt });
   const signature = await crypto.subtle.sign(
@@ -554,6 +554,20 @@ export function isCertificateRevoked(db: Database, cert: T.Certificate): boolean
   return getCertificateRegistryState(db, cert) === "revoked";
 }
 
+function consumeRequestSignature(db: Database, signature: string): boolean {
+  db.query(\`
+    DELETE FROM identity_request_signature
+    WHERE created_at < datetime('now', '-5 minutes')
+  \`).run();
+
+  try {
+    db.query("INSERT INTO identity_request_signature (signature) VALUES (?)").run(signature);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function verifyRequest(
   db: Database,
   cert: T.Certificate,
@@ -590,6 +604,7 @@ export async function verifyRequest(
     const ts = parseInt(timestamp);
     const now = Date.now();
     if (Math.abs(now - ts) > 5 * 60 * 1000) return null;
+    if (!consumeRequestSignature(db, signature)) return null;
 
     return { email: cert.email, publicKey: cert.publicKey, certificate: cert };
   } catch {

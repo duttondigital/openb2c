@@ -28,4 +28,10 @@
     email = { type = "text"; required = true; };
     created_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
   };
+
+  tables.identity_request_signature = {
+    id = { type = "integer"; pk = true; auto = true; };
+    signature = { type = "text"; required = true; unique = true; };
+    created_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
+  };
 }

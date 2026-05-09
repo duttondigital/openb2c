@@ -37,6 +37,11 @@ const schema: Schema = {
       email: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
     },
+    identity_request_signature: {
+      id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      signature: { type: "text", pk: false, auto: false, required: true, unique: true, default: null, references: null },
+      created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
+    },
   },
   operations: {},
 };
@@ -115,8 +120,8 @@ describe("identity hardening generation", () => {
     const userPublicKey = bytesToHex(await crypto.subtle.exportKey("raw", userKeys.publicKey));
     const cert = await services.issueCertificate("revoked@example.com", userPublicKey);
 
-    const timestamp = String(Date.now());
-    const signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
+    let timestamp = String(Date.now());
+    let signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
 
     await expect(services.verifyRequest(
       db,
@@ -160,6 +165,8 @@ describe("identity hardening generation", () => {
     )).resolves.toBeNull();
 
     db.query("UPDATE identity_registry SET revoked = 0 WHERE email = ?").run(cert.email);
+    timestamp = String(Date.now() + 1);
+    signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
     await expect(services.verifyRequest(
       db,
       cert,
@@ -323,6 +330,97 @@ describe("identity hardening generation", () => {
       email: "rotate@example.com",
       publicKey: newIdentity.publicKey,
     });
+  });
+
+  test("certificate request verification rejects expired, revoked, malformed, replayed, and wrong-key requests", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+    const registryPublicKey = await services.initRegistryKeys();
+
+    const userKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const wrongKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const userPublicKey = bytesToHex(await crypto.subtle.exportKey("raw", userKeys.publicKey));
+    const cert = await services.issueCertificate("negative@example.com", userPublicKey);
+    services.upsertIdentityRegistry(db, cert.email, cert.publicKey);
+
+    let timestamp = String(Date.now());
+    let signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
+    const expiredCert = await services.issueCertificate("negative@example.com", userPublicKey, -1_000);
+    await expect(services.verifyRequest(
+      db,
+      expiredCert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+
+    db.query("UPDATE identity_registry SET revoked = 1 WHERE email = ?").run(cert.email);
+    timestamp = String(Date.now() + 1);
+    signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+    db.query("UPDATE identity_registry SET revoked = 0 WHERE email = ?").run(cert.email);
+
+    timestamp = String(Date.now() + 2);
+    signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      { ...cert, signature: "not-hex" },
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+
+    timestamp = String(Date.now() + 3);
+    signature = await signRequest(wrongKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+
+    timestamp = String(Date.now() + 4);
+    signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toMatchObject({ email: "negative@example.com" });
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
   });
 
   test("identity verification attempts are rate limited by challenge and email", async () => {
