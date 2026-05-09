@@ -54,6 +54,14 @@ function createDb(): Database {
   return db;
 }
 
+async function signRequest(privateKey: CryptoKey, method: string, path: string, timestamp: string): Promise<string> {
+  return bytesToHex(await crypto.subtle.sign(
+    "Ed25519",
+    privateKey,
+    new TextEncoder().encode(`${method} ${path} ${timestamp}`)
+  ));
+}
+
 describe("identity hardening generation", () => {
   test("registry keys are initialized before the server starts", () => {
     const server = genRoutes(schema);
@@ -63,11 +71,13 @@ describe("identity hardening generation", () => {
     expect(server.indexOf("const registryPubKey = await initRegistryPublicKey();")).toBeLessThan(
       server.indexOf("const server = Bun.serve({")
     );
-    expect(server).toContain("S.verifyRequest(db, cert, registryPubKey");
+    expect(server).toContain("const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;");
+    expect(server).toContain("const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;");
+    expect(server).toContain("S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY");
     expect(server).not.toContain("(async () => {");
   });
 
-  test("certificate request verification rejects locally revoked certificates", async () => {
+  test("certificate request verification applies the chosen registry state model", async () => {
     const dir = writeGenerated();
     const services = await import(pathToFileURL(join(dir, "services.ts")).href);
     const db = createDb();
@@ -76,23 +86,45 @@ describe("identity hardening generation", () => {
     const userKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
     const userPublicKey = bytesToHex(await crypto.subtle.exportKey("raw", userKeys.publicKey));
     const cert = await services.issueCertificate("revoked@example.com", userPublicKey);
-    db.query(`
-      INSERT INTO identity_registry (email, public_key, revoked)
-      VALUES (?, ?, 1)
-    `).run(cert.email, cert.publicKey);
 
     const timestamp = String(Date.now());
-    const message = `GET /api/users/1 ${timestamp}`;
-    const signature = bytesToHex(await crypto.subtle.sign(
-      "Ed25519",
-      userKeys.privateKey,
-      new TextEncoder().encode(message)
-    ));
+    const signature = await signRequest(userKeys.privateKey, "GET", "/api/users/1", timestamp);
 
     await expect(services.verifyRequest(
       db,
       cert,
       registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      false,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toMatchObject({
+      email: "revoked@example.com",
+      publicKey: userPublicKey,
+    });
+
+    db.query(`
+      INSERT INTO identity_registry (email, public_key, revoked)
+      VALUES (?, ?, 1)
+    `).run(cert.email, cert.publicKey);
+
+    await expect(services.verifyRequest(
+      db,
+      cert,
+      registryPublicKey,
+      false,
       "GET",
       "/api/users/1",
       timestamp,
@@ -104,6 +136,7 @@ describe("identity hardening generation", () => {
       db,
       cert,
       registryPublicKey,
+      true,
       "GET",
       "/api/users/1",
       timestamp,

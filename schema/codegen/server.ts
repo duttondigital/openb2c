@@ -94,6 +94,8 @@ const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by defaul
 const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
 const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
+const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;
+const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;
 
 // Structured logging
 function log(level: string, msg: string, data?: Record<string, unknown>) {
@@ -248,7 +250,7 @@ export const server = Bun.serve({
         // Certificate-based auth
         try {
           const cert = JSON.parse(certHeader) as T.Certificate;
-          const identity = await S.verifyRequest(db, cert, registryPubKey, req.method, url.pathname, tsHeader, sigHeader);
+          const identity = await S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
             return corsResponse({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
           }

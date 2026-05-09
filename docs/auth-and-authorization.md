@@ -36,6 +36,21 @@ export interface AuthContext {
 
 `SYSTEM_AUTH_CONTEXT` uses `scopes: ["*"]` and is reserved for trusted local/system execution such as auth-disabled development and local MCP execution.
 
+## Certificate Registry State
+
+Certificate authentication always verifies two cryptographic signatures:
+
+- the certificate signature from the configured registry public key
+- the request signature from the certificate's user public key
+
+Generated servers then apply an explicit registry-state model:
+
+- Local registry mode is used when the app has a registry private key, or when development mode generates an ephemeral registry key. A certificate must have an active local `identity_registry` row with the same email and public key.
+- External registry mode is used when only `REGISTRY_PUBLIC_KEY` is configured. The external signature is authoritative, and the local `identity_registry` table acts as an override/denylist.
+- In both modes, a matching local row with `revoked = 1` rejects the certificate.
+
+This keeps local deployments stateful enough for revocation and rotation while still allowing a future external registry to verify identities without pre-seeding every user locally.
+
 ## Operation Scopes
 
 Every table has implicit CRUD operations:
