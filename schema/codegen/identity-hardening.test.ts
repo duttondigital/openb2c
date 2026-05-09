@@ -19,6 +19,7 @@ const schema: Schema = {
       email: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       code: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       public_key: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      ip_address: { type: "text", pk: false, auto: false, required: false, unique: false, default: null, references: null },
       created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
       expires_at: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
       used: { type: "integer", pk: false, auto: false, required: false, unique: false, default: "0", references: null },
@@ -74,6 +75,7 @@ describe("identity hardening generation", () => {
     expect(server).toContain("const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;");
     expect(server).toContain("const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;");
     expect(server).toContain("S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY");
+    expect(server).toContain("S.createChallenge(db, email, publicKey, clientIp(req))");
     expect(server).not.toContain("(async () => {");
   });
 
@@ -144,6 +146,44 @@ describe("identity hardening generation", () => {
     )).resolves.toMatchObject({
       email: "revoked@example.com",
       publicKey: userPublicKey,
+    });
+  });
+
+  test("identity challenge creation is rate limited by email, public key, and IP", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+
+    const emailDb = createDb();
+    for (let i = 0; i < 3; i++) {
+      expect((await services.createChallenge(emailDb, "same@example.com", `pk-email-${i}`, `10.0.0.${i}`)).ok).toBe(true);
+    }
+    const emailLimited = await services.createChallenge(emailDb, "same@example.com", "pk-email-4", "10.0.0.4");
+    expect(emailLimited).toMatchObject({
+      ok: false,
+      code: "rate_limited",
+      error: "too many identity challenges for email",
+    });
+
+    const publicKeyDb = createDb();
+    for (let i = 0; i < 3; i++) {
+      expect((await services.createChallenge(publicKeyDb, `pk${i}@example.com`, "same-public-key", `10.0.1.${i}`)).ok).toBe(true);
+    }
+    const publicKeyLimited = await services.createChallenge(publicKeyDb, "pk4@example.com", "same-public-key", "10.0.1.4");
+    expect(publicKeyLimited).toMatchObject({
+      ok: false,
+      code: "rate_limited",
+      error: "too many identity challenges for public key",
+    });
+
+    const ipDb = createDb();
+    for (let i = 0; i < 10; i++) {
+      expect((await services.createChallenge(ipDb, `ip${i}@example.com`, `pk-ip-${i}`, "10.0.2.1")).ok).toBe(true);
+    }
+    const ipLimited = await services.createChallenge(ipDb, "ip11@example.com", "pk-ip-11", "10.0.2.1");
+    expect(ipLimited).toMatchObject({
+      ok: false,
+      code: "rate_limited",
+      error: "too many identity challenges for IP address",
     });
   });
 });

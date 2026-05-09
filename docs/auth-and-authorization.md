@@ -51,6 +51,8 @@ Generated servers then apply an explicit registry-state model:
 
 This keeps local deployments stateful enough for revocation and rotation while still allowing a future external registry to verify identities without pre-seeding every user locally.
 
+Identity challenge creation is rate limited by email, public key, and client IP over a 10-minute window. Generated REST handlers derive the client IP from forwarding headers when present and return `429` with code `rate_limited` when a limit is exceeded.
+
 ## Operation Scopes
 
 Every table has implicit CRUD operations:

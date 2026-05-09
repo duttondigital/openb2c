@@ -8,6 +8,7 @@
     email = { type = "text"; required = true; };
     code = { type = "text"; required = true; };
     public_key = { type = "text"; required = true; };
+    ip_address = { type = "text"; required = false; };
     created_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
     expires_at = { type = "text"; required = true; };
     used = { type = "integer"; required = false; default = "0"; };

@@ -117,6 +117,12 @@ function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
   return result;
 }
 
+function clientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
+  return req.headers.get("x-real-ip") || req.headers.get("cf-connecting-ip") || "unknown";
+}
+
 const db = new Database(DB_PATH);
 db.run("PRAGMA journal_mode = WAL");
 db.run("PRAGMA foreign_keys = ON");
@@ -162,13 +168,16 @@ const routes: Route[] = [
     if (!email || !publicKey) {
       return corsResponse({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
     }
-    const result = await S.createChallenge(db, email, publicKey);
+    const result = await S.createChallenge(db, email, publicKey, clientIp(req));
+    if (!result.ok) {
+      return corsResponse(result, { status: S.statusForResult(result) });
+    }
     log("info", "identity challenge created", { email });
     // In production, code must be sent via email. In dev, return it for testing.
     if (PRODUCTION) {
-      return corsResponse({ challengeId: result.challengeId, message: "verification code sent to email" });
+      return corsResponse({ challengeId: result.data.challengeId, message: "verification code sent to email" });
     }
-    return corsResponse({ challengeId: result.challengeId, code: result.code });
+    return corsResponse({ challengeId: result.data.challengeId, code: result.data.code });
   }},
   { method: "POST", path: "/identity/verify", handler: async (req) => {
     const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };

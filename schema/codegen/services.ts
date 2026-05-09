@@ -55,7 +55,7 @@ function genServiceImports(schema: Schema): string {
   return `import { Database } from "bun:sqlite";
 import * as T from "./types";
 
-export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict" | "unauthorized" | "forbidden";
+export type ErrorCode = "not_found" | "invalid" | "bad_state" | "conflict" | "unauthorized" | "forbidden" | "rate_limited";
 
 export type Result<D> =
   | { ok: true; data: D }
@@ -235,6 +235,7 @@ export function statusForResult(result: Result<unknown>): number {
   switch (result.code) {
     case "unauthorized": return 401;
     case "forbidden": return 403;
+    case "rate_limited": return 429;
     case "not_found": return 404;
     case "conflict": return 409;
     case "bad_state": return 409;
@@ -319,20 +320,52 @@ export function generateOTP(): string {
     .map(b => (b % 10).toString()).join("").padStart(6, "0");
 }
 
+const IDENTITY_CHALLENGE_LIMITS = {
+  windowSeconds: 10 * 60,
+  email: 3,
+  publicKey: 3,
+  ipAddress: 10,
+} as const;
+
+function recentChallengeCount(db: Database, column: "email" | "public_key" | "ip_address", value: string): number {
+  const row = db.query(\`
+    SELECT COUNT(*) as n FROM identity_challenge
+    WHERE \${column} = ? AND created_at >= datetime('now', ?)
+  \`).get(value, \`-\${IDENTITY_CHALLENGE_LIMITS.windowSeconds} seconds\`) as { n: number };
+  return row.n;
+}
+
+function checkChallengeCreationRateLimit(db: Database, email: string, publicKey: string, ipAddress: string): Result<true> {
+  if (recentChallengeCount(db, "email", email) >= IDENTITY_CHALLENGE_LIMITS.email) {
+    return { ok: false, error: "too many identity challenges for email", code: "rate_limited" };
+  }
+  if (recentChallengeCount(db, "public_key", publicKey) >= IDENTITY_CHALLENGE_LIMITS.publicKey) {
+    return { ok: false, error: "too many identity challenges for public key", code: "rate_limited" };
+  }
+  if (recentChallengeCount(db, "ip_address", ipAddress) >= IDENTITY_CHALLENGE_LIMITS.ipAddress) {
+    return { ok: false, error: "too many identity challenges for IP address", code: "rate_limited" };
+  }
+  return { ok: true, data: true };
+}
+
 export async function createChallenge(
   db: Database,
   email: string,
-  publicKey: string
-): Promise<{ challengeId: number; code: string }> {
+  publicKey: string,
+  ipAddress = "unknown"
+): Promise<Result<{ challengeId: number; code: string }>> {
+  const rateLimit = checkChallengeCreationRateLimit(db, email, publicKey, ipAddress);
+  if (!rateLimit.ok) return rateLimit;
+
   const code = generateOTP();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
   const result = db.query(\`
-    INSERT INTO identity_challenge (email, code, public_key, expires_at)
-    VALUES (?, ?, ?, ?) RETURNING id
-  \`).get(email, code, publicKey, expiresAt) as { id: number };
+    INSERT INTO identity_challenge (email, code, public_key, ip_address, expires_at)
+    VALUES (?, ?, ?, ?, ?) RETURNING id
+  \`).get(email, code, publicKey, ipAddress, expiresAt) as { id: number };
 
-  return { challengeId: result.id, code };
+  return { ok: true, data: { challengeId: result.id, code } };
 }
 
 export async function verifyChallenge(
