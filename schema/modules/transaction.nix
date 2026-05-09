@@ -21,6 +21,11 @@ in
     ticket_id = { type = "integer"; required = true; references = "ticket(id)"; };
   };
 
+  indexes.transaction_ticket.unique_pair = {
+    columns = [ "transaction_id" "ticket_id" ];
+    unique = true;
+  };
+
   operations.transaction = {
     complete = {
       relationships = [];

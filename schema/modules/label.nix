@@ -20,5 +20,10 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
+  indexes.issue_label.unique_pair = {
+    columns = [ "issue_id" "label_id" ];
+    unique = true;
+  };
+
   operations.label = { };
 }

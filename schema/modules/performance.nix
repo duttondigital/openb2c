@@ -27,6 +27,11 @@ in
     role_in_performance = { type = "text"; };  # Character name or role
   };
 
+  indexes.performance_artist.unique_pair = {
+    columns = [ "performance_id" "artist_id" ];
+    unique = true;
+  };
+
   operations.performance = {
     read.public = true;
 
