@@ -11,6 +11,7 @@ in
 
   operations.user = {
     suspend = {
+      relationships = [];
       guard = E.eq (E.f "status") (E.lit "active");
       set = { status = "suspended"; };
       effects = [
@@ -19,6 +20,7 @@ in
     };
 
     reactivate = {
+      relationships = [];
       guard = E.or
         (E.eq (E.f "status") (E.lit "suspended"))
         (E.eq (E.f "status") (E.lit "inactive"));
@@ -26,6 +28,7 @@ in
     };
 
     promote_to_admin = {
+      relationships = [];
       guard = E.and
         (E.eq (E.f "role") (E.lit "member"))
         (E.eq (E.f "status") (E.lit "active"));

@@ -18,20 +18,12 @@ in
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  relationships.issue = {
-    creator.field = config.refs.issue.creator_id;
-    assignee.field = config.refs.issue.assignee_id;
-  };
-
-  operations.issue =
-    let rel = config.relationships.issue;
-    in {
-    read.relationships = with rel; [ creator assignee ];
-    create.relationships = with rel; [ creator ];
-    update.relationships = with rel; [ creator assignee ];
+  operations.issue = {
+    read.relationships = [ "creator" "assignee" ];
+    create.relationships = [ "creator" ];
+    update.relationships = [ "creator" "assignee" ];
 
     start = {
-      relationships = with rel; [ creator assignee ];
       guard = E.and
         (E.and
           (E.eq (E.f "status") (E.lit "todo"))
@@ -44,7 +36,6 @@ in
     };
 
     submit_for_review = {
-      relationships = with rel; [ creator assignee ];
       guard = E.eq (E.f "status") (E.lit "in_progress");
       set = { status = "in_review"; };
       effects = [
@@ -53,7 +44,6 @@ in
     };
 
     complete = {
-      relationships = with rel; [ creator assignee ];
       guard = E.or
         (E.eq (E.f "status") (E.lit "in_review"))
         (E.eq (E.f "status") (E.lit "in_progress"));
@@ -64,7 +54,6 @@ in
     };
 
     cancel = {
-      relationships = with rel; [ creator assignee ];
       guard = E.and
         (E.ne (E.f "status") (E.lit "done"))
         (E.ne (E.f "status") (E.lit "cancelled"));
@@ -72,7 +61,6 @@ in
     };
 
     reopen = {
-      relationships = with rel; [ creator assignee ];
       guard = E.or
         (E.eq (E.f "status") (E.lit "done"))
         (E.eq (E.f "status") (E.lit "cancelled"));
@@ -80,6 +68,7 @@ in
     };
 
     assign = {
+      relationships = [];
       guard = E.and
         (E.ne (E.f "status") (E.lit "done"))
         (E.ne (E.f "status") (E.lit "cancelled"));
@@ -90,6 +79,7 @@ in
     };
 
     escalate = {
+      relationships = [];
       guard = E.and
         (E.ne (E.f "priority") (E.lit "urgent"))
         (E.ne (E.f "status") (E.lit "done"));

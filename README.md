@@ -118,7 +118,7 @@ examples/*/generated/  # Generated code (gitignored)
      tables = modules.config.tables;
      refs = modules.config.refs;
      relationships = modules.config.relationships;
-     operations = composeLib.processOperations modules.config.tables modules.config.operations;
+     operations = composeLib.processOperations modules.config.tables modules.config.relationships modules.config.operations;
    }
    ```
 

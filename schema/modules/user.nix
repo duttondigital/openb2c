@@ -9,13 +9,4 @@
     avatar_url = { type = "text"; };
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
-
-  relationships.user.self.field = config.refs.user.id;
-
-  operations.user =
-    let rel = config.relationships.user;
-    in {
-      read.relationships = with rel; [ self ];
-      update.relationships = with rel; [ self ];
-    };
 }

@@ -13,23 +13,17 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  relationships.project.owner.field = config.refs.project.owner_id;
-
-  operations.project =
-    let rel = config.relationships.project;
-    in {
-    read.relationships = with rel; [ owner ];
-    create.relationships = with rel; [ owner ];
-    update.relationships = with rel; [ owner ];
+  operations.project = {
+    read.relationships = [ "owner" ];
+    create.relationships = [ "owner" ];
+    update.relationships = [ "owner" ];
 
     archive = {
-      relationships = with rel; [ owner ];
       guard = E.eq (E.f "status") (E.lit "active");
       set = { status = "archived"; };
     };
 
     unarchive = {
-      relationships = with rel; [ owner ];
       guard = E.eq (E.f "status") (E.lit "archived");
       set = { status = "active"; };
     };

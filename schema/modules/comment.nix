@@ -12,18 +12,13 @@ in
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  relationships.comment.author.field = config.refs.comment.author_id;
-
-  operations.comment =
-    let rel = config.relationships.comment;
-    in {
-    read.relationships = with rel; [ author ];
-    create.relationships = with rel; [ author ];
-    update.relationships = with rel; [ author ];
-    delete.relationships = with rel; [ author ];
+  operations.comment = {
+    read.relationships = [ "author" ];
+    create.relationships = [ "author" ];
+    update.relationships = [ "author" ];
+    delete.relationships = [ "author" ];
 
     edit = {
-      relationships = with rel; [ author ];
       guard = E.true_;  # Can always edit own comments (auth layer handles ownership)
       set = { };  # body set via parameters
     };

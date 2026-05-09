@@ -14,18 +14,8 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  relationships.ticket.owner.field = config.refs.ticket.user_id;
-
-  operations.ticket =
-    let rel = config.relationships.ticket;
-    in {
-    read.relationships = with rel; [ owner ];
-    create.relationships = with rel; [ owner ];
-    update.relationships = with rel; [ owner ];
-    delete.relationships = with rel; [ owner ];
-
+  operations.ticket = {
     confirm = {
-      relationships = with rel; [ owner ];
       guard = E.and
         (E.eq (E.f "status") (E.lit "reserved"))
         # Can't confirm if performance is cancelled
@@ -37,7 +27,6 @@ in
     };
 
     cancel = {
-      relationships = with rel; [ owner ];
       guard = E.or
         (E.eq (E.f "status") (E.lit "reserved"))
         (E.eq (E.f "status") (E.lit "confirmed"));
@@ -45,6 +34,7 @@ in
     };
 
     use = {
+      relationships = [];
       guard = E.and
         (E.eq (E.f "status") (E.lit "confirmed"))
         (E.eq (E.rel "performance" "status") (E.lit "scheduled"));
@@ -52,7 +42,6 @@ in
     };
 
     upgrade = {
-      relationships = with rel; [ owner ];
       guard = E.and
         (E.eq (E.f "ticket_type") (E.lit "standard"))
         (E.eq (E.f "status") (E.lit "confirmed"));

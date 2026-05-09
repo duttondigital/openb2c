@@ -21,15 +21,9 @@ in
     ticket_id = { type = "integer"; required = true; references = "ticket(id)"; };
   };
 
-  relationships.transaction.owner.field = config.refs.transaction.user_id;
-
-  operations.transaction =
-    let rel = config.relationships.transaction;
-    in {
-    read.relationships = with rel; [ owner ];
-    create.relationships = with rel; [ owner ];
-
+  operations.transaction = {
     complete = {
+      relationships = [];
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "completed"; };
       cascade = [{
@@ -44,6 +38,7 @@ in
     };
 
     fail = {
+      relationships = [];
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "failed"; };
       cascade = [{
@@ -54,6 +49,7 @@ in
     };
 
     refund = {
+      relationships = [];
       guard = E.eq (E.f "status") (E.lit "completed");
       set = { status = "refunded"; };
       cascade = [{

@@ -15,19 +15,10 @@ in {
     expires_at = { type = "text"; required = false; };
   };
 
-  relationships.api_key.owner.field = config.refs.api_key.user_id;
-
-  operations.api_key =
-    let rel = config.relationships.api_key;
-    in {
-      read.relationships = with rel; [ owner ];
-      create.relationships = with rel; [ owner ];
-      update.relationships = with rel; [ owner ];
-      delete.relationships = with rel; [ owner ];
-      revoke = {
-        relationships = with rel; [ owner ];
-        guard = E.eq (E.f "active") (E.lit 1);
-        set = { active = "0"; };
-      };
+  operations.api_key = {
+    revoke = {
+      guard = E.eq (E.f "active") (E.lit 1);
+      set = { active = "0"; };
+    };
   };
 }

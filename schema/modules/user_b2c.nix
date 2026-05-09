@@ -10,7 +10,6 @@ in
 
   operations.user = {
     upgrade_to_patron = {
-      relationships = with config.relationships.user; [ self ];
       guard = E.and
         (E.ne (E.f "customer_type") (E.lit "patron"))
         (E.notNull (E.f "email"));

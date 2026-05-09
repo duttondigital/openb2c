@@ -51,6 +51,8 @@ let
     };
   };
 
+  relationshipSpecType = lib.types.either lib.types.str relationshipType;
+
   # Effect types
   effectType = lib.types.submodule {
     options = {
@@ -95,9 +97,9 @@ let
         description = "Precondition expression (built with lib/expr.nix)";
       };
       relationships = lib.mkOption {
-        type = lib.types.listOf relationshipType;
-        default = [];
-        description = "Record relationships that permit this operation for auth.userId.";
+        type = lib.types.nullOr (lib.types.listOf relationshipSpecType);
+        default = null;
+        description = "Record relationships that permit this operation. Strings resolve by convention to <relationship>_id fields.";
       };
       public = lib.mkOption {
         type = lib.types.bool;

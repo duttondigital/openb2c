@@ -56,33 +56,47 @@ Federated identity receives generated self-service scopes for non-public operati
 
 Scopes answer whether a caller can perform an operation type. Relationships answer whether the caller can perform it on this record.
 
-Relationships are declared from structured field refs, not string paths:
+Relationships are requested by name and resolved by convention during composition.
+The generated schema still receives structured field refs, but module authors usually only write strings:
 
 ```nix
-relationships.ticket.owner.field = config.refs.ticket.user_id;
+tables.issue.creator_id = { type = "integer"; references = "user(id)"; };
+tables.issue.assignee_id = { type = "integer"; references = "user(id)"; };
 
-operations.ticket =
-  let rel = config.relationships.ticket;
-  in {
-    read.relationships = with rel; [ owner ];
-    create.relationships = with rel; [ owner ];
-    update.relationships = with rel; [ owner ];
+operations.issue = {
+  read.relationships = [ "creator" "assignee" ];
+  create.relationships = [ "creator" ];
+  update.relationships = [ "creator" "assignee" ];
 
-    confirm = {
-      relationships = with rel; [ owner ];
-      guard = E.eq (E.f "status") (E.lit "reserved");
-      set = { status = "confirmed"; };
-    };
+  complete = {
+    guard = E.eq (E.f "status") (E.lit "in_review");
+    set = { status = "done"; };
   };
+};
+```
+
+The resolver maps a requested relationship `x` to `<entity>.x_id`, and only accepts it if that field references `user(id)`.
+The relationship `user` maps to `<entity>.user_id`.
+On the `user` entity, `self` maps to `user.id`.
+
+Entities with `<entity>.user_id -> user(id)` get user-scoped CRUD by default.
+Custom operations inherit the entity's update relationship policy unless they set `relationships` explicitly.
+
+Use `relationships = []` for operations that are intentionally global once the caller has the operation scope.
+Use explicit structured relationships only when the field name cannot follow the convention:
+
+```nix
+relationships.issue.reviewer.field = config.refs.issue.reviewed_by_user_id;
+operations.issue.review.relationships = [ "reviewer" ];
 ```
 
 For create operations, generated services may fill relationship fields from `auth.userId` when the caller omits them. For update operations, generated services prevent changing relationship fields guarded by the operation.
 
 Current modules use relationships such as:
 
-- `api_key.owner -> api_key.user_id`
-- `ticket.owner -> ticket.user_id`
-- `transaction.owner -> transaction.user_id`
+- `api_key.user -> api_key.user_id`
+- `ticket.user -> ticket.user_id`
+- `transaction.user -> transaction.user_id`
 - `comment.author -> comment.author_id`
 - `issue.creator -> issue.creator_id`
 - `issue.assignee -> issue.assignee_id`
