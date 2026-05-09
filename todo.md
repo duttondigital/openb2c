@@ -96,12 +96,12 @@ These must be complete before calling any generated app production-ready.
 - [x] Add ontology support for indexes.
 - [x] Generate `CREATE INDEX` statements from schema metadata.
 - [x] Add unique constraints to junction tables such as `performance_artist`, `transaction_ticket`, and `issue_label`.
-- [ ] Add a migration system for evolving schemas without data loss.
-- [ ] Store applied migration history in the database.
-- [ ] Generate migration plans or migration stubs from schema diffs.
-- [ ] Add rollback or forward-fix guidance for failed migrations.
-- [ ] Add backup and restore instructions for SQLite deployments.
-- [ ] Add migration tests against realistic old-to-new schema changes.
+- [x] Add a migration system for evolving schemas without data loss.
+- [x] Store applied migration history in the database.
+- [x] Generate migration plans or migration stubs from schema diffs.
+- [x] Add rollback or forward-fix guidance for failed migrations.
+- [x] Add backup and restore instructions for SQLite deployments.
+- [x] Add migration tests against realistic old-to-new schema changes.
 
 ### Effect Execution
 

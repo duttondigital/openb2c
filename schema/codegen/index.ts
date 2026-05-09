@@ -7,6 +7,7 @@
 export type { AppMetadata, OrganizationMetadata, Column, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
 export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
 export { sqlType, genSQL } from "./sql";
+export { planMigration, generateMigrationStub } from "./migration";
 export { tsType, genRowInterface, genInputInterface, genTypes } from "./typescript";
 export { compileExpr, extractRelations } from "./expr";
 export { genServices } from "./services";

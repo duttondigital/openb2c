@@ -87,12 +87,14 @@ export function genRoutes(schema: Schema): string {
 
 import { Database } from "bun:sqlite";
 import * as fs from "fs";
+import * as path from "path";
 import * as S from "./services";
 import * as T from "./types";
 
 const APP_CONFIG = ${JSON.stringify(appConfig, null, 2)} as const;
 
 const DB_PATH = process.env.DB_PATH || APP_CONFIG.databasePath;
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || new URL("./migrations", import.meta.url).pathname;
 const PORT = parseInt(process.env.PORT || String(APP_CONFIG.defaultPorts.server), 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || "1048576", 10);
@@ -246,10 +248,97 @@ db.run("PRAGMA journal_mode = WAL");
 db.run("PRAGMA foreign_keys = ON");
 
 const sql = fs.readFileSync(new URL("./schema.sql", import.meta.url), "utf-8");
-const statements = sql.split(/;\\s*\\n/).filter((s: string) => s.trim());
-for (const stmt of statements) {
-  if (stmt.trim()) db.run(stmt);
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
+
+function sqlStatements(source: string): string[] {
+  return source.split(/;\\s*\\n/).map((s: string) => s.trim()).filter(Boolean);
+}
+
+function ensureMigrationHistory() {
+  db.run(\`
+    CREATE TABLE IF NOT EXISTS openb2c_migration (
+      id TEXT PRIMARY KEY,
+      checksum TEXT NOT NULL,
+      description TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  \`);
+}
+
+function hasUserSchema(): boolean {
+  const row = db.query<{ name: string }, []>(\`
+    SELECT name FROM sqlite_master
+    WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+      AND name != 'openb2c_migration'
+    LIMIT 1
+  \`).get();
+  return !!row;
+}
+
+function migrationRow(id: string): { checksum: string } | null {
+  return db.query<{ checksum: string }, [string]>("SELECT checksum FROM openb2c_migration WHERE id = ?").get(id) || null;
+}
+
+function recordMigration(id: string, checksum: string, description: string) {
+  db.query("INSERT INTO openb2c_migration (id, checksum, description) VALUES (?, ?, ?)").run(id, checksum, description);
+}
+
+function applyMigration(id: string, source: string, description: string) {
+  const checksum = hashString(source);
+  const existing = migrationRow(id);
+  if (existing) {
+    if (existing.checksum !== checksum) {
+      throw new Error(\`Migration \${id} checksum changed after it was applied\`);
+    }
+    return;
+  }
+  const apply = db.transaction(() => {
+    for (const stmt of sqlStatements(source)) db.run(stmt);
+    recordMigration(id, checksum, description);
+  });
+  apply();
+  log("info", "migration applied", { id, description });
+}
+
+function migrationFiles(): { id: string; path: string; source: string; checksum: string }[] {
+  if (!fs.existsSync(MIGRATIONS_DIR)) return [];
+  return fs.readdirSync(MIGRATIONS_DIR)
+    .filter((file: string) => file.endsWith(".sql"))
+    .sort()
+    .map((file: string) => {
+      const source = fs.readFileSync(path.join(MIGRATIONS_DIR, file), "utf-8");
+      return { id: file.replace(/\\.sql$/, ""), path: file, source, checksum: hashString(source) };
+    });
+}
+
+function runSchemaMigrations(schemaSql: string) {
+  ensureMigrationHistory();
+  const files = migrationFiles();
+  if (!hasUserSchema()) {
+    applyMigration(\`schema:\${hashString(schemaSql)}\`, schemaSql, "generated schema baseline");
+    for (const file of files) {
+      if (!migrationRow(file.id)) {
+        recordMigration(file.id, file.checksum, \`included in fresh schema baseline: \${file.path}\`);
+      }
+    }
+    return;
+  }
+  for (const file of files) {
+    applyMigration(file.id, file.source, \`migration file: \${file.path}\`);
+  }
+  applyMigration(\`schema:\${hashString(schemaSql)}\`, schemaSql, "generated schema sync");
+}
+
+runSchemaMigrations(sql);
 
 async function initRegistryPublicKey(): Promise<string> {
   if (REGISTRY_PRIVATE_KEY) {
