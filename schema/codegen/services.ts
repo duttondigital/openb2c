@@ -438,7 +438,17 @@ export async function verifyCertificate(cert: T.Certificate, registryPubKeyHex: 
   }
 }
 
+export function isCertificateRevoked(db: Database, cert: T.Certificate): boolean {
+  const row = db.query(\`
+    SELECT revoked FROM identity_registry
+    WHERE email = ? AND public_key = ?
+  \`).get(cert.email, cert.publicKey) as { revoked: number } | null;
+
+  return row?.revoked === 1;
+}
+
 export async function verifyRequest(
+  db: Database,
   cert: T.Certificate,
   registryPubKeyHex: string,
   method: string,
@@ -449,6 +459,7 @@ export async function verifyRequest(
   // 1. Verify certificate is valid and signed by registry
   const certValid = await verifyCertificate(cert, registryPubKeyHex);
   if (!certValid) return null;
+  if (isCertificateRevoked(db, cert)) return null;
 
   // 2. Verify request signature using user's public key from cert
   try {

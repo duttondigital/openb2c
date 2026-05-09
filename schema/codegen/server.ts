@@ -248,7 +248,7 @@ export const server = Bun.serve({
         // Certificate-based auth
         try {
           const cert = JSON.parse(certHeader) as T.Certificate;
-          const identity = await S.verifyRequest(cert, registryPubKey, req.method, url.pathname, tsHeader, sigHeader);
+          const identity = await S.verifyRequest(db, cert, registryPubKey, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
             return corsResponse({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
           }

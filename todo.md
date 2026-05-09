@@ -72,7 +72,7 @@ These must be complete before calling any generated app production-ready.
 ### Identity Hardening
 
 - [x] Fix async registry key initialization race by awaiting key setup before serving requests.
-- [ ] Enforce certificate revocation by checking `identity_registry.revoked`.
+- [x] Enforce certificate revocation by checking `identity_registry.revoked`.
 - [ ] Decide whether certificate verification needs local database state, external registry state, or both.
 - [ ] Rate limit identity challenge creation by email, public key, IP, and time window.
 - [ ] Rate limit identity verification attempts by challenge ID and email.
