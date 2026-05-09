@@ -222,6 +222,32 @@ describe("identity hardening generation", () => {
         publicKey: userPublicKey,
       },
     });
+    const remaining = db.query("SELECT COUNT(*) as n FROM identity_challenge WHERE id = ?").get(challenge.data.challengeId) as { n: number };
+    expect(remaining.n).toBe(0);
+  });
+
+  test("identity challenge cleanup deletes expired and used challenges", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+    const codeHash = await Bun.password.hash("123456", { algorithm: "bcrypt", cost: 4 });
+
+    db.query(`
+      INSERT INTO identity_challenge (id, email, code_hash, public_key, expires_at, used)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(1, "expired@example.com", codeHash, "pk-expired", new Date(Date.now() - 60_000).toISOString(), 0);
+    db.query(`
+      INSERT INTO identity_challenge (id, email, code_hash, public_key, expires_at, used)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(2, "used@example.com", codeHash, "pk-used", new Date(Date.now() + 60_000).toISOString(), 1);
+    db.query(`
+      INSERT INTO identity_challenge (id, email, code_hash, public_key, expires_at, used)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(3, "active@example.com", codeHash, "pk-active", new Date(Date.now() + 60_000).toISOString(), 0);
+
+    expect(services.cleanupIdentityChallenges(db)).toEqual({ deleted: 2 });
+    const rows = db.query("SELECT id FROM identity_challenge ORDER BY id").all() as { id: number }[];
+    expect(rows.map(row => row.id)).toEqual([3]);
   });
 
   test("identity verification attempts are rate limited by challenge and email", async () => {

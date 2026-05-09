@@ -77,7 +77,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Rate limit identity challenge creation by email, public key, IP, and time window.
 - [x] Rate limit identity verification attempts by challenge ID and email.
 - [x] Store OTP hashes instead of plaintext OTP codes.
-- [ ] Add challenge cleanup for expired and used challenges.
+- [x] Add challenge cleanup for expired and used challenges.
 - [ ] Add certificate rotation and re-issuance flow.
 - [ ] Add identity tests for expired, revoked, malformed, replayed, and wrong-key certificates.
 

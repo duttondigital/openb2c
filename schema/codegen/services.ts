@@ -383,12 +383,21 @@ function recordVerificationAttempt(db: Database, challengeId: number, email: str
   \`).run(challengeId, email);
 }
 
+export function cleanupIdentityChallenges(db: Database): { deleted: number } {
+  const result = db.query(\`
+    DELETE FROM identity_challenge
+    WHERE used = 1 OR datetime(expires_at) < datetime('now')
+  \`).run() as { changes: number };
+  return { deleted: result.changes };
+}
+
 export async function createChallenge(
   db: Database,
   email: string,
   publicKey: string,
   ipAddress = "unknown"
 ): Promise<Result<{ challengeId: number; code: string }>> {
+  cleanupIdentityChallenges(db);
   const rateLimit = checkChallengeCreationRateLimit(db, email, publicKey, ipAddress);
   if (!rateLimit.ok) return rateLimit;
 
@@ -449,6 +458,7 @@ export async function verifyChallenge(
 
   // Mark challenge as used
   db.query("UPDATE identity_challenge SET used = 1 WHERE id = ?").run(challengeId);
+  cleanupIdentityChallenges(db);
 
   // Upsert to registry
   db.query(\`
