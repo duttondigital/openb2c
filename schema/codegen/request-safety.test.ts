@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -121,6 +123,63 @@ describe("generated request safety", () => {
       delete process.env.PORT;
       delete process.env.AUTH_ENABLED;
       delete process.env.MAX_PAGE_LIMIT;
+    }
+  });
+
+  test("route handlers time out slow request work without completing the write", async () => {
+    const dir = writeGenerated();
+    const dbPath = join(dir, "timeout.sqlite");
+    process.env.DB_PATH = dbPath;
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+    process.env.ROUTE_TIMEOUT_MS = "10";
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      const encoder = new TextEncoder();
+      let cancelled = false;
+      let sentFirstChunk = false;
+      const slowBody = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (!sentFirstChunk) {
+            sentFirstChunk = true;
+            controller.enqueue(encoder.encode('{"title":"'));
+            return;
+          }
+          await delay(75);
+          if (cancelled) return;
+          controller.enqueue(encoder.encode('late"}'));
+          controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      const timedOut = await fetch(`${base}/api/notes`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: slowBody,
+        duplex: "half",
+      });
+      expect(timedOut.status).toBe(504);
+      expect(await timedOut.json()).toMatchObject({
+        code: "timeout",
+        error: "request timed out",
+      });
+
+      await delay(100);
+      const db = new Database(dbPath);
+      const row = db.query<{ total: number }, []>("SELECT COUNT(*) as total FROM note").get();
+      db.close();
+      expect(row?.total).toBe(0);
+    } finally {
+      server.stop(true);
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+      delete process.env.ROUTE_TIMEOUT_MS;
     }
   });
 });

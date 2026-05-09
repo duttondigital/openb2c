@@ -87,7 +87,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Validate JSON content type for endpoints that require JSON.
 - [x] Return structured `400` errors for malformed JSON instead of falling into generic `500`.
 - [x] Clamp pagination limits to safe maximums.
-- [ ] Add route-level timeout handling for slow effect or integration work.
+- [x] Add route-level timeout handling for slow effect or integration work.
 - [ ] Add CORS configuration instead of always using wildcard origins.
 - [ ] Add secure defaults for production mode.
 

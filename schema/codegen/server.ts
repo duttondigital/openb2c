@@ -42,8 +42,8 @@ export function genRoutes(schema: Schema): string {
 
     // Special handling for api_key creation - generate and hash key
     if (entity === "api_key") {
-      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth) => {
-    const input = await readJson<{ name: string; user_id?: number; scopes?: string; expires_at?: string }>(req);
+      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth, signal) => {
+    const input = await readJson<{ name: string; user_id?: number; scopes?: string; expires_at?: string }>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const rawKey = S.generateApiKey();
     const keyHash = await S.hashApiKey(rawKey);
@@ -53,16 +53,16 @@ export function genRoutes(schema: Schema): string {
     return corsResponse({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
   }},`);
     } else {
-      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth) => {
-    const input = await readJson<T.${Entity}Input>(req);
+      routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth, signal) => {
+    const input = await readJson<T.${Entity}Input>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const r = S.create${Entity}(db, input.data, auth);
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     }
 
-    routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth) => {
-    const input = await readJson<Partial<T.${Entity}Input>>(req);
+    routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth, signal) => {
+    const input = await readJson<Partial<T.${Entity}Input>>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const r = S.update${Entity}(db, +p.id, input.data, auth);
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
@@ -97,6 +97,7 @@ const PORT = parseInt(process.env.PORT || String(APP_CONFIG.defaultPorts.server)
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || "1048576", 10);
 const MAX_PAGE_LIMIT = parseInt(process.env.MAX_PAGE_LIMIT || "1000", 10);
+const ROUTE_TIMEOUT_MS = Math.max(parseInt(process.env.ROUTE_TIMEOUT_MS || "30000", 10) || 30000, 1);
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
@@ -130,7 +131,56 @@ function clientIp(req: Request): string {
   return req.headers.get("x-real-ip") || req.headers.get("cf-connecting-ip") || "unknown";
 }
 
-async function readJson<T>(req: Request): Promise<S.Result<T>> {
+class RouteTimeoutError extends Error {
+  constructor() {
+    super("request timed out");
+  }
+}
+
+function timeoutResult(): S.Result<never> {
+  return { ok: false, error: "request timed out", code: "timeout" };
+}
+
+async function readRequestBody(req: Request, signal: AbortSignal): Promise<S.Result<string>> {
+  if (!req.body) return { ok: true, data: "" };
+  if (signal.aborted) return timeoutResult();
+
+  const reader = req.body.getReader();
+  const decoder = new TextDecoder();
+  let body = "";
+  let bytes = 0;
+  let abortListener: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    abortListener = () => reject(new RouteTimeoutError());
+    signal.addEventListener("abort", abortListener, { once: true });
+  });
+
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) break;
+      if (!value) continue;
+      bytes += value.byteLength;
+      if (bytes > MAX_REQUEST_BODY_BYTES) {
+        await reader.cancel();
+        return { ok: false, error: "request body too large", code: "payload_too_large" };
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    body += decoder.decode();
+    return { ok: true, data: body };
+  } catch (err) {
+    if (err instanceof RouteTimeoutError) {
+      await reader.cancel().catch(() => {});
+      return timeoutResult();
+    }
+    throw err;
+  } finally {
+    if (abortListener) signal.removeEventListener("abort", abortListener);
+  }
+}
+
+async function readJson<T>(req: Request, signal: AbortSignal): Promise<S.Result<T>> {
   const contentType = req.headers.get("content-type") || "";
   const mediaType = contentType.split(";")[0]?.trim().toLowerCase();
   if (mediaType !== "application/json" && !mediaType?.endsWith("+json")) {
@@ -142,13 +192,11 @@ async function readJson<T>(req: Request): Promise<S.Result<T>> {
     return { ok: false, error: "request body too large", code: "payload_too_large" };
   }
 
-  const body = await req.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BODY_BYTES) {
-    return { ok: false, error: "request body too large", code: "payload_too_large" };
-  }
+  const body = await readRequestBody(req, signal);
+  if (!body.ok) return body;
 
   try {
-    return { ok: true, data: JSON.parse(body) as T };
+    return { ok: true, data: JSON.parse(body.data) as T };
   } catch {
     return { ok: false, error: "malformed JSON", code: "invalid" };
   }
@@ -195,7 +243,7 @@ async function initRegistryPublicKey(): Promise<string> {
 
 const registryPubKey = await initRegistryPublicKey();
 
-type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext) => Response | Promise<Response>;
+type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext, signal: AbortSignal) => Response | Promise<Response>;
 
 interface Route {
   method: string;
@@ -208,8 +256,8 @@ const routes: Route[] = [
   { method: "GET", path: "/identity/public-key", handler: async () => {
     return corsResponse({ publicKey: registryPubKey });
   }},
-  { method: "POST", path: "/identity/challenge", handler: async (req) => {
-    const input = await readJson<{ email: string; publicKey: string }>(req);
+  { method: "POST", path: "/identity/challenge", handler: async (req, _, __, signal) => {
+    const input = await readJson<{ email: string; publicKey: string }>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const { email, publicKey } = input.data;
     if (!email || !publicKey) {
@@ -226,8 +274,8 @@ const routes: Route[] = [
     }
     return corsResponse({ challengeId: result.data.challengeId, code: result.data.code });
   }},
-  { method: "POST", path: "/identity/verify", handler: async (req) => {
-    const input = await readJson<{ challengeId: number; code: string; signature: string }>(req);
+  { method: "POST", path: "/identity/verify", handler: async (req, _, __, signal) => {
+    const input = await readJson<{ challengeId: number; code: string; signature: string }>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const { challengeId, code, signature } = input.data;
     const result = await S.verifyChallenge(db, challengeId, code, signature);
@@ -273,6 +321,24 @@ function corsResponse(body: unknown, init?: ResponseInit): Response {
     res.headers.set(k, v);
   }
   return res;
+}
+
+async function runRouteWithTimeout(handler: (signal: AbortSignal) => Response | Promise<Response>): Promise<Response> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const route = Promise.resolve().then(() => handler(controller.signal));
+  const timedOut = new Promise<Response>((resolve) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      resolve(corsResponse(timeoutResult(), { status: 504 }));
+    }, ROUTE_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([route, timedOut]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export const server = Bun.serve({
@@ -340,7 +406,7 @@ export const server = Bun.serve({
     }
 
     try {
-      const res = await result.route.handler(req, result.params, authContext);
+      const res = await runRouteWithTimeout((signal) => result.route.handler(req, result.params, authContext, signal));
       const ms = (performance.now() - start).toFixed(1);
       log("info", "request", { method: req.method, path: url.pathname, status: res.status, ms });
       return res;

@@ -64,7 +64,8 @@ export type ErrorCode =
   | "forbidden"
   | "rate_limited"
   | "payload_too_large"
-  | "unsupported_media_type";
+  | "unsupported_media_type"
+  | "timeout";
 
 export type Result<D> =
   | { ok: true; data: D }
@@ -247,6 +248,7 @@ export function statusForResult(result: Result<unknown>): number {
     case "rate_limited": return 429;
     case "payload_too_large": return 413;
     case "unsupported_media_type": return 415;
+    case "timeout": return 504;
     case "not_found": return 404;
     case "conflict": return 409;
     case "bad_state": return 409;
