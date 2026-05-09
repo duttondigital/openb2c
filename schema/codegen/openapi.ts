@@ -13,7 +13,7 @@ export function genOpenAPI(schema: Schema): string {
     type: "object",
     properties: {
       error: { type: "string" },
-      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict", "unauthorized", "forbidden", "rate_limited"] },
+      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict", "unauthorized", "forbidden", "rate_limited", "payload_too_large", "unsupported_media_type"] },
       details: { type: "object", additionalProperties: { type: "string" } },
     },
     required: ["error", "code"],

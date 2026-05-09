@@ -43,23 +43,28 @@ export function genRoutes(schema: Schema): string {
     // Special handling for api_key creation - generate and hash key
     if (entity === "api_key") {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth) => {
-    const input = await req.json() as { name: string; user_id?: number; scopes?: string; expires_at?: string };
+    const input = await readJson<{ name: string; user_id?: number; scopes?: string; expires_at?: string }>(req);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const rawKey = S.generateApiKey();
     const keyHash = await S.hashApiKey(rawKey);
-    const r = S.createApiKey(db, { ...input, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) }, auth);
+    const r = S.createApiKey(db, { ...input.data, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) }, auth);
     if (!r.ok) return corsResponse(r, { status: S.statusForResult(r) });
     // Return raw key ONCE - it cannot be retrieved again
     return corsResponse({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
   }},`);
     } else {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth) => {
-    const r = S.create${Entity}(db, await req.json(), auth);
+    const input = await readJson<T.${Entity}Input>(req);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const r = S.create${Entity}(db, input.data, auth);
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     }
 
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth) => {
-    const r = S.update${Entity}(db, +p.id, await req.json(), auth);
+    const input = await readJson<Partial<T.${Entity}Input>>(req);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const r = S.update${Entity}(db, +p.id, input.data, auth);
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     routes.push(`  { method: "DELETE", path: "/api/${entity}s/:id", handler: (_, p, auth) => {
@@ -90,6 +95,7 @@ const APP_CONFIG = ${JSON.stringify(appConfig, null, 2)} as const;
 const DB_PATH = process.env.DB_PATH || APP_CONFIG.databasePath;
 const PORT = parseInt(process.env.PORT || String(APP_CONFIG.defaultPorts.server), 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
+const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || "1048576", 10);
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
@@ -121,6 +127,30 @@ function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
   return req.headers.get("x-real-ip") || req.headers.get("cf-connecting-ip") || "unknown";
+}
+
+async function readJson<T>(req: Request): Promise<S.Result<T>> {
+  const contentType = req.headers.get("content-type") || "";
+  const mediaType = contentType.split(";")[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json" && !mediaType?.endsWith("+json")) {
+    return { ok: false, error: "content-type must be application/json", code: "unsupported_media_type" };
+  }
+
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_REQUEST_BODY_BYTES) {
+    return { ok: false, error: "request body too large", code: "payload_too_large" };
+  }
+
+  const body = await req.text();
+  if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BODY_BYTES) {
+    return { ok: false, error: "request body too large", code: "payload_too_large" };
+  }
+
+  try {
+    return { ok: true, data: JSON.parse(body) as T };
+  } catch {
+    return { ok: false, error: "malformed JSON", code: "invalid" };
+  }
 }
 
 const db = new Database(DB_PATH);
@@ -164,7 +194,9 @@ const routes: Route[] = [
     return corsResponse({ publicKey: registryPubKey });
   }},
   { method: "POST", path: "/identity/challenge", handler: async (req) => {
-    const { email, publicKey } = await req.json() as { email: string; publicKey: string };
+    const input = await readJson<{ email: string; publicKey: string }>(req);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const { email, publicKey } = input.data;
     if (!email || !publicKey) {
       return corsResponse({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
     }
@@ -180,7 +212,9 @@ const routes: Route[] = [
     return corsResponse({ challengeId: result.data.challengeId, code: result.data.code });
   }},
   { method: "POST", path: "/identity/verify", handler: async (req) => {
-    const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };
+    const input = await readJson<{ challengeId: number; code: string; signature: string }>(req);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const { challengeId, code, signature } = input.data;
     const result = await S.verifyChallenge(db, challengeId, code, signature);
     if (!result.ok) {
       return corsResponse(result, { status: S.statusForResult(result) });
