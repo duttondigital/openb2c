@@ -460,17 +460,33 @@ export async function verifyChallenge(
   db.query("UPDATE identity_challenge SET used = 1 WHERE id = ?").run(challengeId);
   cleanupIdentityChallenges(db);
 
-  // Upsert to registry
-  db.query(\`
-    INSERT INTO identity_registry (email, public_key)
-    VALUES (?, ?)
-    ON CONFLICT(email) DO UPDATE SET public_key = ?, verified_at = CURRENT_TIMESTAMP, revoked = 0
-  \`).run(challenge.email, challenge.public_key, challenge.public_key);
+  upsertIdentityRegistry(db, challenge.email, challenge.public_key);
 
   // Issue certificate
   const cert = await issueCertificate(challenge.email, challenge.public_key);
 
   return { ok: true, data: cert };
+}
+
+export interface IdentityRegistryUpdate {
+  rotated: boolean;
+  reissued: boolean;
+}
+
+export function upsertIdentityRegistry(db: Database, email: string, publicKey: string): IdentityRegistryUpdate {
+  const existing = db.query("SELECT public_key FROM identity_registry WHERE email = ?")
+    .get(email) as { public_key: string } | null;
+
+  db.query(\`
+    INSERT INTO identity_registry (email, public_key)
+    VALUES (?, ?)
+    ON CONFLICT(email) DO UPDATE SET public_key = ?, verified_at = CURRENT_TIMESTAMP, revoked = 0
+  \`).run(email, publicKey, publicKey);
+
+  return {
+    rotated: existing !== null && existing.public_key !== publicKey,
+    reissued: existing !== null && existing.public_key === publicKey,
+  };
 }
 
 export async function issueCertificate(email: string, publicKey: string): Promise<T.Certificate> {

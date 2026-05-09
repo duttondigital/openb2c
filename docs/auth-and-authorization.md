@@ -55,6 +55,7 @@ Identity challenge creation is rate limited by email, public key, and client IP 
 Challenge verification attempts are also rate limited over a 10-minute window by challenge ID and email address, and failed attempts are recorded before code or signature validation.
 OTP challenge codes are stored with bcrypt in `identity_challenge.code_hash`; the raw OTP is only returned in development or handed to the delivery channel.
 Generated services clean up expired and used identity challenges before creating new challenges and after successful verification.
+Successful challenge verification upserts `identity_registry`: the same key is reissued, while a different key rotates the identity and invalidates previous local-mode certificates for that email.
 
 ## Operation Scopes
 

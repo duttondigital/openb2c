@@ -73,6 +73,22 @@ async function signRequest(privateKey: CryptoKey, method: string, path: string, 
   return signText(privateKey, `${method} ${path} ${timestamp}`);
 }
 
+async function issueThroughChallenge(
+  services: any,
+  db: Database,
+  email: string,
+  keyPair: CryptoKeyPair,
+  ipAddress: string
+): Promise<{ cert: any; publicKey: string }> {
+  const publicKey = bytesToHex(await crypto.subtle.exportKey("raw", keyPair.publicKey));
+  const challenge = await services.createChallenge(db, email, publicKey, ipAddress);
+  expect(challenge.ok).toBe(true);
+  const signature = await signText(keyPair.privateKey, challenge.data.code);
+  const result = await services.verifyChallenge(db, challenge.data.challengeId, challenge.data.code, signature);
+  expect(result.ok).toBe(true);
+  return { cert: result.data, publicKey };
+}
+
 describe("identity hardening generation", () => {
   test("registry keys are initialized before the server starts", () => {
     const server = genRoutes(schema);
@@ -248,6 +264,65 @@ describe("identity hardening generation", () => {
     expect(services.cleanupIdentityChallenges(db)).toEqual({ deleted: 2 });
     const rows = db.query("SELECT id FROM identity_challenge ORDER BY id").all() as { id: number }[];
     expect(rows.map(row => row.id)).toEqual([3]);
+  });
+
+  test("certificate rotation reissues active keys and invalidates previous keys in local registry mode", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+    const registryPublicKey = await services.initRegistryKeys();
+
+    const oldKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const oldIdentity = await issueThroughChallenge(services, db, "rotate@example.com", oldKeys, "10.0.5.1");
+    expect(services.upsertIdentityRegistry(db, "rotate@example.com", oldIdentity.publicKey)).toEqual({
+      rotated: false,
+      reissued: true,
+    });
+
+    let timestamp = String(Date.now());
+    let signature = await signRequest(oldKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      oldIdentity.cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toMatchObject({ email: "rotate@example.com" });
+
+    const newKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const newIdentity = await issueThroughChallenge(services, db, "rotate@example.com", newKeys, "10.0.5.2");
+    expect(newIdentity.publicKey).not.toBe(oldIdentity.publicKey);
+
+    timestamp = String(Date.now());
+    signature = await signRequest(oldKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      oldIdentity.cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+
+    signature = await signRequest(newKeys.privateKey, "GET", "/api/users/1", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      newIdentity.cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/api/users/1",
+      timestamp,
+      signature
+    )).resolves.toMatchObject({
+      email: "rotate@example.com",
+      publicKey: newIdentity.publicKey,
+    });
   });
 
   test("identity verification attempts are rate limited by challenge and email", async () => {
