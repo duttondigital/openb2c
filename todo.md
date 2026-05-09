@@ -105,16 +105,16 @@ These must be complete before calling any generated app production-ready.
 
 ### Effect Execution
 
-- [ ] Define the runtime effect dispatcher interface.
-- [ ] Wire generated REST operations to dispatch returned effects.
-- [ ] Wire generated MCP operations to dispatch returned effects.
-- [ ] Add idempotency keys for effects triggered by operations.
-- [ ] Persist effect attempts and outcomes for retry and audit.
-- [ ] Implement webhook dispatch handler.
-- [ ] Implement email dispatch handler.
-- [ ] Implement payment intent or checkout creation handler.
-- [ ] Add retry policy, dead-letter handling, and operator visibility for failed effects.
-- [ ] Add tests proving operation state changes and effects stay consistent.
+- [x] Define the runtime effect dispatcher interface.
+- [x] Wire generated REST operations to dispatch returned effects.
+- [x] Wire generated MCP operations to dispatch returned effects.
+- [x] Add idempotency keys for effects triggered by operations.
+- [x] Persist effect attempts and outcomes for retry and audit.
+- [x] Implement webhook dispatch handler.
+- [x] Implement email dispatch handler.
+- [x] Implement payment intent or checkout creation handler.
+- [x] Add retry policy, dead-letter handling, and operator visibility for failed effects.
+- [x] Add tests proving operation state changes and effects stay consistent.
 
 ### Secrets And Configuration
 

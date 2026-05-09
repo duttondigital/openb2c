@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
+import { genEffectsInterface } from "./effects";
 import { genMcpServer } from "./mcp";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -125,6 +126,7 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
   writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   writeFileSync(join(dir, "mcp.ts"), genMcpServer(schema));
   return dir;
@@ -218,11 +220,11 @@ describe("generated authorization enforcement", () => {
     process.env.DB_PATH = dbPath;
     const { callTool } = await import(pathToFileURL(join(dir, "mcp.ts")).href);
 
-    const denied = callTool("confirm_ticket", { id: 1 }, serviceWithWriteOnly);
+    const denied = await callTool("confirm_ticket", { id: 1 }, serviceWithWriteOnly);
     expect(denied.isError).toBe(true);
     expect(denied.content[0].text).toContain("not authorized");
 
-    const allowed = callTool("confirm_ticket", { id: 2 }, serviceWithConfirm);
+    const allowed = await callTool("confirm_ticket", { id: 2 }, serviceWithConfirm);
     expect(allowed.isError).toBeUndefined();
     expect(JSON.parse(allowed.content[0].text)).toEqual({ id: 2, status: "confirmed" });
   });

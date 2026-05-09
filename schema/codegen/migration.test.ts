@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { genEffectsInterface } from "./effects";
 import { generateMigrationStub, planMigration } from "./migration";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -52,6 +53,7 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(newTables, newIndexes));
   writeFileSync(join(dir, "types.ts"), genTypes(newTables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   return dir;
 }

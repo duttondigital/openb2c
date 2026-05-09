@@ -108,6 +108,13 @@ export function genMcpServer(schema: Schema): string {
       handlers.push(`      case "${opName}_${entity}":
         const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number, auth);
         if (!${OpName}${Entity}Result.ok) return { content: [{ type: "text", text: ${OpName}${Entity}Result.error }], isError: true };
+        await FX.dispatchEffects(db, ${OpName}${Entity}Result.effects || [], {
+          source: "mcp",
+          operation: "${entity}.${opName}",
+          entity: "${entity}",
+          recordId: args.id as number,
+          result: ${OpName}${Entity}Result.data,
+        });
         return { content: [{ type: "text", text: JSON.stringify(${OpName}${Entity}Result.data) }] };`);
     }
   }
@@ -117,6 +124,7 @@ export function genMcpServer(schema: Schema): string {
 
 import { Database } from "bun:sqlite";
 import * as fs from "fs";
+import * as FX from "./effects";
 import * as S from "./services";
 import * as T from "./types";
 
@@ -159,7 +167,7 @@ interface McpResponse {
   error?: { code: number; message: string };
 }
 
-export function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CONTEXT): McpResponse {
+export async function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CONTEXT): Promise<McpResponse> {
   switch (req.method) {
     case "initialize":
       return {
@@ -181,7 +189,7 @@ export function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CO
 
     case "tools/call": {
       const { name, arguments: args = {} } = req.params as { name: string; arguments?: Record<string, unknown> };
-      const result = callTool(name, args, auth);
+      const result = await callTool(name, args, auth);
       return {
         jsonrpc: "2.0",
         id: req.id,
@@ -198,7 +206,7 @@ export function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CO
   }
 }
 
-export function callTool(name: string, args: Record<string, unknown>, auth: T.AuthContext = MCP_AUTH_CONTEXT): { content: { type: string; text: string }[]; isError?: boolean } {
+export async function callTool(name: string, args: Record<string, unknown>, auth: T.AuthContext = MCP_AUTH_CONTEXT): Promise<{ content: { type: string; text: string }[]; isError?: boolean }> {
   switch (name) {
 ${handlers.join("\n")}
     default:
@@ -309,7 +317,7 @@ if (process.argv.includes("--http")) {
           }
         }
 
-        const res = handleRequest(body);
+        const res = await handleRequest(body);
         return new Response(JSON.stringify(res), { headers });
       })();
     },
@@ -332,7 +340,7 @@ if (process.argv.includes("--http")) {
         if (!line.trim()) continue;
         try {
           const req = JSON.parse(line) as McpRequest;
-          const res = handleRequest(req);
+          const res = await handleRequest(req);
           console.log(JSON.stringify(res));
         } catch (e) {
           console.log(JSON.stringify({

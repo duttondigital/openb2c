@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { genEffectsInterface } from "./effects";
 import { genMcpServer } from "./mcp";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -31,6 +32,7 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
   writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   return dir;
 }

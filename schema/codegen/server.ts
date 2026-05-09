@@ -75,8 +75,18 @@ export function genRoutes(schema: Schema): string {
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
-      routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: (_, p, auth) => {
+      routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: async (req, p, auth) => {
     const r = S.${OpName}${Entity}(db, +p.id, auth);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "${entity}.${opName}",
+        entity: "${entity}",
+        recordId: +p.id,
+        result: r.data,
+        idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
+      });
+    }
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     }
@@ -88,6 +98,7 @@ export function genRoutes(schema: Schema): string {
 import { Database } from "bun:sqlite";
 import * as fs from "fs";
 import * as path from "path";
+import * as FX from "./effects";
 import * as S from "./services";
 import * as T from "./types";
 
@@ -366,6 +377,16 @@ interface Route {
 }
 
 const routes: Route[] = [
+  // Effect operator endpoints
+  { method: "GET", path: "/ops/effects", handler: (_, __, auth) => {
+    if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    return corsResponse({ items: FX.listEffectAttempts(db) });
+  }},
+  { method: "POST", path: "/ops/effects/retry", handler: async (_, __, auth) => {
+    if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    return corsResponse(await FX.retryFailedEffects(db));
+  }},
+
   // Identity endpoints (no auth required)
   { method: "GET", path: "/identity/public-key", handler: async () => {
     return corsResponse({ publicKey: registryPubKey });
