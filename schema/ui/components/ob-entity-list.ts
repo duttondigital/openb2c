@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { theme, reset, table, button, pagination } from "../styles";
+import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, pluralDisplayName, statusClass } from "../format";
 
 export class ObEntityList extends HTMLElement {
   private _sort = "";
@@ -76,55 +77,85 @@ export class ObEntityList extends HTMLElement {
       items = [];
     }
 
-    const totalPages = Math.ceil(this._total / this._limit);
+    const totalPages = Math.max(1, Math.ceil(this._total / this._limit));
     const currentPage = Math.floor(this._offset / this._limit) + 1;
 
     this.shadowRoot!.innerHTML = `
       <style>${theme} ${reset} ${table} ${button} ${pagination}
-        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .header h2 { font-size: 18px; font-weight: 600; }
-        th .arrow { font-size: 10px; margin-left: 4px; }
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+        .eyebrow {
+          color: var(--ob-text-muted);
+          font-size: 13px;
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+        .header h1 {
+          font-size: 26px;
+          line-height: 1.15;
+          font-weight: 800;
+        }
+        .arrow { font-size: 11px; margin-left: 6px; }
+        @media (max-width: 640px) {
+          .header { align-items: flex-start; flex-direction: column; }
+          .header h1 { font-size: 22px; }
+          #create-btn { width: 100%; }
+        }
       </style>
       <div class="header">
-        <h2>${displayName(this.entity)}</h2>
-        <button class="primary" id="create-btn">+ New</button>
+        <div>
+          <div class="eyebrow">${this._total} record${this._total !== 1 ? "s" : ""}</div>
+          <h1>${escapeHtml(pluralDisplayName(this.entity))}</h1>
+        </div>
+        <button class="primary" id="create-btn">New ${escapeHtml(displayName(this.entity))}</button>
       </div>
-      <table>
-        <thead>
-          <tr>${cols.map((c) => {
-            const arrow = this._sort === c ? (this._order === "asc" ? " ▲" : " ▼") : "";
-            return `<th data-col="${c}">${c}${arrow ? `<span class="arrow">${arrow}</span>` : ""}</th>`;
-          }).join("")}</tr>
-        </thead>
-        <tbody>
-          ${items.length === 0 ? `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--ob-text-muted);padding:24px">No records</td></tr>` : ""}
-          ${items.map((row: any) => `
-            <tr data-id="${row.id}" style="cursor:pointer">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
               ${cols.map((c) => {
-                const val = row[c] ?? "";
-                if (fks[c] && val) {
-                  return `<td><a href="#/${fks[c]}s/${val}">${val}</a></td>`;
-                }
-                return `<td>${val}</td>`;
+                const arrow = this._sort === c ? (this._order === "asc" ? "up" : "down") : "";
+                const ariaSort = this._sort === c ? (this._order === "asc" ? "ascending" : "descending") : "none";
+                return `
+                  <th scope="col" aria-sort="${ariaSort}">
+                    <button class="sort-btn" data-col="${escapeAttr(c)}">
+                      ${escapeHtml(fieldLabel(c))}
+                      ${arrow ? `<span class="arrow" aria-hidden="true">${arrow === "up" ? "^" : "v"}</span>` : ""}
+                    </button>
+                  </th>`;
               }).join("")}
+              <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
-          `).join("")}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            ${items.length === 0 ? `<tr><td colspan="${cols.length + 1}"><div class="empty-state">No records yet.</div></td></tr>` : ""}
+            ${items.map((row: any) => `
+              <tr data-id="${escapeAttr(row.id)}">
+                ${cols.map((c) => this._renderCell(c, row[c], fks)).join("")}
+                <td><a class="row-action" href="#/${this.entity}s/${escapeAttr(row.id)}">Open</a></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
       <div class="pagination">
         <span>${this._total} record${this._total !== 1 ? "s" : ""}</span>
         <div class="controls">
-          <button id="prev" ${currentPage <= 1 ? "disabled" : ""}>← Prev</button>
-          <span>Page ${currentPage} of ${totalPages || 1}</span>
-          <button id="next" ${currentPage >= totalPages ? "disabled" : ""}>Next →</button>
+          <button id="prev" ${currentPage <= 1 ? "disabled" : ""} aria-label="Previous page">Previous</button>
+          <span>Page ${currentPage} of ${totalPages}</span>
+          <button id="next" ${currentPage >= totalPages ? "disabled" : ""} aria-label="Next page">Next</button>
         </div>
       </div>
     `;
 
-    // Event listeners
-    this.shadowRoot!.querySelectorAll("th").forEach((th) => {
-      th.addEventListener("click", () => {
-        const col = th.dataset.col!;
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>(".sort-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const col = btn.dataset.col!;
         if (this._sort === col) {
           this._order = this._order === "asc" ? "desc" : "asc";
         } else {
@@ -159,10 +190,24 @@ export class ObEntityList extends HTMLElement {
       }
     });
   }
-}
 
-function displayName(entity: string): string {
-  return entity.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) + "s";
+  private _renderCell(column: string, value: unknown, fks: Record<string, string>): string {
+    if (value === null || value === undefined || value === "") {
+      return `<td><span class="cell-muted">-</span></td>`;
+    }
+
+    if (fks[column]) {
+      return `<td><a href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a></td>`;
+    }
+
+    const formatted = formatValue(column, value);
+    const badgeClass = statusClass(column, value);
+    if (column === "status" || ["active", "used", "revoked"].includes(column)) {
+      return `<td><span class="badge ${badgeClass}">${escapeHtml(formatted)}</span></td>`;
+    }
+
+    return `<td>${escapeHtml(formatted)}</td>`;
+  }
 }
 
 customElements.define("ob-entity-list", ObEntityList);

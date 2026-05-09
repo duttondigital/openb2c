@@ -31,27 +31,77 @@ export function genAppShell(schema: Schema): string {
   <title>${title}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ob-shell-bg: #f7f7f4;
+      --ob-shell-text: #242521;
+      --ob-shell-border: #dedbd2;
+      --ob-shell-focus: 0 0 0 3px rgba(47, 93, 85, 0.2);
+      --ob-nav-width: 248px;
+    }
+    html {
+      min-height: 100%;
+      background: var(--ob-shell-bg);
+    }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      color: #1e293b;
-      background: #f8fafc;
+      color: var(--ob-shell-text);
+      background: var(--ob-shell-bg);
+      min-height: 100%;
+    }
+    .skip-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      transform: translateY(-140%);
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #244a44;
+      box-shadow: var(--ob-shell-focus);
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .skip-link:focus {
+      transform: translateY(0);
     }
     .app {
       display: flex;
       min-height: 100vh;
     }
+    ob-nav {
+      flex: 0 0 var(--ob-nav-width);
+    }
     #content {
       flex: 1;
-      padding: 24px;
-      max-width: 1100px;
+      min-width: 0;
+      width: 100%;
+      max-width: 1280px;
+      padding: 32px;
+      margin: 0 auto;
+    }
+    #content:focus {
+      outline: none;
+    }
+    @media (max-width: 780px) {
+      .app {
+        flex-direction: column;
+      }
+      ob-nav {
+        flex-basis: auto;
+      }
+      #content {
+        padding: 20px;
+      }
     }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#content">Skip to content</a>
   <ob-api src="openapi.json" api-base="${apiBase}">
     <div class="app">
       <ob-nav></ob-nav>
-      <main id="content"></main>
+      <main id="content" tabindex="-1"></main>
     </div>
   </ob-api>
   <script type="module" src="app.js"></script>

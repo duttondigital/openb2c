@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { theme, reset } from "../styles";
+import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
@@ -20,42 +21,101 @@ export class ObNav extends HTMLElement {
     const entities = api.getEntities().filter(
       (e) => !INTERNAL_PREFIXES.some((p) => e.startsWith(p))
     );
+    const appTitle = escapeHtml(api.spec?.info.title?.replace(/\s+API$/, "") || "App");
+    const appDescription = escapeHtml(api.spec?.info.description || "");
 
     this.shadowRoot!.innerHTML = `
       <style>
         ${theme} ${reset}
+        :host {
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          z-index: 2;
+        }
         nav {
           width: var(--ob-nav-width);
           min-height: 100vh;
-          background: var(--ob-bg-alt);
+          background: var(--ob-bg);
           border-right: 1px solid var(--ob-border);
-          padding: 20px 0;
+          padding: 18px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+        .brand {
+          padding: 0 8px 14px;
+          border-bottom: 1px solid var(--ob-border);
         }
         .title {
-          padding: 0 16px 16px;
-          font-weight: 700;
-          font-size: 16px;
-          border-bottom: 1px solid var(--ob-border);
-          margin-bottom: 8px;
+          font-weight: 800;
+          font-size: 17px;
+          line-height: 1.2;
+        }
+        .description {
+          color: var(--ob-text-muted);
+          font-size: 12px;
+          line-height: 1.4;
+          margin-top: 5px;
+        }
+        .group { display: grid; gap: 4px; }
+        .group-title {
+          padding: 0 8px 4px;
+          color: var(--ob-text-muted);
+          font-size: 12px;
+          font-weight: 800;
         }
         a {
-          display: block;
-          padding: 8px 16px;
+          display: flex;
+          align-items: center;
+          min-height: 38px;
+          padding: 8px 10px;
           color: var(--ob-text);
           font-size: 14px;
+          font-weight: 600;
           text-decoration: none;
-          border-radius: 4px;
-          margin: 2px 8px;
+          border-radius: var(--ob-radius);
+          border: 1px solid transparent;
         }
-        a:hover, a.active {
+        a:hover {
+          background: var(--ob-bg-alt);
+          border-color: var(--ob-border);
+          text-decoration: none;
+        }
+        a.active {
           background: var(--ob-primary);
           color: white;
+          border-color: var(--ob-primary);
+          box-shadow: var(--ob-shadow-sm);
+        }
+        @media (max-width: 780px) {
+          :host {
+            position: static;
+            height: auto;
+          }
+          nav {
+            width: 100%;
+            min-height: auto;
+            border-right: 0;
+            border-bottom: 1px solid var(--ob-border);
+          }
         }
       </style>
-      <nav>
-        <div class="title">${api.spec?.info.title || "App"}</div>
-        ${api.hasCommerceWorkflow() ? `<a href="#/commerce" data-entity="commerce">Checkout</a>` : ""}
-        ${entities.map((e) => `<a href="#/${e}s" data-entity="${e}">${displayName(e)}</a>`).join("")}
+      <nav aria-label="Primary">
+        <div class="brand">
+          <div class="title">${appTitle}</div>
+          ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
+        </div>
+        ${api.hasCommerceWorkflow() ? `
+          <div class="group">
+            <div class="group-title">Commerce</div>
+            <a href="#/commerce" data-entity="commerce">Checkout</a>
+          </div>
+        ` : ""}
+        <div class="group">
+          <div class="group-title">Data</div>
+          ${entities.map((e) => `<a href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</a>`).join("")}
+        </div>
       </nav>
     `;
 
@@ -66,13 +126,15 @@ export class ObNav extends HTMLElement {
   private _highlight() {
     const hash = location.hash || "#/";
     this.shadowRoot!.querySelectorAll("a").forEach((a) => {
-      a.classList.toggle("active", hash.startsWith(a.getAttribute("href")!));
+      const active = hash.startsWith(a.getAttribute("href")!);
+      a.classList.toggle("active", active);
+      if (active) {
+        a.setAttribute("aria-current", "page");
+      } else {
+        a.removeAttribute("aria-current");
+      }
     });
   }
-}
-
-function displayName(entity: string): string {
-  return entity.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) + "s";
 }
 
 customElements.define("ob-nav", ObNav);

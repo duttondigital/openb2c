@@ -2,7 +2,8 @@
  * <ob-entity-detail entity="issues" record-id="5"> — Detail view for a single record.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset, detail, button, card } from "../styles";
+import { theme, reset, detail, button, card, form } from "../styles";
+import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, statusClass } from "../format";
 
 export class ObEntityDetail extends HTMLElement {
   private _confirmDelete = false;
@@ -57,41 +58,79 @@ export class ObEntityDetail extends HTMLElement {
     }
 
     const cols = Object.keys(schema.properties);
+    const title = `${displayName(this.entity)} #${this.recordId}`;
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${detail} ${button} ${card}
-        .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+      <style>${theme} ${reset} ${detail} ${button} ${card} ${form}
+        .header-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 18px;
+          padding-top: 18px;
+          border-top: 1px solid var(--ob-border);
+        }
+        .delete-confirm {
+          margin: 0 0 14px;
+          padding: 10px 12px;
+          border-radius: var(--ob-radius);
+          background: var(--ob-danger-soft);
+          color: var(--ob-danger);
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 24px;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: var(--ob-bg-alt);
+          color: var(--ob-text-muted);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .badge.success { background: var(--ob-success-soft); color: var(--ob-success); }
+        .badge.warning { background: var(--ob-warning-soft); color: var(--ob-warning); }
+        .badge.danger { background: var(--ob-danger-soft); color: var(--ob-danger); }
+        @media (max-width: 720px) {
+          .card-header { align-items: flex-start; flex-direction: column; }
+          .header-actions, .header-actions button, .actions button { width: 100%; }
+        }
       </style>
       <div class="card">
         <div class="card-header">
-          <h2>${displayName(this.entity)} #${this.recordId}</h2>
-          <div style="display:flex;gap:8px">
-            <button id="edit-btn">Edit</button>
-            <button class="danger" id="delete-btn">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>
+          <div>
+            <h1>${escapeHtml(title)}</h1>
+          </div>
+          <div class="header-actions">
+            <button id="edit-btn" type="button">Edit</button>
+            <button class="danger" id="delete-btn" type="button">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>
             ${this._confirmDelete ? `<button id="delete-cancel-btn">Cancel Delete</button>` : ""}
-            <button id="back-btn">← Back</button>
+            <button id="back-btn" type="button">Back</button>
           </div>
         </div>
-        ${this._deleteError ? `<div style="color:var(--ob-danger);font-size:13px;margin-bottom:12px">${this._deleteError}</div>` : ""}
+        ${this._confirmDelete ? `<div class="delete-confirm" role="alert">Confirm deletion of ${escapeHtml(title)}.</div>` : ""}
+        ${this._deleteError ? `<div class="error-msg" role="alert">${escapeHtml(this._deleteError)}</div>` : ""}
         <dl>
           ${cols.map((c) => {
             const val = record[c] ?? "";
-            let display: string;
-            if (fks[c] && val) {
-              display = `<a href="#/${fks[c]}s/${val}">${val}</a>`;
-            } else {
-              display = String(val);
-            }
-            return `<dt>${c}</dt><dd>${display}</dd>`;
+            return `<dt>${escapeHtml(fieldLabel(c))}</dt><dd>${this._renderValue(c, val, fks)}</dd>`;
           }).join("")}
         </dl>
         ${ops.length > 0 ? `
           <div class="actions">
             ${ops.map((op) => `
-              <button class="primary op-btn" data-op="${op}">${displayOperation(op)}</button>
+              <button class="secondary op-btn" type="button" data-op="${escapeAttr(op)}">${escapeHtml(displayOperation(op))}</button>
             `).join("")}
           </div>
-          <div id="op-msg" style="font-size:13px;margin-top:8px"></div>
+          <div id="op-msg" class="status-line" role="status" aria-live="polite"></div>
         ` : ""}
       </div>
     `;
@@ -159,10 +198,22 @@ export class ObEntityDetail extends HTMLElement {
       btn.disabled = false;
     }
   }
-}
 
-function displayName(entity: string): string {
-  return entity.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  private _renderValue(column: string, value: unknown, fks: Record<string, string>): string {
+    if (value === null || value === undefined || value === "") {
+      return `<span class="muted">-</span>`;
+    }
+
+    if (fks[column]) {
+      return `<a href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a>`;
+    }
+
+    const formatted = formatValue(column, value);
+    if (column === "status" || ["active", "used", "revoked"].includes(column)) {
+      return `<span class="badge ${statusClass(column, value)}">${escapeHtml(formatted)}</span>`;
+    }
+    return escapeHtml(formatted);
+  }
 }
 
 function displayOperation(op: string): string {
