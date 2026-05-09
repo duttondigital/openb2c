@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { genMcpServer } from "./mcp";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genSQL } from "./sql";
@@ -181,5 +182,70 @@ describe("generated request safety", () => {
       delete process.env.AUTH_ENABLED;
       delete process.env.ROUTE_TIMEOUT_MS;
     }
+  });
+
+  test("CORS origins are configured instead of always wildcarded", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "cors.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+    process.env.CORS_ORIGINS = "https://admin.example,https://app.example";
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      const allowed = await fetch(`${base}/health`, {
+        headers: { origin: "https://admin.example" },
+      });
+      expect(allowed.status).toBe(200);
+      expect(allowed.headers.get("access-control-allow-origin")).toBe("https://admin.example");
+      expect(allowed.headers.get("vary")).toBe("Origin");
+
+      const disallowed = await fetch(`${base}/health`, {
+        headers: { origin: "https://evil.example" },
+      });
+      expect(disallowed.status).toBe(200);
+      expect(disallowed.headers.get("access-control-allow-origin")).toBeNull();
+
+      const allowedPreflight = await fetch(`${base}/api/notes`, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://app.example",
+          "access-control-request-method": "POST",
+        },
+      });
+      expect(allowedPreflight.status).toBe(204);
+      expect(allowedPreflight.headers.get("access-control-allow-origin")).toBe("https://app.example");
+
+      const disallowedPreflight = await fetch(`${base}/api/notes`, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://evil.example",
+          "access-control-request-method": "POST",
+        },
+      });
+      expect(disallowedPreflight.status).toBe(403);
+      expect(disallowedPreflight.headers.get("access-control-allow-origin")).toBeNull();
+      expect(await disallowedPreflight.json()).toMatchObject({
+        code: "forbidden",
+        error: "origin not allowed",
+      });
+    } finally {
+      server.stop(true);
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+      delete process.env.CORS_ORIGINS;
+    }
+  });
+
+  test("MCP HTTP transport uses the same configurable CORS policy", () => {
+    const mcp = genMcpServer(schema);
+
+    expect(mcp).toContain("const CORS_ORIGINS = (process.env.CORS_ORIGINS || \"*\")");
+    expect(mcp).toContain("function allowedCorsOrigin(req: Request): string | null");
+    expect(mcp).toContain("return preflightResponse(req);");
+    expect(mcp).toContain("origin not allowed");
+    expect(mcp).not.toContain("\"Access-Control-Allow-Origin\": \"*\"");
   });
 });

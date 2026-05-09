@@ -88,7 +88,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Return structured `400` errors for malformed JSON instead of falling into generic `500`.
 - [x] Clamp pagination limits to safe maximums.
 - [x] Add route-level timeout handling for slow effect or integration work.
-- [ ] Add CORS configuration instead of always using wildcard origins.
+- [x] Add CORS configuration instead of always using wildcard origins.
 - [ ] Add secure defaults for production mode.
 
 ### Data Integrity And Migrations

@@ -98,6 +98,8 @@ const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || "1048576", 10);
 const MAX_PAGE_LIMIT = parseInt(process.env.MAX_PAGE_LIMIT || "1000", 10);
 const ROUTE_TIMEOUT_MS = Math.max(parseInt(process.env.ROUTE_TIMEOUT_MS || "30000", 10) || 30000, 1);
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.trim()).filter(Boolean);
+const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
@@ -309,18 +311,50 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
   return null;
 }
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp",
-};
+const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp";
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
-  const res = Response.json(body, init);
-  for (const [k, v] of Object.entries(CORS_HEADERS)) {
+  return Response.json(body, init);
+}
+
+function allowedCorsOrigin(req: Request): string | null {
+  const origin = req.headers.get("origin");
+  if (CORS_ORIGINS.includes("*")) {
+    return CORS_ALLOW_CREDENTIALS ? origin : "*";
+  }
+  return origin && CORS_ORIGINS.includes(origin) ? origin : null;
+}
+
+function corsHeaders(req: Request): Headers {
+  const headers = new Headers();
+  const origin = allowedCorsOrigin(req);
+  if (origin) headers.set("Access-Control-Allow-Origin", origin);
+  if (origin && CORS_ALLOW_CREDENTIALS && origin !== "*") {
+    headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+  headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
+  headers.set("Vary", "Origin");
+  return headers;
+}
+
+function applyCors(req: Request, res: Response): Response {
+  for (const [k, v] of corsHeaders(req)) {
     res.headers.set(k, v);
   }
   return res;
+}
+
+function response(req: Request, body: unknown, init?: ResponseInit): Response {
+  return applyCors(req, corsResponse(body, init));
+}
+
+function preflightResponse(req: Request): Response {
+  if (req.headers.has("origin") && !allowedCorsOrigin(req)) {
+    return response(req, { error: "origin not allowed", code: "forbidden" }, { status: 403 });
+  }
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 async function runRouteWithTimeout(handler: (signal: AbortSignal) => Response | Promise<Response>): Promise<Response> {
@@ -350,12 +384,12 @@ export const server = Bun.serve({
 
     // CORS preflight
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return preflightResponse(req);
     }
 
     // Health check (no auth)
     if (url.pathname === "/health") {
-      return corsResponse({ status: "ok", app: APP_CONFIG.slug, db: DB_PATH, auth: AUTH_ENABLED });
+      return response(req, { status: "ok", app: APP_CONFIG.slug, db: DB_PATH, auth: AUTH_ENABLED });
     }
 
     // Skip auth for identity endpoints
@@ -376,7 +410,7 @@ export const server = Bun.serve({
           const cert = JSON.parse(certHeader) as T.Certificate;
           const identity = await S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
-            return corsResponse({ error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
+            return response(req, { error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
           }
           // Ensure user record exists for this identity
           const userId = S.ensureUser(db, identity.email);
@@ -386,14 +420,14 @@ export const server = Bun.serve({
           };
           log("debug", "authenticated", { email: identity.email, userId });
         } catch {
-          return corsResponse({ error: "invalid certificate format", code: "invalid" }, { status: 401 });
+          return response(req, { error: "invalid certificate format", code: "invalid" }, { status: 401 });
         }
       } else if (authHeader?.startsWith("Bearer ")) {
         // API key auth (for services/integrations)
         const key = authHeader.slice(7);
         const auth = await S.verifyApiKey(db, key);
         if (!auth) {
-          return corsResponse({ error: "invalid api key", code: "invalid" }, { status: 401 });
+          return response(req, { error: "invalid api key", code: "invalid" }, { status: 401 });
         }
         authContext = auth;
       }
@@ -402,18 +436,18 @@ export const server = Bun.serve({
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
       log("info", "not found", { method: req.method, path: url.pathname });
-      return corsResponse({ error: "not found" }, { status: 404 });
+      return response(req, { error: "not found" }, { status: 404 });
     }
 
     try {
       const res = await runRouteWithTimeout((signal) => result.route.handler(req, result.params, authContext, signal));
       const ms = (performance.now() - start).toFixed(1);
       log("info", "request", { method: req.method, path: url.pathname, status: res.status, ms });
-      return res;
+      return applyCors(req, res);
     } catch (err) {
       const ms = (performance.now() - start).toFixed(1);
       log("error", "request failed", { method: req.method, path: url.pathname, error: String(err), ms });
-      return corsResponse({ error: "internal error" }, { status: 500 });
+      return response(req, { error: "internal error" }, { status: 500 });
     }
   },
 });

@@ -213,36 +213,68 @@ if (process.argv.includes("--http")) {
   // Streamable HTTP transport (MCP 2025-03-26)
   const sessions = new Map<string, boolean>();
 
-  const CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id",
-    "Access-Control-Expose-Headers": "Mcp-Session-Id",
-  };
+  const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.trim()).filter(Boolean);
+  const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
+  const CORS_ALLOW_METHODS = "POST, OPTIONS";
+  const CORS_ALLOW_HEADERS = "Content-Type, Mcp-Session-Id";
+
+  function allowedCorsOrigin(req: Request): string | null {
+    const origin = req.headers.get("origin");
+    if (CORS_ORIGINS.includes("*")) {
+      return CORS_ALLOW_CREDENTIALS ? origin : "*";
+    }
+    return origin && CORS_ORIGINS.includes(origin) ? origin : null;
+  }
+
+  function corsHeaders(req: Request): Headers {
+    const headers = new Headers();
+    const origin = allowedCorsOrigin(req);
+    if (origin) headers.set("Access-Control-Allow-Origin", origin);
+    if (origin && CORS_ALLOW_CREDENTIALS && origin !== "*") {
+      headers.set("Access-Control-Allow-Credentials", "true");
+    }
+    headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
+    headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
+    headers.set("Access-Control-Expose-Headers", "Mcp-Session-Id");
+    headers.set("Vary", "Origin");
+    return headers;
+  }
+
+  function applyCors(req: Request, res: Response): Response {
+    for (const [k, v] of corsHeaders(req)) {
+      res.headers.set(k, v);
+    }
+    return res;
+  }
+
+  function preflightResponse(req: Request): Response {
+    if (req.headers.has("origin") && !allowedCorsOrigin(req)) {
+      return applyCors(req, Response.json({ error: "origin not allowed", code: "forbidden" }, { status: 403 }));
+    }
+    return new Response(null, { status: 204, headers: corsHeaders(req) });
+  }
 
   Bun.serve({
     port: MCP_PORT,
     fetch(req) {
       const url = new URL(req.url);
       if (url.pathname !== "/mcp") {
-        return new Response("Not found", { status: 404 });
+        return applyCors(req, new Response("Not found", { status: 404 }));
       }
 
       if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: CORS_HEADERS });
+        return preflightResponse(req);
       }
 
       if (req.method !== "POST") {
-        return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+        return applyCors(req, new Response("Method not allowed", { status: 405 }));
       }
 
       return (async () => {
         const body = await req.json() as McpRequest;
 
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-          ...CORS_HEADERS,
-        };
+        const headers = corsHeaders(req);
+        headers.set("Content-Type", "application/json");
 
         // JSON-RPC notifications have no id — acknowledge with 202
         if (body.id === undefined) {
@@ -250,16 +282,16 @@ if (process.argv.includes("--http")) {
           if (body.method !== "initialize") {
             const sessionId = req.headers.get("Mcp-Session-Id");
             if (!sessionId || !sessions.has(sessionId)) {
-              return new Response(null, { status: 400, headers: CORS_HEADERS });
+              return new Response(null, { status: 400, headers: corsHeaders(req) });
             }
           }
-          return new Response(null, { status: 202, headers: CORS_HEADERS });
+          return new Response(null, { status: 202, headers: corsHeaders(req) });
         }
 
         if (body.method === "initialize") {
           const sessionId = crypto.randomUUID();
           sessions.set(sessionId, true);
-          headers["Mcp-Session-Id"] = sessionId;
+          headers.set("Mcp-Session-Id", sessionId);
         } else {
           const sessionId = req.headers.get("Mcp-Session-Id");
           if (!sessionId || !sessions.has(sessionId)) {
@@ -267,7 +299,7 @@ if (process.argv.includes("--http")) {
               jsonrpc: "2.0",
               id: body.id,
               error: { code: -32600, message: "Invalid or missing session ID" },
-            }), { status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+            }), { status: 400, headers });
           }
         }
 
