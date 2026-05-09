@@ -6,6 +6,7 @@
 
 export type { AppMetadata, OrganizationMetadata, Column, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
 export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
+export { envVarSpecs, requiredProductionEnvVars, genEnvExample } from "./config";
 export { sqlType, genSQL } from "./sql";
 export { planMigration, generateMigrationStub } from "./migration";
 export { tsType, genRowInterface, genInputInterface, genTypes } from "./typescript";
@@ -28,6 +29,7 @@ import { genRoutes } from "./server";
 import { genMcpServer } from "./mcp";
 import { genOpenAPI } from "./openapi";
 import { genAppShell } from "./ui";
+import { genEnvExample } from "./config";
 
 if (import.meta.main) {
   const input = await Bun.stdin.text();
@@ -44,6 +46,7 @@ if (import.meta.main) {
   writeFileSync(join(outDir, "server.ts"), genRoutes(schema));
   writeFileSync(join(outDir, "mcp.ts"), genMcpServer(schema));
   writeFileSync(join(outDir, "openapi.json"), genOpenAPI(schema));
+  writeFileSync(join(outDir, ".env.example"), genEnvExample(schema));
 
   console.log(`wrote ${outDir}/schema.sql`);
   console.log(`wrote ${outDir}/types.ts`);
@@ -52,6 +55,7 @@ if (import.meta.main) {
   console.log(`wrote ${outDir}/server.ts`);
   console.log(`wrote ${outDir}/mcp.ts`);
   console.log(`wrote ${outDir}/openapi.json`);
+  console.log(`wrote ${outDir}/.env.example`);
 
   // Generate UI
   const uiDir = join(outDir, "ui");

@@ -1,4 +1,5 @@
 import type { Schema } from "./types";
+import { requiredProductionEnvVars } from "./config";
 import { getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -9,6 +10,7 @@ export function genRoutes(schema: Schema): string {
     ...app,
     databasePath: getDefaultDatabasePath(app),
   };
+  const requiredProductionEnv = requiredProductionEnvVars(schema);
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -122,6 +124,7 @@ const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded E
 const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
 const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;
 const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;
+const REQUIRED_PRODUCTION_ENV = ${JSON.stringify(requiredProductionEnv, null, 2)} as const;
 
 // Structured logging
 function log(level: string, msg: string, data?: Record<string, unknown>) {
@@ -245,6 +248,9 @@ function validateProductionConfig() {
   }
   if (!REGISTRY_PRIVATE_KEY && !REGISTRY_PUBLIC_KEY && !ALLOW_EPHEMERAL_REGISTRY_KEYS) {
     errors.push("REGISTRY_PRIVATE_KEY or REGISTRY_PUBLIC_KEY is required in production unless ALLOW_EPHEMERAL_REGISTRY_KEYS=true");
+  }
+  for (const name of REQUIRED_PRODUCTION_ENV) {
+    if (!process.env[name]) errors.push(\`\${name} is required in production\`);
   }
   if (errors.length) {
     log("error", "refusing insecure production config", { errors });

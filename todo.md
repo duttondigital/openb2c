@@ -118,12 +118,12 @@ These must be complete before calling any generated app production-ready.
 
 ### Secrets And Configuration
 
-- [ ] Define required environment variables per generated app.
-- [ ] Validate required production environment variables at startup.
+- [x] Define required environment variables per generated app.
+- [x] Validate required production environment variables at startup.
 - [x] Refuse production startup with ephemeral registry keys unless explicitly allowed.
-- [ ] Keep API keys, registry private keys, payment keys, email credentials, and webhook signing secrets out of generated source.
-- [ ] Add `.env.example` per example app.
-- [ ] Document local, staging, and production configuration.
+- [x] Keep API keys, registry private keys, payment keys, email credentials, and webhook signing secrets out of generated source.
+- [x] Add `.env.example` per example app.
+- [x] Document local, staging, and production configuration.
 
 ## P1 - Application-Grade Generated Outputs
 

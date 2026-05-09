@@ -154,8 +154,12 @@ export const defaultEffectHandlers: RuntimeEffectHandlers = {
     return { status: res.status };
   },
   async payment(action, payload) {
+    const provider = process.env.PAYMENT_PROVIDER || "local";
+    if (provider !== "local" && !process.env.PAYMENT_API_KEY) {
+      throw new Error("PAYMENT_API_KEY is required for configured payment provider");
+    }
     return {
-      provider: "local",
+      provider,
       action,
       id: \`payment_\${crypto.randomUUID()}\`,
       payload,

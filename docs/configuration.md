@@ -1,0 +1,47 @@
+# Configuration
+
+Generated apps are configured through environment variables. Secrets must be supplied by the deployment environment, not committed into generated source.
+
+## Local
+
+Use the example `.env.example` as a starting point:
+
+```bash
+cp examples/duchyopera/.env.example .env
+NODE_ENV=development AUTH_ENABLED=false DB_PATH=./dev.db bun examples/duchyopera/generated/server.ts
+```
+
+Local development may use ephemeral registry keys and fake effect handlers. Email, webhook, and payment effects are persisted even when provider env vars are absent.
+
+## Staging
+
+Staging should mirror production safety settings:
+
+- `NODE_ENV=production`
+- Explicit `DB_PATH`
+- Explicit `CORS_ORIGINS`
+- `AUTH_ENABLED=true`
+- `REGISTRY_PRIVATE_KEY` for local issuance or `REGISTRY_PUBLIC_KEY` for an external registry
+- Provider env vars for every declared email, webhook, or payment effect
+
+Use staging to test migrations, backups, restore drills, and failed effect retries before production.
+
+## Production
+
+Production startup fails when required env vars are missing. The generated server validates:
+
+- Required app env vars derived from the ontology and declared effects.
+- Auth is not disabled unless `ALLOW_INSECURE_AUTH_DISABLED=true`.
+- CORS origins are explicit unless `ALLOW_WILDCARD_CORS=true`.
+- Registry keys are configured unless `ALLOW_EPHEMERAL_REGISTRY_KEYS=true`.
+
+Secrets such as `REGISTRY_PRIVATE_KEY`, `PAYMENT_API_KEY`, email provider credentials, and webhook endpoints must come from a secret store. Keep `.env` files out of source control.
+
+## Generated Templates
+
+Codegen writes `.env.example` beside generated artifacts. These templates list required and optional variables, but secret values are intentionally blank.
+
+Example projects also include:
+
+- `examples/duchyopera/.env.example`
+- `examples/ticketing/.env.example`
