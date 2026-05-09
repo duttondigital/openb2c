@@ -215,6 +215,8 @@ if (process.argv.includes("--http")) {
 
   const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.trim()).filter(Boolean);
   const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
+  const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
+  const PRODUCTION = process.env.NODE_ENV === "production";
   const CORS_ALLOW_METHODS = "POST, OPTIONS";
   const CORS_ALLOW_HEADERS = "Content-Type, Mcp-Session-Id";
 
@@ -252,6 +254,10 @@ if (process.argv.includes("--http")) {
       return applyCors(req, Response.json({ error: "origin not allowed", code: "forbidden" }, { status: 403 }));
     }
     return new Response(null, { status: 204, headers: corsHeaders(req) });
+  }
+
+  if (PRODUCTION && CORS_ORIGINS.includes("*") && !ALLOW_WILDCARD_CORS) {
+    throw new Error("CORS_ORIGINS must be explicit in production or ALLOW_WILDCARD_CORS=true must be set");
   }
 
   Bun.serve({

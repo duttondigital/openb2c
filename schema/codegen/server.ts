@@ -102,6 +102,9 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.tri
 const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
+const ALLOW_INSECURE_AUTH_DISABLED = process.env.ALLOW_INSECURE_AUTH_DISABLED === "true";
+const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
+const ALLOW_EPHEMERAL_REGISTRY_KEYS = process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS === "true";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
 const REGISTRY_PUBLIC_KEY = process.env.REGISTRY_PUBLIC_KEY;   // for verifying certs from external registry
 const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;
@@ -217,6 +220,26 @@ function clampLimit(value: string | null): number {
 function clampOffset(value: string | null): number {
   return Math.max(parseIntegerParam(value, 0), 0);
 }
+
+function validateProductionConfig() {
+  if (!PRODUCTION) return;
+  const errors: string[] = [];
+  if (!AUTH_ENABLED && !ALLOW_INSECURE_AUTH_DISABLED) {
+    errors.push("AUTH_ENABLED=false requires ALLOW_INSECURE_AUTH_DISABLED=true in production");
+  }
+  if (CORS_ORIGINS.includes("*") && !ALLOW_WILDCARD_CORS) {
+    errors.push("CORS_ORIGINS must be explicit in production or ALLOW_WILDCARD_CORS=true must be set");
+  }
+  if (!REGISTRY_PRIVATE_KEY && !REGISTRY_PUBLIC_KEY && !ALLOW_EPHEMERAL_REGISTRY_KEYS) {
+    errors.push("REGISTRY_PRIVATE_KEY or REGISTRY_PUBLIC_KEY is required in production unless ALLOW_EPHEMERAL_REGISTRY_KEYS=true");
+  }
+  if (errors.length) {
+    log("error", "refusing insecure production config", { errors });
+    throw new Error(\`refusing insecure production config: \${errors.join("; ")}\`);
+  }
+}
+
+validateProductionConfig();
 
 const db = new Database(DB_PATH);
 db.run("PRAGMA journal_mode = WAL");

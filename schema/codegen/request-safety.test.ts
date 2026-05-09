@@ -24,6 +24,8 @@ const schema: Schema = {
   operations: {},
 };
 
+const TEST_REGISTRY_PUBLIC_KEY = "a".repeat(64);
+
 function writeGenerated(): string {
   const dir = mkdtempSync(join(tmpdir(), "openb2c-request-safety-"));
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
@@ -31,6 +33,18 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "services.ts"), genServices(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   return dir;
+}
+
+function clearGeneratedServerEnv() {
+  delete process.env.DB_PATH;
+  delete process.env.PORT;
+  delete process.env.AUTH_ENABLED;
+  delete process.env.CORS_ORIGINS;
+  delete process.env.REGISTRY_PRIVATE_KEY;
+  delete process.env.REGISTRY_PUBLIC_KEY;
+  delete process.env.ALLOW_INSECURE_AUTH_DISABLED;
+  delete process.env.ALLOW_WILDCARD_CORS;
+  delete process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS;
 }
 
 describe("generated request safety", () => {
@@ -245,7 +259,70 @@ describe("generated request safety", () => {
     expect(mcp).toContain("const CORS_ORIGINS = (process.env.CORS_ORIGINS || \"*\")");
     expect(mcp).toContain("function allowedCorsOrigin(req: Request): string | null");
     expect(mcp).toContain("return preflightResponse(req);");
+    expect(mcp).toContain("if (PRODUCTION && CORS_ORIGINS.includes(\"*\") && !ALLOW_WILDCARD_CORS)");
     expect(mcp).toContain("origin not allowed");
     expect(mcp).not.toContain("\"Access-Control-Allow-Origin\": \"*\"");
+  });
+
+  test("production mode refuses insecure REST defaults", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      let dir = writeGenerated();
+      process.env.DB_PATH = join(dir, "prod-auth.sqlite");
+      process.env.PORT = "0";
+      process.env.AUTH_ENABLED = "false";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.REGISTRY_PUBLIC_KEY = TEST_REGISTRY_PUBLIC_KEY;
+      await expect(import(pathToFileURL(join(dir, "server.ts")).href)).rejects.toThrow("AUTH_ENABLED=false");
+
+      clearGeneratedServerEnv();
+      dir = writeGenerated();
+      process.env.DB_PATH = join(dir, "prod-cors.sqlite");
+      process.env.PORT = "0";
+      process.env.REGISTRY_PUBLIC_KEY = TEST_REGISTRY_PUBLIC_KEY;
+      await expect(import(pathToFileURL(join(dir, "server.ts")).href)).rejects.toThrow("CORS_ORIGINS must be explicit");
+
+      clearGeneratedServerEnv();
+      dir = writeGenerated();
+      process.env.DB_PATH = join(dir, "prod-registry.sqlite");
+      process.env.PORT = "0";
+      process.env.CORS_ORIGINS = "https://app.example";
+      await expect(import(pathToFileURL(join(dir, "server.ts")).href)).rejects.toThrow("REGISTRY_PRIVATE_KEY or REGISTRY_PUBLIC_KEY");
+
+      clearGeneratedServerEnv();
+      dir = writeGenerated();
+      process.env.DB_PATH = join(dir, "prod-valid.sqlite");
+      process.env.PORT = "0";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.REGISTRY_PUBLIC_KEY = TEST_REGISTRY_PUBLIC_KEY;
+      const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+      try {
+        const health = await fetch(`http://127.0.0.1:${server.port}/health`, {
+          headers: { origin: "https://app.example" },
+        });
+        expect(health.status).toBe(200);
+        expect(health.headers.get("access-control-allow-origin")).toBe("https://app.example");
+      } finally {
+        server.stop(true);
+      }
+
+      clearGeneratedServerEnv();
+      dir = writeGenerated();
+      process.env.DB_PATH = join(dir, "prod-ephemeral-allowed.sqlite");
+      process.env.PORT = "0";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS = "true";
+      const allowedEphemeral = await import(pathToFileURL(join(dir, "server.ts")).href);
+      allowedEphemeral.server.stop(true);
+    } finally {
+      clearGeneratedServerEnv();
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
   });
 });

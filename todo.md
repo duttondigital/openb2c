@@ -89,7 +89,7 @@ These must be complete before calling any generated app production-ready.
 - [x] Clamp pagination limits to safe maximums.
 - [x] Add route-level timeout handling for slow effect or integration work.
 - [x] Add CORS configuration instead of always using wildcard origins.
-- [ ] Add secure defaults for production mode.
+- [x] Add secure defaults for production mode.
 
 ### Data Integrity And Migrations
 
@@ -120,7 +120,7 @@ These must be complete before calling any generated app production-ready.
 
 - [ ] Define required environment variables per generated app.
 - [ ] Validate required production environment variables at startup.
-- [ ] Refuse production startup with ephemeral registry keys unless explicitly allowed.
+- [x] Refuse production startup with ephemeral registry keys unless explicitly allowed.
 - [ ] Keep API keys, registry private keys, payment keys, email credentials, and webhook signing secrets out of generated source.
 - [ ] Add `.env.example` per example app.
 - [ ] Document local, staging, and production configuration.
