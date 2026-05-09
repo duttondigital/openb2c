@@ -54,6 +54,7 @@ export class ObNav extends HTMLElement {
       </style>
       <nav>
         <div class="title">${api.spec?.info.title || "App"}</div>
+        ${api.hasCommerceWorkflow() ? `<a href="#/commerce" data-entity="commerce">Checkout</a>` : ""}
         ${entities.map((e) => `<a href="#/${e}s" data-entity="${e}">${displayName(e)}</a>`).join("")}
       </nav>
     `;

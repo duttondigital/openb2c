@@ -125,6 +125,14 @@ export class ObApi extends HTMLElement {
     return entities;
   }
 
+  hasCommerceWorkflow(): boolean {
+    if (!this.spec) return false;
+    return Boolean(
+      this.spec.paths["/commerce/bookings/reserve"] &&
+      this.spec.paths["/commerce/bookings/{id}/payment-intent"]
+    );
+  }
+
   /** Get operations for an entity from OpenAPI paths */
   getOperations(entity: string): string[] {
     if (!this.spec) return [];

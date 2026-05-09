@@ -7,6 +7,7 @@ export { ObEntityList } from "./components/ob-entity-list";
 export { ObEntityForm } from "./components/ob-entity-form";
 export { ObEntityDetail } from "./components/ob-entity-detail";
 export { ObOperationBtn } from "./components/ob-operation-btn";
+export { ObCommerce } from "./components/ob-commerce";
 
 import { ObApi } from "./components/ob-api";
 
@@ -21,6 +22,11 @@ function route() {
 
   // Routes: /<entity>s, /<entity>s/new, /<entity>s/:id, /<entity>s/:id/edit
   let m: RegExpMatchArray | null;
+
+  if (hash === "/commerce") {
+    content.innerHTML = `<ob-commerce></ob-commerce>`;
+    return;
+  }
 
   if ((m = hash.match(/^\/([a-z_]+s)\/new$/))) {
     const entity = m[1].replace(/s$/, "");
