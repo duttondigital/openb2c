@@ -1,22 +1,64 @@
 /**
- * <ob-commerce> — Generated checkout workflow surface.
+ * <ob-commerce> - Generated catalog, cart, checkout, and payment workflow.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset, form, button, card } from "../styles";
-import { escapeAttr, escapeHtml, fieldLabel, formatValue, labelFor } from "../format";
+import { theme, reset, form, button } from "../styles";
+import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, labelFor } from "../format";
+
+type FieldRef = { field: string; references?: string | null };
+
+type CommerceOption = {
+  field?: FieldRef | null;
+  type?: string;
+  label?: string | null;
+  default?: string | null;
+  choices?: string[];
+  required?: boolean;
+  min?: number | null;
+  max?: number | null;
+};
+
+type CommerceConfig = {
+  enabled?: boolean;
+  catalog?: {
+    entity?: string;
+    title?: FieldRef | null;
+    description?: FieldRef | null;
+    price?: FieldRef | null;
+    groupBy?: FieldRef[];
+    variantFields?: FieldRef[];
+    availability?: { field?: FieldRef | null; available?: string };
+  };
+  order?: { entity?: string; user?: FieldRef | null };
+  lineItem?: { entity?: string; options?: Record<string, CommerceOption> };
+  transaction?: { entity?: string };
+  checkout?: { currency?: string; expiryMinutes?: number; maxQuantity?: number; maxLines?: number };
+};
+
+type CartLine = {
+  id: string;
+  itemId: number;
+  quantity: number;
+  options: Record<string, string | number | null>;
+  item: Record<string, unknown>;
+};
+
+type LookupMap = Record<string, Map<string, string>>;
 
 export class ObCommerce extends HTMLElement {
-  private _reservation: any = null;
+  private _selectedGroup = "";
+  private _selectedItemId = "";
+  private _quantity = "1";
+  private _customerId = "";
+  private _client = "web";
+  private _optionState: Record<string, string> = {};
+  private _cart: CartLine[] = [];
+  private _checkoutResult: any = null;
   private _paymentIntent: any = null;
   private _expiryResult: any = null;
   private _error = "";
-  private _formState: Record<string, string> = {
-    user_id: "",
-    performance_id: "",
-    quantity: "1",
-    ticket_type: "standard",
-    client: "web",
-  };
+  private _loading = false;
+  private _availableItems: Record<string, unknown>[] = [];
 
   constructor() {
     super();
@@ -27,7 +69,12 @@ export class ObCommerce extends HTMLElement {
     await this._render();
   }
 
-  private async _options(entity: string): Promise<any[]> {
+  private _config(api: ObApi): CommerceConfig {
+    return api.getEcommerceConfig() || legacyCommerceConfig();
+  }
+
+  private async _rows(entity: string): Promise<Record<string, unknown>[]> {
+    if (!entity) return [];
     try {
       const res = await ObApi.instance!.request(`/api/${entity}s?limit=200`);
       const data = await res.json();
@@ -35,6 +82,35 @@ export class ObCommerce extends HTMLElement {
     } catch {
       return [];
     }
+  }
+
+  private async _variantLookups(api: ObApi, config: CommerceConfig): Promise<LookupMap> {
+    const catalogEntity = config.catalog?.entity || "";
+    const fks = catalogEntity ? api.getForeignKeys(catalogEntity) : {};
+    const fields = config.catalog?.variantFields || [];
+    const lookups: LookupMap = {};
+    await Promise.all(fields.map(async (ref) => {
+      const entity = fks[ref.field];
+      if (!entity) return;
+      const rows = await this._rows(entity);
+      lookups[ref.field] = new Map(rows.map((row) => [String(row.id), labelFor(row)]));
+    }));
+    return lookups;
+  }
+
+  private _availableCatalog(items: Record<string, unknown>[], config: CommerceConfig): Record<string, unknown>[] {
+    const availability = config.catalog?.availability;
+    if (!availability?.field) return items;
+    return items.filter((item) => String(item[availability.field!.field]) === String(availability.available));
+  }
+
+  private _groups(items: Record<string, unknown>[], config: CommerceConfig): Map<string, Record<string, unknown>[]> {
+    const groups = new Map<string, Record<string, unknown>[]>();
+    for (const item of items) {
+      const key = this._groupKey(item, config);
+      groups.set(key, [...(groups.get(key) || []), item]);
+    }
+    return groups;
   }
 
   private async _render() {
@@ -47,13 +123,37 @@ export class ObCommerce extends HTMLElement {
       return;
     }
 
-    const [users, performances] = await Promise.all([
-      this._options("user"),
-      this._options("performance"),
+    const config = this._config(api);
+    const catalogEntity = config.catalog?.entity || "item";
+    const customerEntity = entityFromRef(config.order?.user) || (api.getEntities().includes("user") ? "user" : "");
+    const optionDefs = config.lineItem?.options || {};
+    for (const [name, option] of Object.entries(optionDefs)) {
+      if (this._optionState[name] === undefined && option.default !== null && option.default !== undefined) {
+        this._optionState[name] = String(option.default);
+      }
+    }
+
+    const [catalogRows, customers, lookups] = await Promise.all([
+      this._rows(catalogEntity),
+      this._rows(customerEntity),
+      this._variantLookups(api, config),
     ]);
+    const catalog = this._availableCatalog(catalogRows, config);
+    this._availableItems = catalog;
+    const groups = this._groups(catalog, config);
+    if (this._selectedGroup && !groups.has(this._selectedGroup)) {
+      this._selectedGroup = "";
+      this._selectedItemId = "";
+    }
+    const selectedItems = this._selectedGroup ? (groups.get(this._selectedGroup) || []) : [];
+    if (this._selectedItemId && !selectedItems.some((item) => String(item.id) === this._selectedItemId)) {
+      this._selectedItemId = "";
+    }
+    const selectedItem = selectedItems.find((item) => String(item.id) === this._selectedItemId) || null;
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${form} ${button} ${card}
+      <style>${theme} ${reset} ${form} ${button}
+        :host { display: block; }
         .page-header {
           margin-bottom: 18px;
         }
@@ -68,47 +168,172 @@ export class ObCommerce extends HTMLElement {
           line-height: 1.15;
           font-weight: 800;
         }
-        .grid {
+        .layout {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(320px, 0.86fr);
+          grid-template-columns: minmax(0, 1fr) minmax(340px, 0.44fr);
           gap: 18px;
           align-items: start;
         }
+        .flow {
+          display: grid;
+          gap: 14px;
+        }
+        .panel {
+          background: var(--ob-bg);
+          border: 1px solid var(--ob-border);
+          border-radius: var(--ob-radius);
+          padding: 18px;
+          box-shadow: var(--ob-shadow-sm);
+        }
+        .panel-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .panel-header h2 {
+          font-size: 18px;
+          line-height: 1.25;
+          font-weight: 800;
+        }
+        .step {
+          color: var(--ob-text-muted);
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+          text-transform: uppercase;
+          letter-spacing: 0;
+        }
+        .selector-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 10px;
+        }
+        .selector-card {
+          align-items: stretch;
+          justify-content: space-between;
+          min-height: 112px;
+          padding: 14px;
+          text-align: left;
+          background: var(--ob-bg);
+          border: 1px solid var(--ob-border);
+          color: var(--ob-text);
+          flex-direction: column;
+        }
+        .selector-card:hover {
+          background: var(--ob-bg-subtle);
+          border-color: var(--ob-border-strong);
+        }
+        .selector-card.selected {
+          border-color: var(--ob-primary);
+          box-shadow: inset 0 0 0 1px var(--ob-primary);
+        }
+        .selector-title {
+          font-size: 15px;
+          line-height: 1.3;
+          font-weight: 800;
+          overflow-wrap: anywhere;
+        }
+        .selector-meta {
+          display: grid;
+          gap: 4px;
+          color: var(--ob-text-muted);
+          font-size: 13px;
+          line-height: 1.35;
+        }
+        .variant-card {
+          min-height: 86px;
+        }
+        .configure-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+        .configure-grid .full { grid-column: 1 / -1; }
         .actions {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
           margin-top: 4px;
         }
-        .summary {
+        .cart {
+          position: sticky;
+          top: 18px;
+          display: grid;
+          gap: 14px;
+        }
+        .cart-list {
           display: grid;
           gap: 10px;
+        }
+        .cart-line {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          align-items: start;
+          padding: 12px;
+          border: 1px solid var(--ob-border);
+          border-radius: var(--ob-radius);
+          background: var(--ob-bg-subtle);
+        }
+        .cart-line h3 {
+          font-size: 14px;
+          line-height: 1.3;
+          font-weight: 800;
+          margin-bottom: 4px;
+        }
+        .cart-line p {
+          color: var(--ob-text-muted);
+          font-size: 13px;
+          line-height: 1.4;
+        }
+        .icon-btn {
+          width: 34px;
+          min-height: 34px;
+          padding: 0;
+          font-size: 18px;
+          line-height: 1;
+        }
+        .summary {
+          display: grid;
+          gap: 8px;
+          font-size: 14px;
         }
         .summary-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 14px;
-          padding: 10px 0;
+          gap: 16px;
+          padding: 8px 0;
           border-bottom: 1px solid var(--ob-border);
-          font-size: 14px;
         }
         .summary-row:last-child { border-bottom: 0; }
-        .summary + .summary { margin-top: 14px; }
         .summary-row span:first-child {
           color: var(--ob-text-muted);
           font-weight: 700;
         }
         .summary-row span:last-child {
           text-align: right;
-          font-weight: 700;
+          font-weight: 800;
           overflow-wrap: anywhere;
+        }
+        .total-row {
+          font-size: 16px;
+        }
+        .empty {
+          color: var(--ob-text-muted);
+          font-size: 14px;
+          line-height: 1.45;
+          padding: 18px;
+          border: 1px dashed var(--ob-border-strong);
+          border-radius: var(--ob-radius);
+          background: var(--ob-bg-subtle);
         }
         .links {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          margin-top: 14px;
+          margin-top: 12px;
           font-size: 13px;
         }
         .links a {
@@ -119,29 +344,19 @@ export class ObCommerce extends HTMLElement {
           border: 1px solid var(--ob-border);
           border-radius: var(--ob-radius);
           background: var(--ob-bg);
-          font-weight: 700;
+          font-weight: 800;
         }
         .links a:hover {
           background: var(--ob-bg-alt);
           text-decoration: none;
         }
-        .empty {
-          color: var(--ob-text-muted);
-          font-size: 14px;
-          line-height: 1.5;
-          padding: 18px;
-          border: 1px dashed var(--ob-border-strong);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg-subtle);
-        }
         details {
-          margin-top: 14px;
           color: var(--ob-text-muted);
           font-size: 13px;
         }
         summary {
           cursor: pointer;
-          font-weight: 700;
+          font-weight: 800;
         }
         pre {
           margin-top: 10px;
@@ -153,170 +368,296 @@ export class ObCommerce extends HTMLElement {
           font-size: 12px;
           line-height: 1.5;
         }
-        @media (max-width: 860px) {
-          .grid { grid-template-columns: 1fr; }
-          .page-header h1 { font-size: 24px; }
+        @media (max-width: 980px) {
+          .layout { grid-template-columns: 1fr; }
+          .cart { position: static; }
         }
-        @media (max-width: 640px) {
+        @media (max-width: 680px) {
+          .page-header h1 { font-size: 24px; }
+          .panel-header { flex-direction: column; }
+          .configure-grid { grid-template-columns: 1fr; }
           .actions button { width: 100%; }
         }
       </style>
+
       <div class="page-header">
         <div class="eyebrow">Commerce</div>
         <h1>Checkout</h1>
       </div>
-      <div class="grid">
-        <section class="card" aria-labelledby="reserve-title">
-          <div class="card-header"><h2 id="reserve-title">Reserve tickets</h2></div>
-          ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
-          <form id="reserve-form">
-            <div class="form-group">
-              <label for="checkout-user">Customer <span class="required">*</span></label>
-              <select id="checkout-user" name="user_id" required>
-                <option value="">Select customer</option>
-                ${users.map((user) => `<option value="${escapeAttr(user.id)}" ${String(user.id) === this._formState.user_id ? "selected" : ""}>${escapeHtml(labelFor(user))} (${escapeHtml(user.id)})</option>`).join("")}
-              </select>
+      ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
+
+      <div class="layout">
+        <div class="flow">
+          <section class="panel" aria-labelledby="choose-subject-title">
+            <div class="panel-header">
+              <h2 id="choose-subject-title">Choose ${escapeHtml(displayName(catalogEntity))}</h2>
+              <span class="step">Step 1</span>
             </div>
-            <div class="form-group">
-              <label for="checkout-performance">Performance <span class="required">*</span></label>
-              <select id="checkout-performance" name="performance_id" required>
-                <option value="">Select performance</option>
-                ${performances.map((performance) => `<option value="${escapeAttr(performance.id)}" ${String(performance.id) === this._formState.performance_id ? "selected" : ""}>${escapeHtml(labelFor(performance))} (${escapeHtml(performance.id)})</option>`).join("")}
-              </select>
+            ${groups.size === 0 ? `<div class="empty">No available items.</div>` : this._renderGroups(groups, config)}
+          </section>
+
+          <section class="panel" aria-labelledby="choose-variant-title">
+            <div class="panel-header">
+              <h2 id="choose-variant-title">Choose details</h2>
+              <span class="step">Step 2</span>
             </div>
-            <div class="form-group">
-              <label for="checkout-quantity">${fieldLabel("quantity")} <span class="required">*</span></label>
-              <input id="checkout-quantity" type="text" inputmode="numeric" pattern="[0-9]*" name="quantity" value="${escapeAttr(this._formState.quantity)}" required />
+            ${this._selectedGroup ? this._renderVariants(selectedItems, selectedItem, config, lookups) : `<div class="empty">Choose ${escapeHtml(displayName(catalogEntity))} first.</div>`}
+          </section>
+
+          <section class="panel" aria-labelledby="configure-title">
+            <div class="panel-header">
+              <h2 id="configure-title">Configure item</h2>
+              <span class="step">Step 3</span>
             </div>
-            <div class="form-group">
-              <label for="checkout-ticket-type">${fieldLabel("ticket_type")}</label>
-              <input id="checkout-ticket-type" type="text" name="ticket_type" value="${escapeAttr(this._formState.ticket_type)}" />
+            ${selectedItem ? this._renderConfigureForm(optionDefs, selectedItem, config) : `<div class="empty">Choose details before configuring.</div>`}
+          </section>
+        </div>
+
+        <aside class="cart" aria-live="polite">
+          <section class="panel" aria-labelledby="cart-title">
+            <div class="panel-header">
+              <h2 id="cart-title">Cart</h2>
+              <span class="step">${this._cart.length} line${this._cart.length === 1 ? "" : "s"}</span>
             </div>
-            <div class="form-group">
-              <label for="checkout-client">${fieldLabel("client")}</label>
-              <input id="checkout-client" type="text" name="client" value="${escapeAttr(this._formState.client)}" />
+            ${this._renderCart(config)}
+          </section>
+
+          <section class="panel" aria-labelledby="checkout-title">
+            <div class="panel-header">
+              <h2 id="checkout-title">Checkout</h2>
             </div>
-            <div class="actions">
-              <button type="submit" class="primary">Reserve tickets</button>
-              <button type="button" id="payment-btn" ${this._reservation ? "" : "disabled"}>Create payment intent</button>
-              <button type="button" id="expire-btn">Expire stale bookings</button>
+            ${this._renderCheckoutForm(customers, customerEntity)}
+          </section>
+
+          <section class="panel" aria-labelledby="status-title">
+            <div class="panel-header">
+              <h2 id="status-title">Status</h2>
             </div>
-          </form>
-        </section>
-        <section class="card" aria-labelledby="checkout-status-title" aria-live="polite">
-          <div class="card-header"><h2 id="checkout-status-title">Status</h2></div>
-          ${this._reservation ? this._renderReservationSummary() : `<div class="empty">No reservation yet.</div>`}
-          ${this._paymentIntent ? this._renderPaymentSummary() : ""}
-          ${this._expiryResult ? this._renderExpirySummary() : ""}
-          ${this._reservation ? `
-            <div class="links">
-              <a href="#/bookings/${escapeAttr(this._reservation.booking_id)}">Booking #${escapeHtml(this._reservation.booking_id)}</a>
-              ${(this._reservation.ticket_ids || []).map((id: number) => `<a href="#/tickets/${escapeAttr(id)}">Ticket #${escapeHtml(id)}</a>`).join("")}
-              ${this._paymentIntent ? `<a href="#/transactions/${escapeAttr(this._paymentIntent.transaction_id)}">Transaction #${escapeHtml(this._paymentIntent.transaction_id)}</a>` : ""}
-            </div>
-            <details>
-              <summary>Response JSON</summary>
-              <pre>${escapeHtml(JSON.stringify({ reservation: this._reservation, paymentIntent: this._paymentIntent, expiry: this._expiryResult }, null, 2))}</pre>
-            </details>
-          ` : ""}
-        </section>
+            ${this._renderStatus(config)}
+          </section>
+        </aside>
       </div>
     `;
 
-    this.shadowRoot!.getElementById("reserve-form")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this._reserve();
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-group]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._selectedGroup = button.dataset.group || "";
+        this._selectedItemId = "";
+        this._error = "";
+        this._render();
+      });
+    });
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-item-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._selectedItemId = button.dataset.itemId || "";
+        this._error = "";
+        this._render();
+      });
+    });
+    this.shadowRoot!.getElementById("configure-form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this._addSelectedToCart();
+    });
+    this.shadowRoot!.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-option]").forEach((input) => {
+      input.addEventListener("input", () => {
+        this._optionState[input.dataset.option || ""] = input.value;
+      });
+      input.addEventListener("change", () => {
+        this._optionState[input.dataset.option || ""] = input.value;
+      });
+    });
+    this.shadowRoot!.getElementById("line-quantity")?.addEventListener("input", (event) => {
+      this._quantity = (event.target as HTMLInputElement).value;
+    });
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-remove-line]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._cart = this._cart.filter((line) => line.id !== button.dataset.removeLine);
+        this._checkoutResult = null;
+        this._paymentIntent = null;
+        this._render();
+      });
+    });
+    this.shadowRoot!.getElementById("checkout-form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this._checkout();
+    });
+    this.shadowRoot!.getElementById("checkout-customer")?.addEventListener("change", (event) => {
+      this._customerId = (event.target as HTMLSelectElement).value;
+    });
+    this.shadowRoot!.getElementById("checkout-client")?.addEventListener("input", (event) => {
+      this._client = (event.target as HTMLInputElement).value;
     });
     this.shadowRoot!.getElementById("payment-btn")?.addEventListener("click", () => this._createPaymentIntent());
     this.shadowRoot!.getElementById("expire-btn")?.addEventListener("click", () => this._expireStale());
   }
 
-  private async _reserve() {
-    const form = this.shadowRoot!.getElementById("reserve-form") as HTMLFormElement | null;
-    if (!form) return;
-
-    const formData = new FormData(form);
-    for (const field of ["user_id", "performance_id", "quantity", "ticket_type", "client"]) {
-      this._formState[field] = String(formData.get(field) || "");
-    }
-
-    const body: Record<string, unknown> = {};
-    for (const field of ["user_id", "performance_id", "quantity"]) {
-      const value = formData.get(field);
-      if (value !== null && String(value) !== "") body[field] = Number(value);
-    }
-    for (const field of ["ticket_type", "client"]) {
-      const value = formData.get(field);
-      if (value !== null && String(value) !== "") body[field] = String(value);
-    }
-
-    try {
-      const res = await ObApi.instance!.request("/commerce/bookings/reserve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        this._error = err.error || "Reservation failed";
-        await this._render();
-        return;
-      }
-      this._reservation = await res.json();
-      this._paymentIntent = null;
-      this._expiryResult = null;
-      this._error = "";
-      await this._render();
-    } catch (e: any) {
-      this._error = e.message || "Reservation failed";
-      await this._render();
-    }
+  private _renderGroups(groups: Map<string, Record<string, unknown>[]>, config: CommerceConfig): string {
+    return `
+      <div class="selector-grid">
+        ${[...groups.entries()].map(([key, items]) => {
+          const first = items[0];
+          const description = this._fieldValue(first, config.catalog?.description);
+          const price = this._priceLabel(first, config);
+          return `
+            <button type="button" class="selector-card ${key === this._selectedGroup ? "selected" : ""}" data-group="${escapeAttr(key)}" aria-pressed="${key === this._selectedGroup}">
+              <span class="selector-title">${escapeHtml(key)}</span>
+              <span class="selector-meta">
+                ${description ? `<span>${escapeHtml(description)}</span>` : ""}
+                <span>${escapeHtml(items.length)} option${items.length === 1 ? "" : "s"}${price ? ` from ${escapeHtml(price)}` : ""}</span>
+              </span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
-  private async _createPaymentIntent() {
-    if (!this._reservation?.booking_id) return;
-    try {
-      const res = await ObApi.instance!.request(`/commerce/bookings/${this._reservation.booking_id}/payment-intent`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        this._error = err.error || "Payment intent failed";
-        await this._render();
-        return;
-      }
-      this._paymentIntent = await res.json();
-      this._error = "";
-      await this._render();
-    } catch (e: any) {
-      this._error = e.message || "Payment intent failed";
-      await this._render();
-    }
+  private _renderVariants(items: Record<string, unknown>[], selected: Record<string, unknown> | null, config: CommerceConfig, lookups: LookupMap): string {
+    if (items.length === 0) return `<div class="empty">No available details.</div>`;
+    return `
+      <div class="selector-grid">
+        ${items.map((item) => {
+          const id = String(item.id);
+          return `
+            <button type="button" class="selector-card variant-card ${selected && String(selected.id) === id ? "selected" : ""}" data-item-id="${escapeAttr(id)}" aria-pressed="${selected && String(selected.id) === id ? "true" : "false"}">
+              <span class="selector-title">${escapeHtml(this._variantLabel(item, config, lookups))}</span>
+              <span class="selector-meta"><span>${escapeHtml(this._priceLabel(item, config))}</span></span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
-  private async _expireStale() {
-    try {
-      const res = await ObApi.instance!.request("/commerce/bookings/expire", { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        this._error = err.error || "Expiry failed";
-        await this._render();
-        return;
-      }
-      this._expiryResult = await res.json();
-      this._error = "";
-      await this._render();
-    } catch (e: any) {
-      this._error = e.message || "Expiry failed";
-      await this._render();
-    }
+  private _renderConfigureForm(optionDefs: Record<string, CommerceOption>, item: Record<string, unknown>, config: CommerceConfig): string {
+    const maxQuantity = config.checkout?.maxQuantity || 20;
+    return `
+      <form id="configure-form">
+        <div class="configure-grid">
+          <div class="form-group">
+            <label for="line-quantity">${escapeHtml(fieldLabel("quantity"))} <span class="required">*</span></label>
+            <input id="line-quantity" type="text" inputmode="numeric" pattern="[0-9]*" name="quantity" value="${escapeAttr(this._quantity)}" required aria-describedby="line-quantity-help" />
+            <div class="help-text" id="line-quantity-help">Max ${escapeHtml(maxQuantity)}</div>
+          </div>
+          <div class="form-group">
+            <label>${escapeHtml(fieldLabel(config.catalog?.price?.field || "price_pence"))}</label>
+            <input type="text" value="${escapeAttr(this._priceLabel(item, config))}" disabled />
+          </div>
+          ${Object.entries(optionDefs).map(([name, option]) => this._renderOptionInput(name, option)).join("")}
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Add to cart</button>
+        </div>
+      </form>
+    `;
   }
 
-  private _renderReservationSummary(): string {
-    const ticketCount = this._reservation.ticket_ids?.length || 0;
+  private _renderOptionInput(name: string, option: CommerceOption): string {
+    const label = option.label || fieldLabel(option.field?.field || name);
+    const value = this._optionState[name] ?? option.default ?? "";
+    const required = option.required ? "required" : "";
+    const describedBy = `${name}-help`;
+    const help = option.choices?.length
+      ? `${option.choices.length} choices`
+      : option.min !== null && option.min !== undefined || option.max !== null && option.max !== undefined
+        ? [option.min !== null && option.min !== undefined ? `Min ${option.min}` : "", option.max !== null && option.max !== undefined ? `Max ${option.max}` : ""].filter(Boolean).join(", ")
+        : "";
+
+    if (option.choices && option.choices.length > 0) {
+      return `
+        <div class="form-group">
+          <label for="option-${escapeAttr(name)}">${escapeHtml(label)}${option.required ? ' <span class="required">*</span>' : ""}</label>
+          <select id="option-${escapeAttr(name)}" name="${escapeAttr(name)}" data-option="${escapeAttr(name)}" ${required} aria-describedby="${escapeAttr(describedBy)}">
+            ${option.required ? "" : `<option value="">None</option>`}
+            ${option.choices.map((choice) => `<option value="${escapeAttr(choice)}" ${String(choice) === String(value) ? "selected" : ""}>${escapeHtml(fieldLabel(choice))}</option>`).join("")}
+          </select>
+          ${help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : ""}
+        </div>
+      `;
+    }
+
+    const inputAttrs = option.type === "integer"
+      ? `type="text" inputmode="numeric" pattern="[0-9]*"`
+      : `type="text"`;
+    return `
+      <div class="form-group">
+        <label for="option-${escapeAttr(name)}">${escapeHtml(label)}${option.required ? ' <span class="required">*</span>' : ""}</label>
+        <input id="option-${escapeAttr(name)}" ${inputAttrs} name="${escapeAttr(name)}" data-option="${escapeAttr(name)}" value="${escapeAttr(value)}" ${required} aria-describedby="${escapeAttr(describedBy)}" />
+        ${help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  private _renderCart(config: CommerceConfig): string {
+    if (this._cart.length === 0) return `<div class="empty">Cart is empty.</div>`;
+    const total = this._cartTotal(config);
+    return `
+      <div class="cart-list">
+        ${this._cart.map((line) => `
+          <div class="cart-line">
+            <div>
+              <h3>${escapeHtml(this._itemTitle(line.item, config))}</h3>
+              <p>${escapeHtml(this._lineDescription(line, config))}</p>
+            </div>
+            <button type="button" class="icon-btn danger" data-remove-line="${escapeAttr(line.id)}" aria-label="Remove ${escapeAttr(this._itemTitle(line.item, config))}">x</button>
+          </div>
+        `).join("")}
+      </div>
+      <div class="summary">
+        <div class="summary-row total-row"><span>Total</span><span>${escapeHtml(formatValue("amount_pence", total))}</span></div>
+      </div>
+    `;
+  }
+
+  private _renderCheckoutForm(customers: Record<string, unknown>[], customerEntity: string): string {
+    const canCheckout = this._cart.length > 0;
+    return `
+      <form id="checkout-form">
+        ${customerEntity ? `
+          <div class="form-group">
+            <label for="checkout-customer">${escapeHtml(displayName(customerEntity))} <span class="required">*</span></label>
+            <select id="checkout-customer" name="user_id" required>
+              <option value="">Select ${escapeHtml(displayName(customerEntity).toLowerCase())}</option>
+              ${customers.map((customer) => `<option value="${escapeAttr(customer.id)}" ${String(customer.id) === this._customerId ? "selected" : ""}>${escapeHtml(labelFor(customer))} (${escapeHtml(customer.id)})</option>`).join("")}
+            </select>
+          </div>
+        ` : ""}
+        <div class="form-group">
+          <label for="checkout-client">${escapeHtml(fieldLabel("client"))}</label>
+          <input id="checkout-client" type="text" name="client" value="${escapeAttr(this._client)}" />
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary" ${canCheckout && !this._loading ? "" : "disabled"}>${this._loading ? "Working" : "Checkout"}</button>
+          <button type="button" id="payment-btn" ${this._checkoutResult ? "" : "disabled"}>Create payment intent</button>
+          <button type="button" id="expire-btn">Expire stale orders</button>
+        </div>
+      </form>
+    `;
+  }
+
+  private _renderStatus(config: CommerceConfig): string {
+    if (!this._checkoutResult && !this._paymentIntent && !this._expiryResult) {
+      return `<div class="empty">No checkout activity yet.</div>`;
+    }
+    return `
+      ${this._checkoutResult ? this._renderCheckoutSummary() : ""}
+      ${this._paymentIntent ? this._renderPaymentSummary() : ""}
+      ${this._expiryResult ? this._renderExpirySummary() : ""}
+      ${this._checkoutResult ? this._renderLinks(config) : ""}
+      <details>
+        <summary>Response JSON</summary>
+        <pre>${escapeHtml(JSON.stringify({ checkout: this._checkoutResult, paymentIntent: this._paymentIntent, expiry: this._expiryResult }, null, 2))}</pre>
+      </details>
+    `;
+  }
+
+  private _renderCheckoutSummary(): string {
     return `
       <div class="summary">
-        <div class="summary-row"><span>Booking</span><span>#${escapeHtml(this._reservation.booking_id)}</span></div>
-        <div class="summary-row"><span>Tickets</span><span>${ticketCount}</span></div>
-        <div class="summary-row"><span>Amount</span><span>${escapeHtml(formatValue("amount_pence", this._reservation.amount_pence))}</span></div>
+        <div class="summary-row"><span>Order</span><span>#${escapeHtml(this._checkoutResult.order_id)}</span></div>
+        <div class="summary-row"><span>Items</span><span>${escapeHtml(this._checkoutResult.line_item_ids?.length || 0)}</span></div>
+        <div class="summary-row"><span>Amount</span><span>${escapeHtml(formatValue("amount_pence", this._checkoutResult.amount_pence))}</span></div>
+        <div class="summary-row"><span>Status</span><span>${escapeHtml(this._checkoutResult.status)}</span></div>
       </div>
     `;
   }
@@ -337,6 +678,274 @@ export class ObCommerce extends HTMLElement {
       </div>
     `;
   }
+
+  private _renderLinks(config: CommerceConfig): string {
+    const orderEntity = config.order?.entity || "order";
+    const lineItemEntity = config.lineItem?.entity || "item";
+    const transactionEntity = config.transaction?.entity || "transaction";
+    return `
+      <div class="links">
+        <a href="#/${escapeAttr(orderEntity)}s/${escapeAttr(this._checkoutResult.order_id)}">${escapeHtml(displayName(orderEntity))} #${escapeHtml(this._checkoutResult.order_id)}</a>
+        ${(this._checkoutResult.line_item_ids || []).map((id: number) => `<a href="#/${escapeAttr(lineItemEntity)}s/${escapeAttr(id)}">${escapeHtml(displayName(lineItemEntity))} #${escapeHtml(id)}</a>`).join("")}
+        ${this._paymentIntent ? `<a href="#/${escapeAttr(transactionEntity)}s/${escapeAttr(this._paymentIntent.transaction_id)}">${escapeHtml(displayName(transactionEntity))} #${escapeHtml(this._paymentIntent.transaction_id)}</a>` : ""}
+      </div>
+    `;
+  }
+
+  private _addSelectedToCart() {
+    const config = this._config(ObApi.instance!);
+    const catalogEntity = config.catalog?.entity || "";
+    const quantity = Number.parseInt(this._quantity, 10);
+    const maxQuantity = config.checkout?.maxQuantity || 20;
+    const maxLines = config.checkout?.maxLines || 50;
+    if (!this._selectedItemId) {
+      this._error = "Choose details before adding to cart";
+      this._render();
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+      this._error = `Quantity must be between 1 and ${maxQuantity}`;
+      this._render();
+      return;
+    }
+    if (this._cart.length >= maxLines) {
+      this._error = `Cart can contain at most ${maxLines} lines`;
+      this._render();
+      return;
+    }
+
+    const options = this._collectOptions();
+    if (!options.ok) {
+      this._error = options.error;
+      this._render();
+      return;
+    }
+
+    const selected = this._availableItems.find((item) => String(item.id) === this._selectedItemId) || null;
+    if (!selected) {
+      this._error = `Selected ${catalogEntity || "item"} is unavailable`;
+      this._render();
+      return;
+    }
+
+    this._cart = [
+      ...this._cart,
+      {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        itemId: Number(this._selectedItemId),
+        quantity,
+        options: options.data,
+        item: selected,
+      },
+    ];
+    this._checkoutResult = null;
+    this._paymentIntent = null;
+    this._expiryResult = null;
+    this._error = "";
+    this._render();
+  }
+
+  private _collectOptions(): { ok: true; data: Record<string, string | number | null> } | { ok: false; error: string } {
+    const config = this._config(ObApi.instance!);
+    const defs = config.lineItem?.options || {};
+    const data: Record<string, string | number | null> = {};
+    for (const [name, option] of Object.entries(defs)) {
+      const input = this.shadowRoot!.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-option="${cssEscape(name)}"]`);
+      const raw = input?.value ?? "";
+      if (!raw && option.required) return { ok: false, error: `${option.label || fieldLabel(name)} is required` };
+      if (!raw) {
+        data[name] = null;
+        continue;
+      }
+      if (option.choices && option.choices.length > 0 && !option.choices.includes(raw)) {
+        return { ok: false, error: `${option.label || fieldLabel(name)} is not available` };
+      }
+      if (option.type === "integer") {
+        const value = Number(raw);
+        if (!Number.isInteger(value)) return { ok: false, error: `${option.label || fieldLabel(name)} must be a whole number` };
+        if (option.min !== null && option.min !== undefined && value < option.min) return { ok: false, error: `${option.label || fieldLabel(name)} is below minimum` };
+        if (option.max !== null && option.max !== undefined && value > option.max) return { ok: false, error: `${option.label || fieldLabel(name)} is above maximum` };
+        data[name] = value;
+      } else {
+        data[name] = raw;
+      }
+    }
+    return { ok: true, data };
+  }
+
+  private async _checkout() {
+    if (this._cart.length === 0) return;
+    const form = this.shadowRoot!.getElementById("checkout-form") as HTMLFormElement | null;
+    const formData = form ? new FormData(form) : new FormData();
+    const currentCustomerId = String(formData.get("user_id") || this._customerId || "");
+    const currentClient = String(formData.get("client") || this._client || "web");
+    if (this.shadowRoot!.getElementById("checkout-customer") && !currentCustomerId) {
+      this._error = "Select a customer before checkout";
+      await this._render();
+      return;
+    }
+
+    this._loading = true;
+    this._error = "";
+    const body: Record<string, unknown> = {
+      client: currentClient.trim() || "web",
+      items: this._cart.map((line) => ({
+        item_id: line.itemId,
+        quantity: line.quantity,
+        options: line.options,
+      })),
+    };
+    if (currentCustomerId) body.user_id = Number(currentCustomerId);
+
+    try {
+      const res = await ObApi.instance!.request("/commerce/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        this._error = err.error || "Checkout failed";
+        this._loading = false;
+        await this._render();
+        return;
+      }
+      this._checkoutResult = await res.json();
+      this._paymentIntent = null;
+      this._expiryResult = null;
+      this._cart = [];
+      this._loading = false;
+      await this._render();
+    } catch (error: any) {
+      this._error = error.message || "Checkout failed";
+      this._loading = false;
+      await this._render();
+    }
+  }
+
+  private async _createPaymentIntent() {
+    if (!this._checkoutResult?.order_id) return;
+    try {
+      const res = await ObApi.instance!.request(`/commerce/orders/${this._checkoutResult.order_id}/payment-intent`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        this._error = err.error || "Payment intent failed";
+        await this._render();
+        return;
+      }
+      this._paymentIntent = await res.json();
+      this._error = "";
+      await this._render();
+    } catch (error: any) {
+      this._error = error.message || "Payment intent failed";
+      await this._render();
+    }
+  }
+
+  private async _expireStale() {
+    try {
+      const res = await ObApi.instance!.request("/commerce/orders/expire", { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        this._error = err.error || "Expiry failed";
+        await this._render();
+        return;
+      }
+      this._expiryResult = await res.json();
+      this._error = "";
+      await this._render();
+    } catch (error: any) {
+      this._error = error.message || "Expiry failed";
+      await this._render();
+    }
+  }
+
+  private _groupKey(item: Record<string, unknown>, config: CommerceConfig): string {
+    const fields = config.catalog?.groupBy || [];
+    if (fields.length === 0) return this._itemTitle(item, config);
+    return fields.map((field) => this._fieldValue(item, field)).filter(Boolean).join(" - ") || this._itemTitle(item, config);
+  }
+
+  private _itemTitle(item: Record<string, unknown>, config: CommerceConfig): string {
+    return this._fieldValue(item, config.catalog?.title) || labelFor(item);
+  }
+
+  private _variantLabel(item: Record<string, unknown>, config: CommerceConfig, lookups: LookupMap): string {
+    const fields = config.catalog?.variantFields || [];
+    if (fields.length === 0) return this._itemTitle(item, config);
+    return fields.map((field) => this._formatFieldValue(field, item[field.field], lookups)).filter(Boolean).join(" - ");
+  }
+
+  private _fieldValue(item: Record<string, unknown>, field?: FieldRef | null): string {
+    if (!field) return "";
+    const value = item[field.field];
+    if (value === null || value === undefined || value === "") return "";
+    return formatValue(field.field, value);
+  }
+
+  private _formatFieldValue(field: FieldRef, value: unknown, lookups: LookupMap): string {
+    if (value === null || value === undefined || value === "") return "";
+    const lookup = lookups[field.field]?.get(String(value));
+    if (lookup) return lookup;
+    return formatValue(field.field, value);
+  }
+
+  private _priceLabel(item: Record<string, unknown>, config: CommerceConfig): string {
+    const priceField = config.catalog?.price?.field || "price_pence";
+    const value = Number(item[priceField] || 0);
+    return value > 0 ? formatValue(priceField, value) : "";
+  }
+
+  private _lineDescription(line: CartLine, config: CommerceConfig): string {
+    const parts = [
+      `${line.quantity} x ${this._priceLabel(line.item, config)}`,
+      ...Object.entries(line.options)
+        .filter(([, value]) => value !== null && value !== "")
+        .map(([name, value]) => `${fieldLabel(name)}: ${value}`),
+    ];
+    return parts.join(" - ");
+  }
+
+  private _cartTotal(config: CommerceConfig): number {
+    const priceField = config.catalog?.price?.field || "price_pence";
+    return this._cart.reduce((sum, line) => sum + Number(line.item[priceField] || 0) * line.quantity, 0);
+  }
+}
+
+function entityFromRef(ref?: FieldRef | null): string {
+  if (!ref) return "";
+  const referenceEntity = ref.references?.match(/^([a-z_]+)\(/)?.[1];
+  if (referenceEntity) return referenceEntity;
+  return ref.field.endsWith("_id") ? ref.field.slice(0, -3) : "";
+}
+
+function cssEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function legacyCommerceConfig(): CommerceConfig {
+  return {
+    enabled: true,
+    catalog: {
+      entity: "performance",
+      title: { field: "title" },
+      description: { field: "description" },
+      price: { field: "price_pence" },
+      groupBy: [{ field: "title" }],
+      variantFields: [{ field: "date" }, { field: "time" }, { field: "venue_id" }],
+      availability: { field: { field: "status" }, available: "scheduled" },
+    },
+    order: { entity: "booking", user: { field: "user_id", references: "user(id)" } },
+    lineItem: {
+      entity: "ticket",
+      options: {
+        ticket_type: { field: { field: "ticket_type" }, label: "Ticket type", default: "standard", choices: ["standard", "concession", "patron"] },
+        seat: { field: { field: "seat" }, label: "Seat" },
+      },
+    },
+    transaction: { entity: "transaction" },
+    checkout: { currency: "GBP", expiryMinutes: 15, maxQuantity: 20, maxLines: 50 },
+  };
 }
 
 customElements.define("ob-commerce", ObCommerce);

@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { genEffectsInterface } from "./effects";
+import { genMcpServer } from "./mcp";
+import { genOpenAPI } from "./openapi";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genSQL } from "./sql";
@@ -77,9 +79,153 @@ function clearEnv() {
   delete process.env.PAYMENT_WEBHOOK_SECRET;
 }
 
+function ref(table: string, field: string, references: string | null = null) {
+  return { table, field, references };
+}
+
+function genericShopSchema(): Schema {
+  return {
+    organization: { name: "Generic Shop", description: "Generic ecommerce test" },
+    tables: {
+      user: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      },
+      product: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        name: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        price_pence: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        status: { type: "text", pk: false, auto: false, required: true, unique: false, default: "'available'", references: null },
+      },
+      cart_order: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        user_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "user(id)" },
+        status: { type: "text", pk: false, auto: false, required: true, unique: false, default: "'checkout_pending'", references: null },
+        amount_pence: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        currency: { type: "text", pk: false, auto: false, required: true, unique: false, default: "'GBP'", references: null },
+        expires_at: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        payment_reference: { type: "text", pk: false, auto: false, required: false, unique: false, default: null, references: null },
+        client: { type: "text", pk: false, auto: false, required: false, unique: false, default: "'web'", references: null },
+      },
+      cart_line: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        product_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "product(id)" },
+        user_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "user(id)" },
+        price_pence: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        status: { type: "text", pk: false, auto: false, required: true, unique: false, default: "'reserved'", references: null },
+        colour: { type: "text", pk: false, auto: false, required: false, unique: false, default: null, references: null },
+      },
+      cart_order_line: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        cart_order_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "cart_order(id)" },
+        cart_line_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "cart_line(id)" },
+      },
+      payment: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        user_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "user(id)" },
+        amount_pence: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+        status: { type: "text", pk: false, auto: false, required: true, unique: false, default: "'pending'", references: null },
+        reference: { type: "text", pk: false, auto: false, required: true, unique: true, default: null, references: null },
+        client: { type: "text", pk: false, auto: false, required: false, unique: false, default: "'web'", references: null },
+      },
+      payment_line: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        payment_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "payment(id)" },
+        cart_line_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "cart_line(id)" },
+      },
+    },
+    operations: {},
+    ecommerce: {
+      enabled: true,
+      catalog: {
+        entity: "product",
+        title: ref("product", "name"),
+        description: null,
+        price: ref("product", "price_pence"),
+        groupBy: [ref("product", "name")],
+        variantFields: [],
+        availability: { field: ref("product", "status"), available: "available" },
+      },
+      order: {
+        entity: "cart_order",
+        user: ref("cart_order", "user_id", "user(id)"),
+        status: ref("cart_order", "status"),
+        amount: ref("cart_order", "amount_pence"),
+        currency: ref("cart_order", "currency"),
+        expiresAt: ref("cart_order", "expires_at"),
+        paymentReference: ref("cart_order", "payment_reference"),
+        client: ref("cart_order", "client"),
+        pendingStatus: "checkout_pending",
+        paidStatus: "paid",
+        expiredStatus: "expired",
+        cancelledStatus: "cancelled",
+      },
+      lineItem: {
+        entity: "cart_line",
+        catalogItem: ref("cart_line", "product_id", "product(id)"),
+        user: ref("cart_line", "user_id", "user(id)"),
+        price: ref("cart_line", "price_pence"),
+        status: ref("cart_line", "status"),
+        quantity: null,
+        reservedStatus: "reserved",
+        fulfilledStatus: "fulfilled",
+        cancelledStatus: "cancelled",
+        options: {
+          colour: { field: ref("cart_line", "colour"), type: "text", label: "Colour", default: null, choices: ["black", "white"], required: false, min: null, max: null },
+        },
+      },
+      orderLine: {
+        entity: "cart_order_line",
+        order: ref("cart_order_line", "cart_order_id", "cart_order(id)"),
+        lineItem: ref("cart_order_line", "cart_line_id", "cart_line(id)"),
+      },
+      transaction: {
+        entity: "payment",
+        user: ref("payment", "user_id", "user(id)"),
+        amount: ref("payment", "amount_pence"),
+        type: null,
+        status: ref("payment", "status"),
+        reference: ref("payment", "reference"),
+        client: ref("payment", "client"),
+        purchaseType: "purchase",
+        pendingStatus: "pending",
+        completedStatus: "completed",
+        failedStatus: "failed",
+      },
+      transactionLine: {
+        entity: "payment_line",
+        transaction: ref("payment_line", "payment_id", "payment(id)"),
+        lineItem: ref("payment_line", "cart_line_id", "cart_line(id)"),
+      },
+      checkout: { currency: "GBP", expiryMinutes: 15, maxQuantity: 20, maxLines: 50 },
+    },
+  };
+}
+
 describe("Duchy Opera commerce workflow", () => {
-  test("reserves tickets, creates a payment intent, confirms paid bookings, and expires stale checkouts", async () => {
+  test("generic ecommerce generation does not expose ticket-specific compatibility aliases unless the legacy shape is present", () => {
+    const schema = genericShopSchema();
+    const services = genServices(schema);
+    const routes = genRoutes(schema);
+    const mcp = genMcpServer(schema);
+    const openapi = JSON.parse(genOpenAPI(schema));
+
+    expect(services).toContain("checkoutCommerceCart");
+    expect(services).not.toContain("ReserveBookingInput");
+    expect(routes).toContain("/commerce/checkout");
+    expect(routes).not.toContain("/commerce/bookings/reserve");
+    expect(mcp).toContain("checkout_cart");
+    expect(mcp).not.toContain("reserve_booking");
+    expect(openapi.paths["/commerce/checkout"]).toBeDefined();
+    expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
+  });
+
+  test("checks out a cart, creates a payment intent, confirms paid orders, and expires stale checkouts", async () => {
     const schema = await loadDuchyOperaSchema();
+    expect(schema.ecommerce?.enabled).toBe(true);
+    expect(schema.ecommerce?.catalog.entity).toBe("performance");
+    expect(schema.ecommerce?.order.entity).toBe("booking");
+    expect(schema.ecommerce?.lineItem.entity).toBe("ticket");
+
     const dir = writeGenerated(schema);
     const dbPath = join(dir, "duchy-commerce.sqlite");
     process.env.DB_PATH = dbPath;
@@ -92,30 +238,34 @@ describe("Duchy Opera commerce workflow", () => {
     seedDuchyOpera(dbPath);
 
     try {
-      const reserve = await fetch(`${base}/commerce/bookings/reserve`, {
+      const checkout = await fetch(`${base}/commerce/checkout`, {
         method: "POST",
-        headers: { "content-type": "application/json", "Idempotency-Key": "reserve-opera-1" },
+        headers: { "content-type": "application/json", "Idempotency-Key": "checkout-opera-1" },
         body: JSON.stringify({
           user_id: 1,
-          performance_id: 1,
-          quantity: 2,
-          price_pence: 1,
-          ticket_type: "standard",
           client: "web",
+          items: [
+            {
+              item_id: 1,
+              quantity: 2,
+              options: { ticket_type: "standard" },
+            },
+          ],
         }),
       });
-      expect(reserve.status).toBe(201);
-      const reserved = await reserve.json() as { booking_id: number; ticket_ids: number[]; amount_pence: number; status: string };
-      expect(reserved.ticket_ids).toHaveLength(2);
-      expect(reserved.amount_pence).toBe(5000);
-      expect(reserved.status).toBe("checkout_pending");
+      expect(checkout.status).toBe(201);
+      const checkedOut = await checkout.json() as { order_id: number; line_item_ids: number[]; amount_pence: number; status: string };
+      expect(checkedOut.line_item_ids).toHaveLength(2);
+      expect(checkedOut.amount_pence).toBe(5000);
+      expect(checkedOut.status).toBe("checkout_pending");
 
-      const intent = await fetch(`${base}/commerce/bookings/${reserved.booking_id}/payment-intent`, {
+      const intent = await fetch(`${base}/commerce/orders/${checkedOut.order_id}/payment-intent`, {
         method: "POST",
         headers: { "Idempotency-Key": "intent-opera-1" },
       });
       expect(intent.status).toBe(201);
-      const payment = await intent.json() as { transaction_id: number; reference: string; amount_pence: number; provider: string };
+      const payment = await intent.json() as { order_id: number; transaction_id: number; reference: string; amount_pence: number; provider: string };
+      expect(payment.order_id).toBe(checkedOut.order_id);
       expect(payment.reference).toStartWith("fake_pi_");
       expect(payment.amount_pence).toBe(5000);
       expect(payment.provider).toBe("local");
@@ -132,7 +282,7 @@ describe("Duchy Opera commerce workflow", () => {
       });
       expect(webhook.status).toBe(200);
       expect(await webhook.json()).toMatchObject({
-        booking_id: reserved.booking_id,
+        order_id: checkedOut.order_id,
         transaction_id: payment.transaction_id,
         status: "paid",
         idempotent: false,
@@ -140,9 +290,9 @@ describe("Duchy Opera commerce workflow", () => {
 
       const db = new Database(dbPath);
       try {
-        const booking = db.query<{ status: string }, []>("SELECT status FROM booking WHERE id = ?").get(reserved.booking_id);
+        const booking = db.query<{ status: string }, []>("SELECT status FROM booking WHERE id = ?").get(checkedOut.order_id);
         const transaction = db.query<{ status: string }, []>("SELECT status FROM [transaction] WHERE id = ?").get(payment.transaction_id);
-        const tickets = db.query<{ status: string }, []>("SELECT status FROM ticket WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?) ORDER BY id").all(reserved.booking_id);
+        const tickets = db.query<{ status: string }, []>("SELECT status FROM ticket WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?) ORDER BY id").all(checkedOut.order_id);
         expect(booking?.status).toBe("paid");
         expect(transaction?.status).toBe("completed");
         expect(tickets.map(ticket => ticket.status)).toEqual(["confirmed", "confirmed"]);
@@ -150,29 +300,29 @@ describe("Duchy Opera commerce workflow", () => {
         db.close();
       }
 
-      const staleReserve = await fetch(`${base}/commerce/bookings/reserve`, {
+      const staleCheckout = await fetch(`${base}/commerce/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ user_id: 1, performance_id: 1, quantity: 1 }),
+        body: JSON.stringify({ user_id: 1, items: [{ item_id: 1, quantity: 1 }] }),
       });
-      expect(staleReserve.status).toBe(201);
-      const stale = await staleReserve.json() as { booking_id: number; ticket_ids: number[] };
+      expect(staleCheckout.status).toBe(201);
+      const stale = await staleCheckout.json() as { order_id: number; line_item_ids: number[] };
 
       const staleDb = new Database(dbPath);
       try {
-        staleDb.query("UPDATE booking SET expires_at = ? WHERE id = ?").run(new Date(Date.now() - 60000).toISOString(), stale.booking_id);
+        staleDb.query("UPDATE booking SET expires_at = ? WHERE id = ?").run(new Date(Date.now() - 60000).toISOString(), stale.order_id);
       } finally {
         staleDb.close();
       }
 
-      const expire = await fetch(`${base}/commerce/bookings/expire`, { method: "POST" });
+      const expire = await fetch(`${base}/commerce/orders/expire`, { method: "POST" });
       expect(expire.status).toBe(200);
       expect(await expire.json()).toEqual({ expired: 1 });
 
       const finalDb = new Database(dbPath);
       try {
-        const expiredBooking = finalDb.query<{ status: string }, []>("SELECT status FROM booking WHERE id = ?").get(stale.booking_id);
-        const expiredTicket = finalDb.query<{ status: string }, []>("SELECT status FROM ticket WHERE id = ?").get(stale.ticket_ids[0]);
+        const expiredBooking = finalDb.query<{ status: string }, []>("SELECT status FROM booking WHERE id = ?").get(stale.order_id);
+        const expiredTicket = finalDb.query<{ status: string }, []>("SELECT status FROM ticket WHERE id = ?").get(stale.line_item_ids[0]);
         const effects = finalDb.query<{ status: string }, []>("SELECT status FROM openb2c_effect_attempt ORDER BY id").all();
         expect(expiredBooking?.status).toBe("expired");
         expect(expiredTicket?.status).toBe("cancelled");

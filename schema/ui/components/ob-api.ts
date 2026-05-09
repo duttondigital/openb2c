@@ -6,6 +6,7 @@ export interface OpenAPISpec {
   info: { title: string; version: string };
   paths: Record<string, Record<string, any>>;
   components: { schemas: Record<string, any> };
+  "x-openb2c-ecommerce"?: any;
 }
 
 export interface Certificate {
@@ -128,9 +129,16 @@ export class ObApi extends HTMLElement {
   hasCommerceWorkflow(): boolean {
     if (!this.spec) return false;
     return Boolean(
-      this.spec.paths["/commerce/bookings/reserve"] &&
-      this.spec.paths["/commerce/bookings/{id}/payment-intent"]
+      this.spec["x-openb2c-ecommerce"]?.enabled ||
+      (this.spec.paths["/commerce/checkout"] &&
+        this.spec.paths["/commerce/orders/{id}/payment-intent"]) ||
+      (this.spec.paths["/commerce/bookings/reserve"] &&
+        this.spec.paths["/commerce/bookings/{id}/payment-intent"])
     );
+  }
+
+  getEcommerceConfig(): any | null {
+    return this.spec?.["x-openb2c-ecommerce"] || null;
   }
 
   /** Get operations for an entity from OpenAPI paths */

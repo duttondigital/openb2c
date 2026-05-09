@@ -53,6 +53,168 @@ let
 
   relationshipSpecType = lib.types.either lib.types.str relationshipType;
 
+  ecommerceOptionType = lib.types.submodule {
+    options = {
+      field = lib.mkOption {
+        type = lib.types.nullOr fieldRefType;
+        default = null;
+        description = "Optional target field this configurable purchase option writes to.";
+      };
+      type = lib.mkOption {
+        type = lib.types.str;
+        default = "text";
+        description = "UI/input type for this option.";
+      };
+      label = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Human-readable option label.";
+      };
+      default = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Default option value.";
+      };
+      choices = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Allowed user-facing choices, when finite.";
+      };
+      required = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether this option must be provided.";
+      };
+      min = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Minimum numeric value.";
+      };
+      max = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Maximum numeric value.";
+      };
+    };
+  };
+
+  ecommerceType = lib.types.submodule {
+    options = {
+      enabled = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable generated catalog, cart, checkout, settlement, and order flows.";
+      };
+      catalog = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            title = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            description = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            price = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            groupBy = lib.mkOption { type = lib.types.listOf fieldRefType; default = []; };
+            variantFields = lib.mkOption { type = lib.types.listOf fieldRefType; default = []; };
+            availability = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  field = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+                  available = lib.mkOption { type = lib.types.str; default = "available"; };
+                };
+              };
+              default = {};
+            };
+          };
+        };
+        default = {};
+      };
+      order = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            user = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            status = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            amount = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            currency = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            expiresAt = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            paymentReference = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            client = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            pendingStatus = lib.mkOption { type = lib.types.str; default = "checkout_pending"; };
+            paidStatus = lib.mkOption { type = lib.types.str; default = "paid"; };
+            expiredStatus = lib.mkOption { type = lib.types.str; default = "expired"; };
+            cancelledStatus = lib.mkOption { type = lib.types.str; default = "cancelled"; };
+          };
+        };
+        default = {};
+      };
+      lineItem = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            catalogItem = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            user = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            price = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            status = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            quantity = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            reservedStatus = lib.mkOption { type = lib.types.str; default = "reserved"; };
+            fulfilledStatus = lib.mkOption { type = lib.types.str; default = "fulfilled"; };
+            cancelledStatus = lib.mkOption { type = lib.types.str; default = "cancelled"; };
+            options = lib.mkOption { type = lib.types.attrsOf ecommerceOptionType; default = {}; };
+          };
+        };
+        default = {};
+      };
+      orderLine = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            order = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            lineItem = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+          };
+        };
+        default = {};
+      };
+      transaction = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            user = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            amount = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            type = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            status = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            reference = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            client = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            purchaseType = lib.mkOption { type = lib.types.str; default = "purchase"; };
+            pendingStatus = lib.mkOption { type = lib.types.str; default = "pending"; };
+            completedStatus = lib.mkOption { type = lib.types.str; default = "completed"; };
+            failedStatus = lib.mkOption { type = lib.types.str; default = "failed"; };
+          };
+        };
+        default = {};
+      };
+      transactionLine = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            entity = lib.mkOption { type = lib.types.str; default = ""; };
+            transaction = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            lineItem = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+          };
+        };
+        default = {};
+      };
+      checkout = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            currency = lib.mkOption { type = lib.types.str; default = "GBP"; };
+            expiryMinutes = lib.mkOption { type = lib.types.int; default = 15; };
+            maxQuantity = lib.mkOption { type = lib.types.int; default = 20; };
+            maxLines = lib.mkOption { type = lib.types.int; default = 50; };
+          };
+        };
+        default = {};
+      };
+    };
+  };
+
   indexType = lib.types.submodule {
     options = {
       columns = lib.mkOption {
@@ -184,6 +346,12 @@ in {
       type = lib.types.attrsOf (lib.types.attrsOf operationType);
       default = {};
       description = "Operations per entity (e.g., operations.ticket.confirm)";
+    };
+
+    ecommerce = lib.mkOption {
+      type = ecommerceType;
+      default = {};
+      description = "Generic catalog/cart/checkout commerce configuration.";
     };
   };
 }

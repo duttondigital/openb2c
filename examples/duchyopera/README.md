@@ -49,12 +49,14 @@ This example's `composition.nix` directly imports the modules it needs from `sch
 
 ## Checkout Flow
 
-Duchy Opera exposes a generated commerce workflow alongside the entity CRUD API:
+Duchy Opera enables the generic ecommerce workflow in `composition.nix`. The configuration maps catalog items to performances, orders to bookings, line items to tickets, and settlement records to transactions.
 
-1. `POST /commerce/bookings/reserve` reserves one or more tickets for a scheduled performance using the configured performance price.
-2. `POST /commerce/bookings/{id}/payment-intent` creates an idempotent payment intent for the booking.
-3. `POST /commerce/payments/webhook` receives a signed provider callback and confirms tickets when payment succeeds.
-4. `POST /commerce/bookings/expire` cancels unpaid checkout reservations after their expiry window.
+1. `POST /commerce/checkout` creates a pending order from a configured cart.
+2. `POST /commerce/orders/{id}/payment-intent` creates an idempotent payment intent for the order.
+3. `POST /commerce/payments/webhook` receives a signed provider callback and confirms line items when payment succeeds.
+4. `POST /commerce/orders/expire` cancels unpaid checkout reservations after their expiry window.
+
+The original booking-oriented route names remain available as compatibility aliases, but the generated UI and MCP tools use the generic cart/order model.
 
 Production deployments must configure `PAYMENT_PROVIDER`, `PAYMENT_API_KEY`, and `PAYMENT_WEBHOOK_SECRET`. The local provider remains available for tests and development.
 

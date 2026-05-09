@@ -1,5 +1,5 @@
 import type { Schema } from "./types";
-import { getAppMetadata, hasCommerceWorkflow, pascalCase } from "./utils";
+import { getAppMetadata, hasCommerceWorkflow, legacyCommerceWorkflow, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
@@ -139,6 +139,104 @@ export function genOpenAPI(schema: Schema): string {
   }
 
   if (hasCommerceWorkflow(schema)) {
+    schemas.CommerceCartItemInput = {
+      type: "object",
+      properties: {
+        item_id: { type: "integer" },
+        quantity: { type: "integer", default: 1 },
+        options: { type: "object", additionalProperties: { oneOf: [{ type: "string" }, { type: "integer" }, { type: "null" }] } },
+      },
+      required: ["item_id"],
+    };
+    schemas.CommerceCheckoutInput = {
+      type: "object",
+      properties: {
+        user_id: { type: "integer" },
+        client: { type: "string", default: "web" },
+        items: { type: "array", items: { $ref: "#/components/schemas/CommerceCartItemInput" } },
+      },
+      required: ["items"],
+    };
+    schemas.CommerceCheckoutResult = {
+      type: "object",
+      properties: {
+        order_id: { type: "integer" },
+        line_item_ids: { type: "array", items: { type: "integer" } },
+        amount_pence: { type: "integer" },
+        currency: { type: "string" },
+        expires_at: { type: "string", format: "date-time" },
+        status: { type: "string" },
+      },
+    };
+    schemas.CommercePaymentIntentResult = {
+      type: "object",
+      properties: {
+        order_id: { type: "integer" },
+        transaction_id: { type: "integer" },
+        reference: { type: "string" },
+        amount_pence: { type: "integer" },
+        currency: { type: "string" },
+        client_secret: { type: "string" },
+        provider: { type: "string" },
+      },
+    };
+    paths["/commerce/checkout"] = {
+      post: {
+        summary: "Checkout a configured cart",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCheckoutInput" } } },
+        },
+        responses: {
+          "201": { description: "Order created", content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCheckoutResult" } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/orders/{id}/payment-intent"] = {
+      post: {
+        summary: "Create a payment intent for a commerce order",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        responses: {
+          "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/CommercePaymentIntentResult" } } } },
+          "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/orders/expire"] = {
+      post: {
+        summary: "Expire stale commerce orders",
+        responses: {
+          "200": { description: "Expired count", content: { "application/json": { schema: { type: "object", properties: { expired: { type: "integer" } } } } } },
+          "403": { description: "Forbidden", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+
+    schemas.PaymentWebhookInput = {
+      type: "object",
+      properties: {
+        reference: { type: "string" },
+        status: { type: "string", enum: ["succeeded", "failed"] },
+        provider: { type: "string" },
+      },
+      required: ["reference", "status"],
+    };
+    paths["/commerce/payments/webhook"] = {
+      post: {
+        summary: "Receive signed payment provider webhooks",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentWebhookInput" } } },
+        },
+        responses: {
+          "200": { description: "Processed" },
+          "401": { description: "Invalid signature", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+
+    if (legacyCommerceWorkflow(schema)) {
     schemas.ReserveBookingInput = {
       type: "object",
       properties: {
@@ -183,19 +281,9 @@ export function genOpenAPI(schema: Schema): string {
         provider: { type: "string" },
       },
     };
-    schemas.PaymentWebhookInput = {
-      type: "object",
-      properties: {
-        reference: { type: "string" },
-        status: { type: "string", enum: ["succeeded", "failed"] },
-        provider: { type: "string" },
-      },
-      required: ["reference", "status"],
-    };
-
     paths["/commerce/bookings/reserve"] = {
       post: {
-        summary: "Reserve tickets for checkout",
+        summary: "Reserve tickets for checkout (compatibility alias)",
         requestBody: {
           required: true,
           content: { "application/json": { schema: { $ref: "#/components/schemas/ReserveBookingInput" } } },
@@ -208,7 +296,7 @@ export function genOpenAPI(schema: Schema): string {
     };
     paths["/commerce/bookings/{id}/payment-intent"] = {
       post: {
-        summary: "Create a payment intent for a booking",
+        summary: "Create a payment intent for a booking (compatibility alias)",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentIntentResult" } } } },
@@ -216,28 +304,16 @@ export function genOpenAPI(schema: Schema): string {
         },
       },
     };
-    paths["/commerce/payments/webhook"] = {
-      post: {
-        summary: "Receive signed payment provider webhooks",
-        requestBody: {
-          required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentWebhookInput" } } },
-        },
-        responses: {
-          "200": { description: "Processed" },
-          "401": { description: "Invalid signature", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        },
-      },
-    };
     paths["/commerce/bookings/expire"] = {
       post: {
-        summary: "Expire stale checkout bookings",
+        summary: "Expire stale checkout bookings (compatibility alias)",
         responses: {
           "200": { description: "Expired count", content: { "application/json": { schema: { type: "object", properties: { expired: { type: "integer" } } } } } },
           "403": { description: "Forbidden", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     };
+    }
   }
 
   const spec = {
@@ -250,6 +326,7 @@ export function genOpenAPI(schema: Schema): string {
     servers: [{ url: `http://localhost:${app.defaultPorts.server}` }],
     paths,
     components: { schemas },
+    ...(openApiEcommerceMetadata(schema) ? { "x-openb2c-ecommerce": openApiEcommerceMetadata(schema) } : {}),
   };
 
   return JSON.stringify(spec, null, 2);

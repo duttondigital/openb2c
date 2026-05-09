@@ -1,12 +1,12 @@
 import type { Schema } from "./types";
 import { requiredProductionEnvVars } from "./config";
-import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, pascalCase, camelCase } from "./utils";
+import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, legacyCommerceWorkflow, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
-function genCommerceRoutes(): string[] {
-  return [
-`  // Commerce
+function genConfiguredCommerceRoutes(schema: Schema): string[] {
+  const compatibilityRoutes = legacyCommerceWorkflow(schema) ? `
+  // Compatibility aliases for the original booking-oriented API.
   { method: "POST", path: "/commerce/bookings/reserve", handler: async (req, _, auth, signal) => {
     const input = await readJson<S.ReserveBookingInput>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
@@ -37,6 +37,45 @@ function genCommerceRoutes(): string[] {
     }
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},
+  { method: "POST", path: "/commerce/bookings/expire", handler: (_, __, auth) => {
+    if (!S.hasScope(auth, "booking.expire") && !S.hasScope(auth, "commerce.expire") && !S.hasScope(auth, "*")) {
+      return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    }
+    const r = S.expireCheckoutBookings(db);
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
+  }},` : "";
+  return [
+`  // Generic ecommerce
+  { method: "POST", path: "/commerce/checkout", handler: async (req, _, auth, signal) => {
+    const input = await readJson<S.CommerceCheckoutInput>(req, signal);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const r = S.checkoutCommerceCart(db, input.data, auth);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "commerce.checkout",
+        entity: "commerce_order",
+        recordId: r.data.order_id,
+        result: r.data,
+        idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
+      });
+    }
+    return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
+  { method: "POST", path: "/commerce/orders/:id/payment-intent", handler: async (req, p, auth) => {
+    const r = S.createCommercePaymentIntent(db, +p.id, auth);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "commerce.create_payment_intent",
+        entity: "commerce_order",
+        recordId: r.data.order_id,
+        result: r.data,
+        idempotencyKey: req.headers.get("Idempotency-Key") || ("commerce-payment-intent:" + r.data.order_id),
+      });
+    }
+    return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
   { method: "POST", path: "/commerce/payments/webhook", handler: async (req, _, __, signal) => {
     const contentType = req.headers.get("content-type") || "";
     const mediaType = contentType.split(";")[0]?.trim().toLowerCase();
@@ -54,26 +93,26 @@ function genCommerceRoutes(): string[] {
     } catch {
       return corsResponse({ ok: false, error: "malformed JSON", code: "invalid" }, { status: 400 });
     }
-    const r = S.handlePaymentWebhook(db, input);
+    const r = S.handleCommercePaymentWebhook(db, input);
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",
         operation: "commerce.payment_webhook",
-        entity: "booking",
-        recordId: r.data.booking_id,
+        entity: "commerce_order",
+        recordId: r.data.order_id,
         result: r.data,
         idempotencyKey: "payment-webhook:" + input.reference + ":" + input.status,
       });
     }
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},
-  { method: "POST", path: "/commerce/bookings/expire", handler: (_, __, auth) => {
-    if (!S.hasScope(auth, "booking.expire") && !S.hasScope(auth, "*")) {
+  { method: "POST", path: "/commerce/orders/expire", handler: (_, __, auth) => {
+    if (!S.hasScope(auth, "commerce.expire") && !S.hasScope(auth, "*")) {
       return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
     }
-    const r = S.expireCheckoutBookings(db);
+    const r = S.expireCommerceOrders(db);
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
-  }},`,
+  }},${compatibilityRoutes}`,
   ];
 }
 
@@ -88,7 +127,7 @@ export function genRoutes(schema: Schema): string {
   const routes: string[] = [];
 
   if (hasCommerceWorkflow(schema)) {
-    routes.push(...genCommerceRoutes());
+    routes.push(...genConfiguredCommerceRoutes(schema));
     routes.push("");
   }
 

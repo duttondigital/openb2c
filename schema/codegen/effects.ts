@@ -16,6 +16,9 @@ export function genEffectsInterface(schema: Schema): string {
     }
   }
   if (hasCommerceWorkflow(schema)) {
+    events.add("commerce.order_created");
+    events.add("commerce.order_paid");
+    events.add("commerce.payment_failed");
     events.add("booking.reserved");
     events.add("booking.paid");
     events.add("booking.payment_failed");

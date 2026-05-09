@@ -1,8 +1,214 @@
-import type { Column, Operation, Schema, Tables } from "./types";
-import { pascalCase, camelCase, hasCommerceWorkflow } from "./utils";
+import type { Column, EcommerceConfig, FieldRef, Operation, Schema, Tables } from "./types";
+import { pascalCase, camelCase, getEcommerceConfig, hasCommerceWorkflow, legacyCommerceWorkflow } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
+function sqlIdent(name: string): string {
+  return `[${name.replace(/]/g, "]]")}]`;
+}
+
+function requireEcommerceField(path: string, ref: FieldRef | null | undefined): FieldRef {
+  if (!ref) throw new Error(`ecommerce.${path} is required`);
+  return ref;
+}
+
+function requireEcommerceEntity(path: string, value: string): string {
+  if (!value) throw new Error(`ecommerce.${path} is required`);
+  return value;
+}
+
+function referencedEntity(ref: FieldRef): string | null {
+  const referenceEntity = ref.references?.match(/^([a-z_]+)\(/)?.[1];
+  if (referenceEntity) return referenceEntity;
+  return ref.field.endsWith("_id") ? ref.field.slice(0, -3) : null;
+}
+
+function ecommerceRuntimeConfig(schema: Schema): Record<string, unknown> {
+  const ecommerce = getEcommerceConfig(schema);
+  if (!ecommerce) {
+    if (!legacyCommerceWorkflow(schema)) throw new Error("ecommerce config is required for commerce generation");
+    return legacyEcommerceConfig();
+  }
+  return normalizeEcommerceConfig(ecommerce);
+}
+
+function normalizeEcommerceConfig(ecommerce: EcommerceConfig): Record<string, unknown> {
+  const catalogEntity = requireEcommerceEntity("catalog.entity", ecommerce.catalog.entity);
+  const orderEntity = requireEcommerceEntity("order.entity", ecommerce.order.entity);
+  const lineItemEntity = requireEcommerceEntity("lineItem.entity", ecommerce.lineItem.entity);
+  const orderLineEntity = requireEcommerceEntity("orderLine.entity", ecommerce.orderLine.entity);
+  const transactionEntity = requireEcommerceEntity("transaction.entity", ecommerce.transaction.entity);
+  const transactionLineEntity = requireEcommerceEntity("transactionLine.entity", ecommerce.transactionLine.entity);
+  const orderUser = requireEcommerceField("order.user", ecommerce.order.user);
+
+  return {
+    catalog: {
+      entity: catalogEntity,
+      table: sqlIdent(catalogEntity),
+      title: ecommerce.catalog.title,
+      description: ecommerce.catalog.description,
+      price: requireEcommerceField("catalog.price", ecommerce.catalog.price),
+      groupBy: ecommerce.catalog.groupBy,
+      variantFields: ecommerce.catalog.variantFields,
+      availability: {
+        field: ecommerce.catalog.availability.field,
+        available: ecommerce.catalog.availability.available,
+      },
+    },
+    order: {
+      entity: orderEntity,
+      table: sqlIdent(orderEntity),
+      user: orderUser,
+      userTable: referencedEntity(orderUser) ? sqlIdent(referencedEntity(orderUser)!) : null,
+      status: requireEcommerceField("order.status", ecommerce.order.status),
+      amount: requireEcommerceField("order.amount", ecommerce.order.amount),
+      currency: requireEcommerceField("order.currency", ecommerce.order.currency),
+      expiresAt: requireEcommerceField("order.expiresAt", ecommerce.order.expiresAt),
+      paymentReference: requireEcommerceField("order.paymentReference", ecommerce.order.paymentReference),
+      client: ecommerce.order.client,
+      pendingStatus: ecommerce.order.pendingStatus,
+      paidStatus: ecommerce.order.paidStatus,
+      expiredStatus: ecommerce.order.expiredStatus,
+      cancelledStatus: ecommerce.order.cancelledStatus,
+    },
+    lineItem: {
+      entity: lineItemEntity,
+      table: sqlIdent(lineItemEntity),
+      catalogItem: requireEcommerceField("lineItem.catalogItem", ecommerce.lineItem.catalogItem),
+      user: ecommerce.lineItem.user,
+      price: requireEcommerceField("lineItem.price", ecommerce.lineItem.price),
+      status: requireEcommerceField("lineItem.status", ecommerce.lineItem.status),
+      quantity: ecommerce.lineItem.quantity,
+      reservedStatus: ecommerce.lineItem.reservedStatus,
+      fulfilledStatus: ecommerce.lineItem.fulfilledStatus,
+      cancelledStatus: ecommerce.lineItem.cancelledStatus,
+      options: ecommerce.lineItem.options,
+    },
+    orderLine: {
+      entity: orderLineEntity,
+      table: sqlIdent(orderLineEntity),
+      order: requireEcommerceField("orderLine.order", ecommerce.orderLine.order),
+      lineItem: requireEcommerceField("orderLine.lineItem", ecommerce.orderLine.lineItem),
+    },
+    transaction: {
+      entity: transactionEntity,
+      table: sqlIdent(transactionEntity),
+      user: requireEcommerceField("transaction.user", ecommerce.transaction.user),
+      amount: requireEcommerceField("transaction.amount", ecommerce.transaction.amount),
+      type: ecommerce.transaction.type,
+      status: requireEcommerceField("transaction.status", ecommerce.transaction.status),
+      reference: requireEcommerceField("transaction.reference", ecommerce.transaction.reference),
+      client: ecommerce.transaction.client,
+      purchaseType: ecommerce.transaction.purchaseType,
+      pendingStatus: ecommerce.transaction.pendingStatus,
+      completedStatus: ecommerce.transaction.completedStatus,
+      failedStatus: ecommerce.transaction.failedStatus,
+    },
+    transactionLine: {
+      entity: transactionLineEntity,
+      table: sqlIdent(transactionLineEntity),
+      transaction: requireEcommerceField("transactionLine.transaction", ecommerce.transactionLine.transaction),
+      lineItem: requireEcommerceField("transactionLine.lineItem", ecommerce.transactionLine.lineItem),
+    },
+    checkout: ecommerce.checkout,
+  };
+}
+
+function legacyEcommerceConfig(): Record<string, unknown> {
+  return normalizeEcommerceConfig({
+    enabled: true,
+    catalog: {
+      entity: "performance",
+      title: { table: "performance", field: "title", references: null },
+      description: { table: "performance", field: "description", references: null },
+      price: { table: "performance", field: "price_pence", references: null },
+      groupBy: [{ table: "performance", field: "title", references: null }],
+      variantFields: [
+        { table: "performance", field: "date", references: null },
+        { table: "performance", field: "time", references: null },
+        { table: "performance", field: "venue_id", references: "venue(id)" },
+      ],
+      availability: { field: { table: "performance", field: "status", references: null }, available: "scheduled" },
+    },
+    order: {
+      entity: "booking",
+      user: { table: "booking", field: "user_id", references: "user(id)" },
+      status: { table: "booking", field: "status", references: null },
+      amount: { table: "booking", field: "amount_pence", references: null },
+      currency: { table: "booking", field: "currency", references: null },
+      expiresAt: { table: "booking", field: "expires_at", references: null },
+      paymentReference: { table: "booking", field: "payment_reference", references: null },
+      client: { table: "booking", field: "client", references: null },
+      pendingStatus: "checkout_pending",
+      paidStatus: "paid",
+      expiredStatus: "expired",
+      cancelledStatus: "cancelled",
+    },
+    lineItem: {
+      entity: "ticket",
+      catalogItem: { table: "ticket", field: "performance_id", references: "performance(id)" },
+      user: { table: "ticket", field: "user_id", references: "user(id)" },
+      price: { table: "ticket", field: "price_pence", references: null },
+      status: { table: "ticket", field: "status", references: null },
+      quantity: null,
+      reservedStatus: "reserved",
+      fulfilledStatus: "confirmed",
+      cancelledStatus: "cancelled",
+      options: {
+        ticket_type: {
+          field: { table: "ticket", field: "ticket_type", references: null },
+          type: "text",
+          label: "Ticket type",
+          default: "standard",
+          choices: ["standard", "concession", "patron"],
+          required: false,
+          min: null,
+          max: null,
+        },
+        seat: {
+          field: { table: "ticket", field: "seat", references: null },
+          type: "text",
+          label: "Seat",
+          default: null,
+          choices: [],
+          required: false,
+          min: null,
+          max: null,
+        },
+      },
+    },
+    orderLine: {
+      entity: "booking_ticket",
+      order: { table: "booking_ticket", field: "booking_id", references: "booking(id)" },
+      lineItem: { table: "booking_ticket", field: "ticket_id", references: "ticket(id)" },
+    },
+    transaction: {
+      entity: "transaction",
+      user: { table: "transaction", field: "user_id", references: "user(id)" },
+      amount: { table: "transaction", field: "amount_pence", references: null },
+      type: { table: "transaction", field: "type", references: null },
+      status: { table: "transaction", field: "status", references: null },
+      reference: { table: "transaction", field: "reference", references: null },
+      client: { table: "transaction", field: "client", references: null },
+      purchaseType: "purchase",
+      pendingStatus: "pending",
+      completedStatus: "completed",
+      failedStatus: "failed",
+    },
+    transactionLine: {
+      entity: "transaction_ticket",
+      transaction: { table: "transaction_ticket", field: "transaction_id", references: "transaction(id)" },
+      lineItem: { table: "transaction_ticket", field: "ticket_id", references: "ticket(id)" },
+    },
+    checkout: {
+      currency: "GBP",
+      expiryMinutes: 15,
+      maxQuantity: 20,
+      maxLines: 50,
+    },
+  });
+}
 
 function defaultOperation(): Operation {
   return { guard: null, relationships: [], public: false, scope: null, set: {}, cascade: [], effects: [] };
@@ -866,15 +1072,51 @@ ${effectsCode}
 `;
 }
 
-function genCommerceServices(): string {
+function genConfiguredCommerceServices(schema: Schema): string {
+  const runtimeConfig = ecommerceRuntimeConfig(schema);
+  const includeLegacyAliases = legacyCommerceWorkflow(schema);
+  const legacyBookingField = includeLegacyAliases ? "booking_id: Number(order.id), " : "";
   return `
 // ============================================================================
-// Commerce Workflow
+// Generic Ecommerce Workflow
 // ============================================================================
 
-const COMMERCE_MAX_TICKETS_PER_BOOKING = 20;
-const DEFAULT_BOOKING_EXPIRY_MINUTES = 15;
+const ECOMMERCE = ${JSON.stringify(runtimeConfig, null, 2)} as const;
 
+export type CommerceOptionValue = string | number | null;
+
+export interface CommerceCartItemInput {
+  item_id: number;
+  quantity?: number;
+  options?: Record<string, CommerceOptionValue>;
+}
+
+export interface CommerceCheckoutInput {
+  user_id?: number;
+  client?: string;
+  items: CommerceCartItemInput[];
+}
+
+export interface CommerceCheckoutResult {
+  order_id: number;
+  line_item_ids: number[];
+  amount_pence: number;
+  currency: string;
+  expires_at: string;
+  status: string;
+}
+
+export interface CommercePaymentIntentResult {
+  order_id: number;
+  transaction_id: number;
+  reference: string;
+  amount_pence: number;
+  currency: string;
+  client_secret: string;
+  provider: string;
+}
+
+${includeLegacyAliases ? `
 export interface ReserveTicketRequest {
   ticket_type?: string;
   seat?: string;
@@ -907,6 +1149,7 @@ export interface PaymentIntentResult {
   client_secret: string;
   provider: string;
 }
+` : ""}
 
 export interface PaymentWebhookInput {
   reference: string;
@@ -915,10 +1158,14 @@ export interface PaymentWebhookInput {
 }
 
 export interface PaymentWebhookResult {
-  booking_id: number;
+${includeLegacyAliases ? "  booking_id: number;\n" : ""}  order_id: number;
   transaction_id: number;
   status: string;
   idempotent: boolean;
+}
+
+function column(ref: { field: string }): string {
+  return "[" + ref.field.replace(/]/g, "]]") + "]";
 }
 
 function resolveCommerceUser(inputUserId: number | undefined, auth: T.AuthContext): Result<number> {
@@ -927,154 +1174,285 @@ function resolveCommerceUser(inputUserId: number | undefined, auth: T.AuthContex
   return { ok: false, error: "authenticated user required", code: "unauthorized" };
 }
 
-function bookingTicketIds(db: Database, bookingId: number): number[] {
-  return (db.query("SELECT ticket_id FROM booking_ticket WHERE booking_id = ? ORDER BY id").all(bookingId) as { ticket_id: number }[])
-    .map(row => row.ticket_id);
+function optionDefinitions(): Record<string, {
+  field: { field: string } | null;
+  type: string;
+  label: string | null;
+  default: string | null;
+  choices: string[];
+  required: boolean;
+  min: number | null;
+  max: number | null;
+}> {
+  return ECOMMERCE.lineItem.options as any;
 }
 
-function expireBookingIds(db: Database, bookingIds: number[]): number {
-  if (bookingIds.length === 0) return 0;
-  const placeholders = bookingIds.map(() => "?").join(", ");
+function normalizeCommerceOptions(input: Record<string, CommerceOptionValue> | undefined): Result<Record<string, CommerceOptionValue>> {
+  const out: Record<string, CommerceOptionValue> = {};
+  for (const [name, def] of Object.entries(optionDefinitions())) {
+    const raw = input?.[name] ?? def.default ?? null;
+    if ((raw === null || raw === "") && def.required) {
+      return { ok: false, error: name + " is required", code: "invalid" };
+    }
+    if (raw !== null && raw !== "") {
+      if (def.choices.length > 0 && !def.choices.includes(String(raw))) {
+        return { ok: false, error: name + " is not an allowed option", code: "invalid" };
+      }
+      if (def.type === "integer") {
+        const n = Number(raw);
+        if (!Number.isInteger(n)) return { ok: false, error: name + " must be an integer", code: "invalid" };
+        if (def.min !== null && n < def.min) return { ok: false, error: name + " is below minimum", code: "invalid" };
+        if (def.max !== null && n > def.max) return { ok: false, error: name + " is above maximum", code: "invalid" };
+        out[name] = n;
+      } else {
+        out[name] = String(raw);
+      }
+    } else {
+      out[name] = null;
+    }
+  }
+  return { ok: true, data: out };
+}
+
+function commerceLineItemIdsForOrder(db: Database, orderId: number): number[] {
+  return (db.query(
+    "SELECT " + column(ECOMMERCE.orderLine.lineItem) + " AS line_item_id FROM " + ECOMMERCE.orderLine.table +
+    " WHERE " + column(ECOMMERCE.orderLine.order) + " = ? ORDER BY id"
+  ).all(orderId) as { line_item_id: number }[]).map(row => row.line_item_id);
+}
+
+function expireCommerceOrderIds(db: Database, orderIds: number[]): number {
+  if (orderIds.length === 0) return 0;
+  const placeholders = orderIds.map(() => "?").join(", ");
+  const orderPaymentRef = column(ECOMMERCE.order.paymentReference);
+  const orderId = "[id]";
   const expire = db.transaction(() => {
-    db.query("UPDATE [transaction] SET status = 'failed' WHERE status = 'pending' AND reference IN (SELECT payment_reference FROM booking WHERE id IN (" + placeholders + ") AND payment_reference IS NOT NULL)").run(...bookingIds);
-    db.query("UPDATE ticket SET status = 'cancelled' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id IN (" + placeholders + "))").run(...bookingIds);
-    db.query("UPDATE booking SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE status = 'checkout_pending' AND id IN (" + placeholders + ")").run(...bookingIds);
+    db.query(
+      "UPDATE " + ECOMMERCE.transaction.table + " SET " + column(ECOMMERCE.transaction.status) + " = ? " +
+      "WHERE " + column(ECOMMERCE.transaction.status) + " = ? AND " + column(ECOMMERCE.transaction.reference) +
+      " IN (SELECT " + orderPaymentRef + " FROM " + ECOMMERCE.order.table + " WHERE " + orderId + " IN (" + placeholders + ") AND " + orderPaymentRef + " IS NOT NULL)"
+    ).run(ECOMMERCE.transaction.failedStatus, ECOMMERCE.transaction.pendingStatus, ...orderIds);
+    db.query(
+      "UPDATE " + ECOMMERCE.lineItem.table + " SET " + column(ECOMMERCE.lineItem.status) + " = ? WHERE [id] IN (" +
+      "SELECT " + column(ECOMMERCE.orderLine.lineItem) + " FROM " + ECOMMERCE.orderLine.table +
+      " WHERE " + column(ECOMMERCE.orderLine.order) + " IN (" + placeholders + "))"
+    ).run(ECOMMERCE.lineItem.cancelledStatus, ...orderIds);
+    db.query(
+      "UPDATE " + ECOMMERCE.order.table + " SET " + column(ECOMMERCE.order.status) + " = ? " +
+      "WHERE " + column(ECOMMERCE.order.status) + " = ? AND [id] IN (" + placeholders + ")"
+    ).run(ECOMMERCE.order.expiredStatus, ECOMMERCE.order.pendingStatus, ...orderIds);
   });
   expire();
-  return bookingIds.length;
+  return orderIds.length;
 }
 
-export function reserveBooking(db: Database, input: ReserveBookingInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<ReserveBookingResult> {
-  if (!Number.isInteger(input.performance_id) || input.performance_id <= 0) {
-    return { ok: false, error: "performance_id is required", code: "invalid" };
-  }
+export function checkoutCommerceCart(db: Database, input: CommerceCheckoutInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<CommerceCheckoutResult> {
+  const items = Array.isArray(input.items) ? input.items : [];
+  if (items.length === 0) return { ok: false, error: "cart must contain at least one item", code: "invalid" };
+  if (items.length > ECOMMERCE.checkout.maxLines) return { ok: false, error: "cart has too many lines", code: "invalid" };
 
   const user = resolveCommerceUser(input.user_id, auth);
   if (!user.ok) return { ok: false, error: user.error, code: user.code };
   const userId = user.data;
-  if (!can("booking", "create", auth, { user_id: userId })) {
-    return authorizationError("booking", "create", auth);
+  if (!can(ECOMMERCE.order.entity, "create", auth, { [ECOMMERCE.order.user.field]: userId })) {
+    return authorizationError(ECOMMERCE.order.entity, "create", auth);
   }
 
-  const userRow = db.query("SELECT id FROM user WHERE id = ?").get(userId) as { id: number } | null;
-  if (!userRow) return { ok: false, error: "user not found", code: "not_found" };
-
-  const performance = db.query("SELECT id, status, price_pence FROM performance WHERE id = ?").get(input.performance_id) as { id: number; status: string | null; price_pence: number } | null;
-  if (!performance) return { ok: false, error: "performance not found", code: "not_found" };
-  if (performance.status !== "scheduled") return { ok: false, error: "performance is not available for booking", code: "bad_state" };
-  if (!Number.isInteger(performance.price_pence) || performance.price_pence <= 0) {
-    return { ok: false, error: "performance has no configured ticket price", code: "invalid" };
+  if (ECOMMERCE.order.userTable) {
+    const userRow = db.query("SELECT id FROM " + ECOMMERCE.order.userTable + " WHERE id = ?").get(userId) as { id: number } | null;
+    if (!userRow) return { ok: false, error: "user not found", code: "not_found" };
   }
 
-  const quantity = input.quantity ?? 1;
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > COMMERCE_MAX_TICKETS_PER_BOOKING) {
-    return { ok: false, error: "quantity must be between 1 and " + COMMERCE_MAX_TICKETS_PER_BOOKING, code: "invalid" };
+  const preparedItems: {
+    itemId: number;
+    quantity: number;
+    unitPrice: number;
+    options: Record<string, CommerceOptionValue>;
+  }[] = [];
+
+  for (const item of items) {
+    if (!Number.isInteger(item.item_id) || item.item_id <= 0) {
+      return { ok: false, error: "item_id is required", code: "invalid" };
+    }
+    const quantity = item.quantity ?? 1;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > ECOMMERCE.checkout.maxQuantity) {
+      return { ok: false, error: "quantity must be between 1 and " + ECOMMERCE.checkout.maxQuantity, code: "invalid" };
+    }
+
+    const catalog = db.query(
+      "SELECT [id] AS id, " + column(ECOMMERCE.catalog.price) + " AS price" +
+      (ECOMMERCE.catalog.availability.field ? ", " + column(ECOMMERCE.catalog.availability.field) + " AS availability" : "") +
+      " FROM " + ECOMMERCE.catalog.table + " WHERE [id] = ?"
+    ).get(item.item_id) as { id: number; price: number; availability?: string | number | null } | null;
+    if (!catalog) return { ok: false, error: "catalog item not found", code: "not_found" };
+    if (ECOMMERCE.catalog.availability.field && String(catalog.availability) !== ECOMMERCE.catalog.availability.available) {
+      return { ok: false, error: "catalog item is not available", code: "bad_state" };
+    }
+    if (!Number.isInteger(catalog.price) || catalog.price <= 0) {
+      return { ok: false, error: "catalog item has no configured price", code: "invalid" };
+    }
+
+    const options = normalizeCommerceOptions(item.options);
+    if (!options.ok) return options;
+    preparedItems.push({ itemId: item.item_id, quantity, unitPrice: catalog.price, options: options.data });
   }
 
-  const requestedTickets = Array.isArray(input.tickets) && input.tickets.length > 0
-    ? input.tickets
-    : Array.from({ length: quantity }, () => ({}));
-  if (requestedTickets.length > COMMERCE_MAX_TICKETS_PER_BOOKING) {
-    return { ok: false, error: "too many tickets requested", code: "invalid" };
-  }
-
-  const tickets = requestedTickets.map(ticket => {
-    const type = ticket.ticket_type ?? input.ticket_type ?? "standard";
-    if (typeof type !== "string" || type.trim() === "") return null;
-    const seat = ticket.seat;
-    if (seat !== undefined && typeof seat !== "string") return null;
-    return { price_pence: performance.price_pence, ticket_type: type, seat: seat ?? null };
-  });
-  if (tickets.some(ticket => ticket === null)) {
-    return { ok: false, error: "invalid ticket request", code: "invalid" };
-  }
-
-  const amount = (tickets as { price_pence: number; ticket_type: string; seat: string | null }[])
-    .reduce((sum, ticket) => sum + ticket.price_pence, 0);
-  const expiresAt = new Date(Date.now() + DEFAULT_BOOKING_EXPIRY_MINUTES * 60000).toISOString();
+  const amount = preparedItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const expiresAt = new Date(Date.now() + ECOMMERCE.checkout.expiryMinutes * 60000).toISOString();
   const client = typeof input.client === "string" && input.client.trim() ? input.client : "web";
 
   try {
     const create = db.transaction(() => {
-      const booking = db.query("INSERT INTO booking (user_id, amount_pence, currency, expires_at, client) VALUES (?, ?, 'GBP', ?, ?) RETURNING id")
-        .get(userId, amount, expiresAt, client) as { id: number };
-      const ticketIds: number[] = [];
-      for (const ticket of tickets as { price_pence: number; ticket_type: string; seat: string | null }[]) {
-        const row = db.query("INSERT INTO ticket (performance_id, user_id, seat, price_pence, ticket_type, status) VALUES (?, ?, ?, ?, ?, 'reserved') RETURNING id")
-          .get(input.performance_id, userId, ticket.seat, ticket.price_pence, ticket.ticket_type) as { id: number };
-        ticketIds.push(row.id);
-        db.query("INSERT INTO booking_ticket (booking_id, ticket_id) VALUES (?, ?)").run(booking.id, row.id);
+      const orderColumns = [
+        column(ECOMMERCE.order.user),
+        column(ECOMMERCE.order.status),
+        column(ECOMMERCE.order.amount),
+        column(ECOMMERCE.order.currency),
+        column(ECOMMERCE.order.expiresAt),
+        ...(ECOMMERCE.order.client ? [column(ECOMMERCE.order.client)] : []),
+      ];
+      const orderValues = [
+        userId,
+        ECOMMERCE.order.pendingStatus,
+        amount,
+        ECOMMERCE.checkout.currency,
+        expiresAt,
+        ...(ECOMMERCE.order.client ? [client] : []),
+      ];
+      const order = db.query(
+        "INSERT INTO " + ECOMMERCE.order.table + " (" + orderColumns.join(", ") + ") VALUES (" +
+        orderColumns.map(() => "?").join(", ") + ") RETURNING id"
+      ).get(...orderValues) as { id: number };
+
+      const lineItemIds: number[] = [];
+      for (const item of preparedItems) {
+        const repetitions = ECOMMERCE.lineItem.quantity ? 1 : item.quantity;
+        for (let i = 0; i < repetitions; i++) {
+          const lineColumns = [
+            column(ECOMMERCE.lineItem.catalogItem),
+            column(ECOMMERCE.lineItem.price),
+            column(ECOMMERCE.lineItem.status),
+            ...(ECOMMERCE.lineItem.user ? [column(ECOMMERCE.lineItem.user)] : []),
+            ...(ECOMMERCE.lineItem.quantity ? [column(ECOMMERCE.lineItem.quantity)] : []),
+          ];
+          const lineValues: unknown[] = [
+            item.itemId,
+            item.unitPrice,
+            ECOMMERCE.lineItem.reservedStatus,
+            ...(ECOMMERCE.lineItem.user ? [userId] : []),
+            ...(ECOMMERCE.lineItem.quantity ? [item.quantity] : []),
+          ];
+          for (const [name, def] of Object.entries(optionDefinitions())) {
+            if (!def.field) continue;
+            lineColumns.push(column(def.field));
+            lineValues.push(item.options[name] ?? null);
+          }
+
+          const line = db.query(
+            "INSERT INTO " + ECOMMERCE.lineItem.table + " (" + lineColumns.join(", ") + ") VALUES (" +
+            lineColumns.map(() => "?").join(", ") + ") RETURNING id"
+          ).get(...lineValues) as { id: number };
+          lineItemIds.push(line.id);
+          db.query(
+            "INSERT INTO " + ECOMMERCE.orderLine.table + " (" + column(ECOMMERCE.orderLine.order) + ", " + column(ECOMMERCE.orderLine.lineItem) + ") VALUES (?, ?)"
+          ).run(order.id, line.id);
+        }
       }
-      return { bookingId: booking.id, ticketIds };
+      return { orderId: order.id, lineItemIds };
     });
+
     const result = create();
     return {
       ok: true,
       data: {
-        booking_id: result.bookingId,
-        ticket_ids: result.ticketIds,
+        order_id: result.orderId,
+        line_item_ids: result.lineItemIds,
         amount_pence: amount,
-        currency: "GBP",
+        currency: ECOMMERCE.checkout.currency,
         expires_at: expiresAt,
-        status: "checkout_pending",
+        status: ECOMMERCE.order.pendingStatus,
       },
       effects: [
-        { type: "emit", payload: { event: "booking.reserved", booking_id: result.bookingId, ticket_ids: result.ticketIds, amount_pence: amount } },
+        { type: "emit", payload: { event: "commerce.order_created", order_id: result.orderId, line_item_ids: result.lineItemIds, amount_pence: amount } },
       ],
     };
-  } catch (err) {
-    return { ok: false, error: "booking reservation failed", code: "conflict" };
+  } catch {
+    return { ok: false, error: "checkout failed", code: "conflict" };
   }
 }
 
-export function createPaymentIntentForBooking(db: Database, bookingId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<PaymentIntentResult> {
-  if (!Number.isInteger(bookingId) || bookingId <= 0) {
-    return { ok: false, error: "booking id is required", code: "invalid" };
+export function createCommercePaymentIntent(db: Database, orderId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<CommercePaymentIntentResult> {
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return { ok: false, error: "order id is required", code: "invalid" };
   }
 
-  const booking = db.query("SELECT * FROM booking WHERE id = ?").get(bookingId) as T.Booking | null;
-  if (!booking) return { ok: false, error: "booking not found", code: "not_found" };
-  if (!can("booking", "update", auth, booking as Record<string, unknown>)) {
-    return authorizationError("booking", "update", auth);
+  const order = db.query("SELECT * FROM " + ECOMMERCE.order.table + " WHERE id = ?").get(orderId) as Record<string, unknown> | null;
+  if (!order) return { ok: false, error: "order not found", code: "not_found" };
+  if (!can(ECOMMERCE.order.entity, "update", auth, order)) {
+    return authorizationError(ECOMMERCE.order.entity, "update", auth);
   }
-  if (booking.status !== "checkout_pending") {
-    return { ok: false, error: "booking is not awaiting payment", code: "bad_state" };
+  if (order[ECOMMERCE.order.status.field] !== ECOMMERCE.order.pendingStatus) {
+    return { ok: false, error: "order is not awaiting payment", code: "bad_state" };
   }
-  if (Date.parse(booking.expires_at) <= Date.now()) {
-    expireBookingIds(db, [booking.id]);
-    return { ok: false, error: "booking expired", code: "bad_state" };
+  if (Date.parse(String(order[ECOMMERCE.order.expiresAt.field])) <= Date.now()) {
+    expireCommerceOrderIds(db, [Number(order.id)]);
+    return { ok: false, error: "order expired", code: "bad_state" };
   }
 
-  const existingReference = booking.payment_reference;
+  const existingReference = order[ECOMMERCE.order.paymentReference.field];
   if (existingReference) {
-    const existing = db.query("SELECT id FROM [transaction] WHERE reference = ?").get(existingReference) as { id: number } | null;
+    const existing = db.query("SELECT id FROM " + ECOMMERCE.transaction.table + " WHERE " + column(ECOMMERCE.transaction.reference) + " = ?")
+      .get(existingReference) as { id: number } | null;
     if (existing) {
       return {
         ok: true,
         data: {
-          booking_id: booking.id,
+          order_id: Number(order.id),
           transaction_id: existing.id,
-          reference: existingReference,
-          amount_pence: booking.amount_pence,
-          currency: booking.currency,
-          client_secret: existingReference + "_secret",
+          reference: String(existingReference),
+          amount_pence: Number(order[ECOMMERCE.order.amount.field]),
+          currency: String(order[ECOMMERCE.order.currency.field]),
+          client_secret: String(existingReference) + "_secret",
           provider: process.env.PAYMENT_PROVIDER || "local",
         },
       };
     }
   }
 
-  const ticketIds = bookingTicketIds(db, booking.id);
-  if (ticketIds.length === 0) return { ok: false, error: "booking has no tickets", code: "invalid" };
+  const lineItemIds = commerceLineItemIdsForOrder(db, Number(order.id));
+  if (lineItemIds.length === 0) return { ok: false, error: "order has no line items", code: "invalid" };
   const reference = "fake_pi_" + crypto.randomUUID();
+  const client = ECOMMERCE.order.client ? String(order[ECOMMERCE.order.client.field] ?? "web") : "web";
 
   const create = db.transaction(() => {
-    const transaction = db.query("INSERT INTO [transaction] (user_id, amount_pence, type, status, reference, client) VALUES (?, ?, 'purchase', 'pending', ?, ?) RETURNING id")
-      .get(booking.user_id, booking.amount_pence, reference, booking.client) as { id: number };
-    for (const ticketId of ticketIds) {
-      db.query("INSERT OR IGNORE INTO transaction_ticket (transaction_id, ticket_id) VALUES (?, ?)").run(transaction.id, ticketId);
+    const txColumns = [
+      column(ECOMMERCE.transaction.user),
+      column(ECOMMERCE.transaction.amount),
+      column(ECOMMERCE.transaction.status),
+      column(ECOMMERCE.transaction.reference),
+      ...(ECOMMERCE.transaction.type ? [column(ECOMMERCE.transaction.type)] : []),
+      ...(ECOMMERCE.transaction.client ? [column(ECOMMERCE.transaction.client)] : []),
+    ];
+    const txValues = [
+      Number(order[ECOMMERCE.order.user.field]),
+      Number(order[ECOMMERCE.order.amount.field]),
+      ECOMMERCE.transaction.pendingStatus,
+      reference,
+      ...(ECOMMERCE.transaction.type ? [ECOMMERCE.transaction.purchaseType] : []),
+      ...(ECOMMERCE.transaction.client ? [client] : []),
+    ];
+    const transaction = db.query(
+      "INSERT INTO " + ECOMMERCE.transaction.table + " (" + txColumns.join(", ") + ") VALUES (" +
+      txColumns.map(() => "?").join(", ") + ") RETURNING id"
+    ).get(...txValues) as { id: number };
+    for (const lineItemId of lineItemIds) {
+      db.query(
+        "INSERT OR IGNORE INTO " + ECOMMERCE.transactionLine.table + " (" + column(ECOMMERCE.transactionLine.transaction) + ", " + column(ECOMMERCE.transactionLine.lineItem) + ") VALUES (?, ?)"
+      ).run(transaction.id, lineItemId);
     }
-    db.query("UPDATE booking SET payment_reference = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(reference, booking.id);
+    db.query(
+      "UPDATE " + ECOMMERCE.order.table + " SET " + column(ECOMMERCE.order.paymentReference) + " = ? WHERE id = ?"
+    ).run(reference, order.id);
     return transaction.id;
   });
   const transactionId = create();
@@ -1082,11 +1460,11 @@ export function createPaymentIntentForBooking(db: Database, bookingId: number, a
   return {
     ok: true,
     data: {
-      booking_id: booking.id,
+      order_id: Number(order.id),
       transaction_id: transactionId,
       reference,
-      amount_pence: booking.amount_pence,
-      currency: booking.currency,
+      amount_pence: Number(order[ECOMMERCE.order.amount.field]),
+      currency: String(order[ECOMMERCE.order.currency.field]),
       client_secret: reference + "_secret",
       provider: process.env.PAYMENT_PROVIDER || "local",
     },
@@ -1098,9 +1476,9 @@ export function createPaymentIntentForBooking(db: Database, bookingId: number, a
           action: "create_intent",
           provider: process.env.PAYMENT_PROVIDER || "local",
           reference,
-          amount_pence: booking.amount_pence,
-          currency: booking.currency,
-          booking_id: booking.id,
+          amount_pence: Number(order[ECOMMERCE.order.amount.field]),
+          currency: String(order[ECOMMERCE.order.currency.field]),
+          order_id: Number(order.id),
           transaction_id: transactionId,
         },
       },
@@ -1108,7 +1486,7 @@ export function createPaymentIntentForBooking(db: Database, bookingId: number, a
   };
 }
 
-export function handlePaymentWebhook(db: Database, input: PaymentWebhookInput): OpResult<PaymentWebhookResult> {
+export function handleCommercePaymentWebhook(db: Database, input: PaymentWebhookInput): OpResult<PaymentWebhookResult> {
   if (!input.reference || typeof input.reference !== "string") {
     return { ok: false, error: "reference is required", code: "invalid" };
   }
@@ -1116,57 +1494,136 @@ export function handlePaymentWebhook(db: Database, input: PaymentWebhookInput): 
     return { ok: false, error: "unsupported payment status", code: "invalid" };
   }
 
-  const transaction = db.query("SELECT * FROM [transaction] WHERE reference = ?").get(input.reference) as T.Transaction | null;
+  const transaction = db.query("SELECT * FROM " + ECOMMERCE.transaction.table + " WHERE " + column(ECOMMERCE.transaction.reference) + " = ?")
+    .get(input.reference) as Record<string, unknown> | null;
   if (!transaction) return { ok: false, error: "transaction not found", code: "not_found" };
-  const booking = db.query("SELECT * FROM booking WHERE payment_reference = ?").get(input.reference) as T.Booking | null;
-  if (!booking) return { ok: false, error: "booking not found", code: "not_found" };
+  const order = db.query("SELECT * FROM " + ECOMMERCE.order.table + " WHERE " + column(ECOMMERCE.order.paymentReference) + " = ?")
+    .get(input.reference) as Record<string, unknown> | null;
+  if (!order) return { ok: false, error: "order not found", code: "not_found" };
 
   if (input.status === "succeeded") {
-    if (transaction.status === "completed" && booking.status === "paid") {
-      return { ok: true, data: { booking_id: booking.id, transaction_id: transaction.id, status: "paid", idempotent: true } };
+    if (transaction[ECOMMERCE.transaction.status.field] === ECOMMERCE.transaction.completedStatus && order[ECOMMERCE.order.status.field] === ECOMMERCE.order.paidStatus) {
+      return { ok: true, data: { ${legacyBookingField}order_id: Number(order.id), transaction_id: Number(transaction.id), status: ECOMMERCE.order.paidStatus, idempotent: true } };
     }
-    if (booking.status !== "checkout_pending") {
-      return { ok: false, error: "booking is not awaiting payment", code: "bad_state" };
+    if (order[ECOMMERCE.order.status.field] !== ECOMMERCE.order.pendingStatus) {
+      return { ok: false, error: "order is not awaiting payment", code: "bad_state" };
     }
     const complete = db.transaction(() => {
-      db.query("UPDATE [transaction] SET status = 'completed' WHERE id = ?").run(transaction.id);
-      db.query("UPDATE booking SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(booking.id);
-      db.query("UPDATE ticket SET status = 'confirmed' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?)").run(booking.id);
+      db.query("UPDATE " + ECOMMERCE.transaction.table + " SET " + column(ECOMMERCE.transaction.status) + " = ? WHERE id = ?")
+        .run(ECOMMERCE.transaction.completedStatus, transaction.id);
+      db.query("UPDATE " + ECOMMERCE.order.table + " SET " + column(ECOMMERCE.order.status) + " = ? WHERE id = ?")
+        .run(ECOMMERCE.order.paidStatus, order.id);
+      db.query(
+        "UPDATE " + ECOMMERCE.lineItem.table + " SET " + column(ECOMMERCE.lineItem.status) + " = ? WHERE [id] IN (" +
+        "SELECT " + column(ECOMMERCE.orderLine.lineItem) + " FROM " + ECOMMERCE.orderLine.table + " WHERE " + column(ECOMMERCE.orderLine.order) + " = ?)"
+      ).run(ECOMMERCE.lineItem.fulfilledStatus, order.id);
     });
     complete();
     return {
       ok: true,
-      data: { booking_id: booking.id, transaction_id: transaction.id, status: "paid", idempotent: false },
+      data: { ${legacyBookingField}order_id: Number(order.id), transaction_id: Number(transaction.id), status: ECOMMERCE.order.paidStatus, idempotent: false },
       effects: [
-        { type: "emit", payload: { event: "booking.paid", booking_id: booking.id, transaction_id: transaction.id, reference: input.reference } },
-        { type: "notify", payload: { channel: "email", template: "receipt", to: "customer", booking_id: booking.id, transaction_id: transaction.id } },
-        { type: "call", payload: { service: "analytics", action: "track_purchase", booking_id: booking.id, transaction_id: transaction.id, amount_pence: booking.amount_pence } },
+        { type: "emit", payload: { event: "commerce.order_paid", order_id: Number(order.id), transaction_id: Number(transaction.id), reference: input.reference } },
+        { type: "notify", payload: { channel: "email", template: "receipt", to: "customer", order_id: Number(order.id), transaction_id: Number(transaction.id) } },
+        { type: "call", payload: { service: "analytics", action: "track_purchase", order_id: Number(order.id), transaction_id: Number(transaction.id), amount_pence: Number(order[ECOMMERCE.order.amount.field]) } },
       ],
     };
   }
 
-  if (transaction.status === "failed" && booking.status === "cancelled") {
-    return { ok: true, data: { booking_id: booking.id, transaction_id: transaction.id, status: "cancelled", idempotent: true } };
+  if (transaction[ECOMMERCE.transaction.status.field] === ECOMMERCE.transaction.failedStatus && order[ECOMMERCE.order.status.field] === ECOMMERCE.order.cancelledStatus) {
+    return { ok: true, data: { ${legacyBookingField}order_id: Number(order.id), transaction_id: Number(transaction.id), status: ECOMMERCE.order.cancelledStatus, idempotent: true } };
   }
   const fail = db.transaction(() => {
-    db.query("UPDATE [transaction] SET status = 'failed' WHERE id = ?").run(transaction.id);
-    db.query("UPDATE booking SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(booking.id);
-    db.query("UPDATE ticket SET status = 'cancelled' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?)").run(booking.id);
+    db.query("UPDATE " + ECOMMERCE.transaction.table + " SET " + column(ECOMMERCE.transaction.status) + " = ? WHERE id = ?")
+      .run(ECOMMERCE.transaction.failedStatus, transaction.id);
+    db.query("UPDATE " + ECOMMERCE.order.table + " SET " + column(ECOMMERCE.order.status) + " = ? WHERE id = ?")
+      .run(ECOMMERCE.order.cancelledStatus, order.id);
+    db.query(
+      "UPDATE " + ECOMMERCE.lineItem.table + " SET " + column(ECOMMERCE.lineItem.status) + " = ? WHERE [id] IN (" +
+      "SELECT " + column(ECOMMERCE.orderLine.lineItem) + " FROM " + ECOMMERCE.orderLine.table + " WHERE " + column(ECOMMERCE.orderLine.order) + " = ?)"
+    ).run(ECOMMERCE.lineItem.cancelledStatus, order.id);
   });
   fail();
   return {
     ok: true,
-    data: { booking_id: booking.id, transaction_id: transaction.id, status: "cancelled", idempotent: false },
+    data: { ${legacyBookingField}order_id: Number(order.id), transaction_id: Number(transaction.id), status: ECOMMERCE.order.cancelledStatus, idempotent: false },
     effects: [
-      { type: "emit", payload: { event: "booking.payment_failed", booking_id: booking.id, transaction_id: transaction.id, reference: input.reference } },
+      { type: "emit", payload: { event: "commerce.payment_failed", order_id: Number(order.id), transaction_id: Number(transaction.id), reference: input.reference } },
     ],
   };
 }
 
-export function expireCheckoutBookings(db: Database, now: Date = new Date()): Result<{ expired: number }> {
-  const rows = db.query("SELECT id FROM booking WHERE status = 'checkout_pending' AND expires_at < ?").all(now.toISOString()) as { id: number }[];
-  return { ok: true, data: { expired: expireBookingIds(db, rows.map(row => row.id)) } };
+export function expireCommerceOrders(db: Database, now: Date = new Date()): Result<{ expired: number }> {
+  const rows = db.query(
+    "SELECT id FROM " + ECOMMERCE.order.table + " WHERE " + column(ECOMMERCE.order.status) + " = ? AND " + column(ECOMMERCE.order.expiresAt) + " < ?"
+  ).all(ECOMMERCE.order.pendingStatus, now.toISOString()) as { id: number }[];
+  return { ok: true, data: { expired: expireCommerceOrderIds(db, rows.map(row => row.id)) } };
 }
+
+${includeLegacyAliases ? `
+export function reserveBooking(db: Database, input: ReserveBookingInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<ReserveBookingResult> {
+  if (!Number.isInteger(input.performance_id) || input.performance_id <= 0) {
+    return { ok: false, error: "performance_id is required", code: "invalid" };
+  }
+  const items = Array.isArray(input.tickets) && input.tickets.length > 0
+    ? input.tickets.map(ticket => ({
+        item_id: input.performance_id,
+        quantity: 1,
+        options: {
+          ticket_type: ticket.ticket_type ?? input.ticket_type ?? "standard",
+          seat: ticket.seat ?? null,
+        },
+      }))
+    : [{
+        item_id: input.performance_id,
+        quantity: input.quantity ?? 1,
+        options: { ticket_type: input.ticket_type ?? "standard" },
+      }];
+  const result = checkoutCommerceCart(db, { user_id: input.user_id, client: input.client, items }, auth);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      booking_id: result.data.order_id,
+      ticket_ids: result.data.line_item_ids,
+      amount_pence: result.data.amount_pence,
+      currency: result.data.currency,
+      expires_at: result.data.expires_at,
+      status: result.data.status,
+    },
+    effects: [
+      ...(result.effects || []),
+      { type: "emit", payload: { event: "booking.reserved", booking_id: result.data.order_id, ticket_ids: result.data.line_item_ids, amount_pence: result.data.amount_pence } },
+    ],
+  };
+}
+
+export function createPaymentIntentForBooking(db: Database, bookingId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<PaymentIntentResult> {
+  const result = createCommercePaymentIntent(db, bookingId, auth);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: {
+      booking_id: result.data.order_id,
+      transaction_id: result.data.transaction_id,
+      reference: result.data.reference,
+      amount_pence: result.data.amount_pence,
+      currency: result.data.currency,
+      client_secret: result.data.client_secret,
+      provider: result.data.provider,
+    },
+    effects: result.effects,
+  };
+}
+
+export function handlePaymentWebhook(db: Database, input: PaymentWebhookInput): OpResult<PaymentWebhookResult> {
+  return handleCommercePaymentWebhook(db, input);
+}
+
+export function expireCheckoutBookings(db: Database, now: Date = new Date()): Result<{ expired: number }> {
+  return expireCommerceOrders(db, now);
+}
+` : ""}
 `;
 }
 
@@ -1190,7 +1647,7 @@ export function genServices(schema: Schema): string {
   }
 
   if (hasCommerceWorkflow(schema)) {
-    chunks.push(genCommerceServices());
+    chunks.push(genConfiguredCommerceServices(schema));
   }
 
   return chunks.join("\n");

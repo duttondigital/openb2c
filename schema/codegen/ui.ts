@@ -35,7 +35,7 @@ export function genAppShell(schema: Schema): string {
       --ob-shell-bg: #f7f7f4;
       --ob-shell-text: #242521;
       --ob-shell-border: #dedbd2;
-      --ob-shell-focus: 0 0 0 3px rgba(47, 93, 85, 0.2);
+      --ob-shell-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
       --ob-nav-width: 248px;
     }
     html {
@@ -57,7 +57,7 @@ export function genAppShell(schema: Schema): string {
       padding: 8px 12px;
       border-radius: 8px;
       background: #ffffff;
-      color: #244a44;
+      color: #111111;
       box-shadow: var(--ob-shell-focus);
       font-weight: 700;
       text-decoration: none;

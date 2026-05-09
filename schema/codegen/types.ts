@@ -60,6 +60,95 @@ export interface Operation {
 
 export type Operations = Record<string, Record<string, Operation>>;
 
+export interface EcommerceOption {
+  field: FieldRef | null;
+  type: string;
+  label: string | null;
+  default: string | null;
+  choices: string[];
+  required: boolean;
+  min: number | null;
+  max: number | null;
+}
+
+export interface EcommerceCatalogConfig {
+  entity: string;
+  title: FieldRef | null;
+  description: FieldRef | null;
+  price: FieldRef | null;
+  groupBy: FieldRef[];
+  variantFields: FieldRef[];
+  availability: {
+    field: FieldRef | null;
+    available: string;
+  };
+}
+
+export interface EcommerceOrderConfig {
+  entity: string;
+  user: FieldRef | null;
+  status: FieldRef | null;
+  amount: FieldRef | null;
+  currency: FieldRef | null;
+  expiresAt: FieldRef | null;
+  paymentReference: FieldRef | null;
+  client: FieldRef | null;
+  pendingStatus: string;
+  paidStatus: string;
+  expiredStatus: string;
+  cancelledStatus: string;
+}
+
+export interface EcommerceLineItemConfig {
+  entity: string;
+  catalogItem: FieldRef | null;
+  user: FieldRef | null;
+  price: FieldRef | null;
+  status: FieldRef | null;
+  quantity: FieldRef | null;
+  reservedStatus: string;
+  fulfilledStatus: string;
+  cancelledStatus: string;
+  options: Record<string, EcommerceOption>;
+}
+
+export interface EcommerceLinkConfig {
+  entity: string;
+  order?: FieldRef | null;
+  transaction?: FieldRef | null;
+  lineItem: FieldRef | null;
+}
+
+export interface EcommerceTransactionConfig {
+  entity: string;
+  user: FieldRef | null;
+  amount: FieldRef | null;
+  type: FieldRef | null;
+  status: FieldRef | null;
+  reference: FieldRef | null;
+  client: FieldRef | null;
+  purchaseType: string;
+  pendingStatus: string;
+  completedStatus: string;
+  failedStatus: string;
+}
+
+export interface EcommerceConfig {
+  enabled: boolean;
+  catalog: EcommerceCatalogConfig;
+  order: EcommerceOrderConfig;
+  lineItem: EcommerceLineItemConfig;
+  orderLine: EcommerceLinkConfig;
+  transaction: EcommerceTransactionConfig;
+  transactionLine: EcommerceLinkConfig;
+  checkout: {
+    currency: string;
+    expiryMinutes: number;
+    maxQuantity: number;
+    maxLines: number;
+  };
+}
+
 export interface OrganizationMetadata {
   name: string;
   description: string;
@@ -85,4 +174,5 @@ export interface Schema {
   refs?: Refs;
   relationships?: Relationships;
   operations: Operations;
+  ecommerce?: EcommerceConfig;
 }

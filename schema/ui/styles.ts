@@ -1,8 +1,8 @@
 export const theme = `
   :host {
-    --ob-primary: #2f5d55;
-    --ob-primary-hover: #244a44;
-    --ob-primary-soft: #e7f1ef;
+    --ob-primary: #111111;
+    --ob-primary-hover: #000000;
+    --ob-primary-soft: #eeeeee;
     --ob-accent: #8f3f46;
     --ob-accent-soft: #f7ebe8;
     --ob-bg: #ffffff;
@@ -19,7 +19,7 @@ export const theme = `
     --ob-warning: #946200;
     --ob-warning-soft: #fff4d6;
     --ob-radius: 8px;
-    --ob-focus: 0 0 0 3px rgba(47, 93, 85, 0.18);
+    --ob-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
     --ob-shadow-sm: 0 1px 2px rgba(36, 37, 33, 0.06);
     --ob-nav-width: 248px;
     --ob-font: system-ui, -apple-system, sans-serif;
@@ -81,7 +81,7 @@ export const button = `
     color: var(--ob-primary-hover);
     border-color: transparent;
   }
-  button.secondary:hover { background: #dcebe8; border-color: transparent; }
+  button.secondary:hover { background: #e2e2e2; border-color: transparent; }
   button.danger {
     background: var(--ob-danger-soft);
     color: var(--ob-danger);
