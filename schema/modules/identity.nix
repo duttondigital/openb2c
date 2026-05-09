@@ -21,4 +21,11 @@
     verified_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
     revoked = { type = "integer"; required = false; default = "0"; };
   };
+
+  tables.identity_verification_attempt = {
+    id = { type = "integer"; pk = true; auto = true; };
+    challenge_id = { type = "integer"; required = true; };
+    email = { type = "text"; required = true; };
+    created_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
+  };
 }

@@ -183,7 +183,7 @@ const routes: Route[] = [
     const { challengeId, code, signature } = await req.json() as { challengeId: number; code: string; signature: string };
     const result = await S.verifyChallenge(db, challengeId, code, signature);
     if (!result.ok) {
-      return corsResponse(result, { status: 400 });
+      return corsResponse(result, { status: S.statusForResult(result) });
     }
     return corsResponse({ certificate: result.data });
   }},

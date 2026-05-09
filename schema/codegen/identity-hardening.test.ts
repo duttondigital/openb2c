@@ -31,6 +31,12 @@ const schema: Schema = {
       verified_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
       revoked: { type: "integer", pk: false, auto: false, required: false, unique: false, default: "0", references: null },
     },
+    identity_verification_attempt: {
+      id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      challenge_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      email: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
+    },
   },
   operations: {},
 };
@@ -184,6 +190,43 @@ describe("identity hardening generation", () => {
       ok: false,
       code: "rate_limited",
       error: "too many identity challenges for IP address",
+    });
+  });
+
+  test("identity verification attempts are rate limited by challenge and email", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+
+    const challengeDb = createDb();
+    const challenge = await services.createChallenge(challengeDb, "challenge@example.com", "public-key", "10.0.3.1");
+    expect(challenge.ok).toBe(true);
+    for (let i = 0; i < 5; i++) {
+      const result = await services.verifyChallenge(challengeDb, challenge.data.challengeId, "wrong", "00");
+      expect(result).toMatchObject({ ok: false, code: "invalid", error: "incorrect code" });
+    }
+    const challengeLimited = await services.verifyChallenge(challengeDb, challenge.data.challengeId, "wrong", "00");
+    expect(challengeLimited).toMatchObject({
+      ok: false,
+      code: "rate_limited",
+      error: "too many identity verification attempts for challenge",
+    });
+
+    const emailDb = createDb();
+    for (let i = 1; i <= 11; i++) {
+      emailDb.query(`
+        INSERT INTO identity_challenge (id, email, code, public_key, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(i, "email-limit@example.com", "123456", `pk-${i}`, new Date(Date.now() + 60_000).toISOString());
+    }
+    for (let i = 1; i <= 10; i++) {
+      const result = await services.verifyChallenge(emailDb, i, "wrong", "00");
+      expect(result).toMatchObject({ ok: false, code: "invalid", error: "incorrect code" });
+    }
+    const emailLimited = await services.verifyChallenge(emailDb, 11, "wrong", "00");
+    expect(emailLimited).toMatchObject({
+      ok: false,
+      code: "rate_limited",
+      error: "too many identity verification attempts for email",
     });
   });
 });

@@ -327,6 +327,12 @@ const IDENTITY_CHALLENGE_LIMITS = {
   ipAddress: 10,
 } as const;
 
+const IDENTITY_VERIFICATION_LIMITS = {
+  windowSeconds: 10 * 60,
+  challenge: 5,
+  email: 10,
+} as const;
+
 function recentChallengeCount(db: Database, column: "email" | "public_key" | "ip_address", value: string): number {
   const row = db.query(\`
     SELECT COUNT(*) as n FROM identity_challenge
@@ -346,6 +352,31 @@ function checkChallengeCreationRateLimit(db: Database, email: string, publicKey:
     return { ok: false, error: "too many identity challenges for IP address", code: "rate_limited" };
   }
   return { ok: true, data: true };
+}
+
+function recentVerificationAttemptCount(db: Database, column: "challenge_id" | "email", value: number | string): number {
+  const row = db.query(\`
+    SELECT COUNT(*) as n FROM identity_verification_attempt
+    WHERE \${column} = ? AND created_at >= datetime('now', ?)
+  \`).get(value, \`-\${IDENTITY_VERIFICATION_LIMITS.windowSeconds} seconds\`) as { n: number };
+  return row.n;
+}
+
+function checkVerificationRateLimit(db: Database, challengeId: number, email: string): Result<true> {
+  if (recentVerificationAttemptCount(db, "challenge_id", challengeId) >= IDENTITY_VERIFICATION_LIMITS.challenge) {
+    return { ok: false, error: "too many identity verification attempts for challenge", code: "rate_limited" };
+  }
+  if (recentVerificationAttemptCount(db, "email", email) >= IDENTITY_VERIFICATION_LIMITS.email) {
+    return { ok: false, error: "too many identity verification attempts for email", code: "rate_limited" };
+  }
+  return { ok: true, data: true };
+}
+
+function recordVerificationAttempt(db: Database, challengeId: number, email: string): void {
+  db.query(\`
+    INSERT INTO identity_verification_attempt (challenge_id, email)
+    VALUES (?, ?)
+  \`).run(challengeId, email);
 }
 
 export async function createChallenge(
@@ -381,6 +412,10 @@ export async function verifyChallenge(
   if (!challenge) {
     return { ok: false, error: "invalid or used challenge", code: "invalid" };
   }
+
+  const rateLimit = checkVerificationRateLimit(db, challengeId, challenge.email);
+  if (!rateLimit.ok) return rateLimit;
+  recordVerificationAttempt(db, challengeId, challenge.email);
 
   if (new Date(challenge.expires_at) < new Date()) {
     return { ok: false, error: "challenge expired", code: "invalid" };
