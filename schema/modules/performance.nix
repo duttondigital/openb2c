@@ -10,6 +10,7 @@ in
     date = { type = "text"; required = true; };
     time = { type = "text"; required = true; };
     duration_mins = { type = "integer"; required = true; };
+    price_pence = { type = "integer"; required = true; };
     description = { type = "text"; };
     status = { type = "text"; default = "'scheduled'"; };  # scheduled, cancelled, completed
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };

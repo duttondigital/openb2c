@@ -1,4 +1,5 @@
 import type { Schema } from "./types";
+import { hasCommerceWorkflow } from "./utils";
 
 export interface EnvVarSpec {
   name: string;
@@ -56,11 +57,14 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   if (hasWebhookEffects(schema)) {
     specs.push({ name: "WEBHOOK_URL", description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true });
   }
-  if (hasPaymentEffects(schema)) {
+  if (hasPaymentEffects(schema) || hasCommerceWorkflow(schema)) {
     specs.push(
       { name: "PAYMENT_PROVIDER", description: "Payment provider identifier.", requiredInProduction: true, secret: false, example: "stripe" },
       { name: "PAYMENT_API_KEY", description: "Payment provider API key.", requiredInProduction: true, secret: true }
     );
+  }
+  if (hasCommerceWorkflow(schema)) {
+    specs.push({ name: "PAYMENT_WEBHOOK_SECRET", description: "Shared secret used to verify payment provider webhook signatures.", requiredInProduction: true, secret: true });
   }
 
   return specs;

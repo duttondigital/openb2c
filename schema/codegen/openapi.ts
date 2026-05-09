@@ -1,5 +1,5 @@
 import type { Schema } from "./types";
-import { getAppMetadata, pascalCase } from "./utils";
+import { getAppMetadata, hasCommerceWorkflow, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
@@ -136,6 +136,108 @@ export function genOpenAPI(schema: Schema): string {
         },
       };
     }
+  }
+
+  if (hasCommerceWorkflow(schema)) {
+    schemas.ReserveBookingInput = {
+      type: "object",
+      properties: {
+        performance_id: { type: "integer" },
+        user_id: { type: "integer" },
+        quantity: { type: "integer", default: 1 },
+        ticket_type: { type: "string", default: "standard" },
+        client: { type: "string", default: "web" },
+        tickets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              ticket_type: { type: "string" },
+              seat: { type: "string" },
+            },
+          },
+        },
+      },
+      required: ["performance_id"],
+    };
+    schemas.ReserveBookingResult = {
+      type: "object",
+      properties: {
+        booking_id: { type: "integer" },
+        ticket_ids: { type: "array", items: { type: "integer" } },
+        amount_pence: { type: "integer" },
+        currency: { type: "string" },
+        expires_at: { type: "string", format: "date-time" },
+        status: { type: "string" },
+      },
+    };
+    schemas.PaymentIntentResult = {
+      type: "object",
+      properties: {
+        booking_id: { type: "integer" },
+        transaction_id: { type: "integer" },
+        reference: { type: "string" },
+        amount_pence: { type: "integer" },
+        currency: { type: "string" },
+        client_secret: { type: "string" },
+        provider: { type: "string" },
+      },
+    };
+    schemas.PaymentWebhookInput = {
+      type: "object",
+      properties: {
+        reference: { type: "string" },
+        status: { type: "string", enum: ["succeeded", "failed"] },
+        provider: { type: "string" },
+      },
+      required: ["reference", "status"],
+    };
+
+    paths["/commerce/bookings/reserve"] = {
+      post: {
+        summary: "Reserve tickets for checkout",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ReserveBookingInput" } } },
+        },
+        responses: {
+          "201": { description: "Reserved", content: { "application/json": { schema: { $ref: "#/components/schemas/ReserveBookingResult" } } } },
+          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/bookings/{id}/payment-intent"] = {
+      post: {
+        summary: "Create a payment intent for a booking",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        responses: {
+          "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentIntentResult" } } } },
+          "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/payments/webhook"] = {
+      post: {
+        summary: "Receive signed payment provider webhooks",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentWebhookInput" } } },
+        },
+        responses: {
+          "200": { description: "Processed" },
+          "401": { description: "Invalid signature", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/bookings/expire"] = {
+      post: {
+        summary: "Expire stale checkout bookings",
+        responses: {
+          "200": { description: "Expired count", content: { "application/json": { schema: { type: "object", properties: { expired: { type: "integer" } } } } } },
+          "403": { description: "Forbidden", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
   }
 
   const spec = {

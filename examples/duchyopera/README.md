@@ -16,6 +16,7 @@ This example composes the following OpenB2C modules:
 - **Artist** - Performers and crew
 - **Performance** - Shows with dates, times, and pricing
 - **Ticket** - Ticket sales and lifecycle (booked → confirmed → used → cancelled)
+- **Booking** - Checkout reservations, payment intent handoff, and stale checkout expiry
 - **Transaction** - Payment processing and fulfillment
 - **API Key** - Service authentication
 
@@ -45,6 +46,17 @@ bun run dev:duchyopera
 ## Composition
 
 This example's `composition.nix` directly imports the modules it needs from `schema/modules/`. To add or remove features, simply edit the imports in `composition.nix` and regenerate.
+
+## Checkout Flow
+
+Duchy Opera exposes a generated commerce workflow alongside the entity CRUD API:
+
+1. `POST /commerce/bookings/reserve` reserves one or more tickets for a scheduled performance using the configured performance price.
+2. `POST /commerce/bookings/{id}/payment-intent` creates an idempotent payment intent for the booking.
+3. `POST /commerce/payments/webhook` receives a signed provider callback and confirms tickets when payment succeeds.
+4. `POST /commerce/bookings/expire` cancels unpaid checkout reservations after their expiry window.
+
+Production deployments must configure `PAYMENT_PROVIDER`, `PAYMENT_API_KEY`, and `PAYMENT_WEBHOOK_SECRET`. The local provider remains available for tests and development.
 
 ## Design Principles
 

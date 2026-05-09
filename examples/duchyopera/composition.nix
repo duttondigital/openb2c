@@ -20,6 +20,7 @@ let
       ../../schema/modules/performance.nix
       ../../schema/modules/ticket.nix
       ../../schema/modules/transaction.nix
+      ../../schema/modules/booking.nix
       ../../schema/modules/venue.nix
     ];
   };

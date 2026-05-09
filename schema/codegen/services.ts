@@ -1,5 +1,5 @@
 import type { Column, Operation, Schema, Tables } from "./types";
-import { pascalCase, camelCase } from "./utils";
+import { pascalCase, camelCase, hasCommerceWorkflow } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -866,6 +866,310 @@ ${effectsCode}
 `;
 }
 
+function genCommerceServices(): string {
+  return `
+// ============================================================================
+// Commerce Workflow
+// ============================================================================
+
+const COMMERCE_MAX_TICKETS_PER_BOOKING = 20;
+const DEFAULT_BOOKING_EXPIRY_MINUTES = 15;
+
+export interface ReserveTicketRequest {
+  ticket_type?: string;
+  seat?: string;
+}
+
+export interface ReserveBookingInput {
+  performance_id: number;
+  user_id?: number;
+  quantity?: number;
+  ticket_type?: string;
+  client?: string;
+  tickets?: ReserveTicketRequest[];
+}
+
+export interface ReserveBookingResult {
+  booking_id: number;
+  ticket_ids: number[];
+  amount_pence: number;
+  currency: string;
+  expires_at: string;
+  status: string;
+}
+
+export interface PaymentIntentResult {
+  booking_id: number;
+  transaction_id: number;
+  reference: string;
+  amount_pence: number;
+  currency: string;
+  client_secret: string;
+  provider: string;
+}
+
+export interface PaymentWebhookInput {
+  reference: string;
+  status: "succeeded" | "failed";
+  provider?: string;
+}
+
+export interface PaymentWebhookResult {
+  booking_id: number;
+  transaction_id: number;
+  status: string;
+  idempotent: boolean;
+}
+
+function resolveCommerceUser(inputUserId: number | undefined, auth: T.AuthContext): Result<number> {
+  if (auth.userId !== null) return { ok: true, data: auth.userId };
+  if (inputUserId !== undefined && hasScope(auth, "*")) return { ok: true, data: inputUserId };
+  return { ok: false, error: "authenticated user required", code: "unauthorized" };
+}
+
+function bookingTicketIds(db: Database, bookingId: number): number[] {
+  return (db.query("SELECT ticket_id FROM booking_ticket WHERE booking_id = ? ORDER BY id").all(bookingId) as { ticket_id: number }[])
+    .map(row => row.ticket_id);
+}
+
+function expireBookingIds(db: Database, bookingIds: number[]): number {
+  if (bookingIds.length === 0) return 0;
+  const placeholders = bookingIds.map(() => "?").join(", ");
+  const expire = db.transaction(() => {
+    db.query("UPDATE [transaction] SET status = 'failed' WHERE status = 'pending' AND reference IN (SELECT payment_reference FROM booking WHERE id IN (" + placeholders + ") AND payment_reference IS NOT NULL)").run(...bookingIds);
+    db.query("UPDATE ticket SET status = 'cancelled' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id IN (" + placeholders + "))").run(...bookingIds);
+    db.query("UPDATE booking SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE status = 'checkout_pending' AND id IN (" + placeholders + ")").run(...bookingIds);
+  });
+  expire();
+  return bookingIds.length;
+}
+
+export function reserveBooking(db: Database, input: ReserveBookingInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<ReserveBookingResult> {
+  if (!Number.isInteger(input.performance_id) || input.performance_id <= 0) {
+    return { ok: false, error: "performance_id is required", code: "invalid" };
+  }
+
+  const user = resolveCommerceUser(input.user_id, auth);
+  if (!user.ok) return { ok: false, error: user.error, code: user.code };
+  const userId = user.data;
+  if (!can("booking", "create", auth, { user_id: userId })) {
+    return authorizationError("booking", "create", auth);
+  }
+
+  const userRow = db.query("SELECT id FROM user WHERE id = ?").get(userId) as { id: number } | null;
+  if (!userRow) return { ok: false, error: "user not found", code: "not_found" };
+
+  const performance = db.query("SELECT id, status, price_pence FROM performance WHERE id = ?").get(input.performance_id) as { id: number; status: string | null; price_pence: number } | null;
+  if (!performance) return { ok: false, error: "performance not found", code: "not_found" };
+  if (performance.status !== "scheduled") return { ok: false, error: "performance is not available for booking", code: "bad_state" };
+  if (!Number.isInteger(performance.price_pence) || performance.price_pence <= 0) {
+    return { ok: false, error: "performance has no configured ticket price", code: "invalid" };
+  }
+
+  const quantity = input.quantity ?? 1;
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > COMMERCE_MAX_TICKETS_PER_BOOKING) {
+    return { ok: false, error: "quantity must be between 1 and " + COMMERCE_MAX_TICKETS_PER_BOOKING, code: "invalid" };
+  }
+
+  const requestedTickets = Array.isArray(input.tickets) && input.tickets.length > 0
+    ? input.tickets
+    : Array.from({ length: quantity }, () => ({}));
+  if (requestedTickets.length > COMMERCE_MAX_TICKETS_PER_BOOKING) {
+    return { ok: false, error: "too many tickets requested", code: "invalid" };
+  }
+
+  const tickets = requestedTickets.map(ticket => {
+    const type = ticket.ticket_type ?? input.ticket_type ?? "standard";
+    if (typeof type !== "string" || type.trim() === "") return null;
+    const seat = ticket.seat;
+    if (seat !== undefined && typeof seat !== "string") return null;
+    return { price_pence: performance.price_pence, ticket_type: type, seat: seat ?? null };
+  });
+  if (tickets.some(ticket => ticket === null)) {
+    return { ok: false, error: "invalid ticket request", code: "invalid" };
+  }
+
+  const amount = (tickets as { price_pence: number; ticket_type: string; seat: string | null }[])
+    .reduce((sum, ticket) => sum + ticket.price_pence, 0);
+  const expiresAt = new Date(Date.now() + DEFAULT_BOOKING_EXPIRY_MINUTES * 60000).toISOString();
+  const client = typeof input.client === "string" && input.client.trim() ? input.client : "web";
+
+  try {
+    const create = db.transaction(() => {
+      const booking = db.query("INSERT INTO booking (user_id, amount_pence, currency, expires_at, client) VALUES (?, ?, 'GBP', ?, ?) RETURNING id")
+        .get(userId, amount, expiresAt, client) as { id: number };
+      const ticketIds: number[] = [];
+      for (const ticket of tickets as { price_pence: number; ticket_type: string; seat: string | null }[]) {
+        const row = db.query("INSERT INTO ticket (performance_id, user_id, seat, price_pence, ticket_type, status) VALUES (?, ?, ?, ?, ?, 'reserved') RETURNING id")
+          .get(input.performance_id, userId, ticket.seat, ticket.price_pence, ticket.ticket_type) as { id: number };
+        ticketIds.push(row.id);
+        db.query("INSERT INTO booking_ticket (booking_id, ticket_id) VALUES (?, ?)").run(booking.id, row.id);
+      }
+      return { bookingId: booking.id, ticketIds };
+    });
+    const result = create();
+    return {
+      ok: true,
+      data: {
+        booking_id: result.bookingId,
+        ticket_ids: result.ticketIds,
+        amount_pence: amount,
+        currency: "GBP",
+        expires_at: expiresAt,
+        status: "checkout_pending",
+      },
+      effects: [
+        { type: "emit", payload: { event: "booking.reserved", booking_id: result.bookingId, ticket_ids: result.ticketIds, amount_pence: amount } },
+      ],
+    };
+  } catch (err) {
+    return { ok: false, error: "booking reservation failed", code: "conflict" };
+  }
+}
+
+export function createPaymentIntentForBooking(db: Database, bookingId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<PaymentIntentResult> {
+  if (!Number.isInteger(bookingId) || bookingId <= 0) {
+    return { ok: false, error: "booking id is required", code: "invalid" };
+  }
+
+  const booking = db.query("SELECT * FROM booking WHERE id = ?").get(bookingId) as T.Booking | null;
+  if (!booking) return { ok: false, error: "booking not found", code: "not_found" };
+  if (!can("booking", "update", auth, booking as Record<string, unknown>)) {
+    return authorizationError("booking", "update", auth);
+  }
+  if (booking.status !== "checkout_pending") {
+    return { ok: false, error: "booking is not awaiting payment", code: "bad_state" };
+  }
+  if (Date.parse(booking.expires_at) <= Date.now()) {
+    expireBookingIds(db, [booking.id]);
+    return { ok: false, error: "booking expired", code: "bad_state" };
+  }
+
+  const existingReference = booking.payment_reference;
+  if (existingReference) {
+    const existing = db.query("SELECT id FROM [transaction] WHERE reference = ?").get(existingReference) as { id: number } | null;
+    if (existing) {
+      return {
+        ok: true,
+        data: {
+          booking_id: booking.id,
+          transaction_id: existing.id,
+          reference: existingReference,
+          amount_pence: booking.amount_pence,
+          currency: booking.currency,
+          client_secret: existingReference + "_secret",
+          provider: process.env.PAYMENT_PROVIDER || "local",
+        },
+      };
+    }
+  }
+
+  const ticketIds = bookingTicketIds(db, booking.id);
+  if (ticketIds.length === 0) return { ok: false, error: "booking has no tickets", code: "invalid" };
+  const reference = "fake_pi_" + crypto.randomUUID();
+
+  const create = db.transaction(() => {
+    const transaction = db.query("INSERT INTO [transaction] (user_id, amount_pence, type, status, reference, client) VALUES (?, ?, 'purchase', 'pending', ?, ?) RETURNING id")
+      .get(booking.user_id, booking.amount_pence, reference, booking.client) as { id: number };
+    for (const ticketId of ticketIds) {
+      db.query("INSERT OR IGNORE INTO transaction_ticket (transaction_id, ticket_id) VALUES (?, ?)").run(transaction.id, ticketId);
+    }
+    db.query("UPDATE booking SET payment_reference = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(reference, booking.id);
+    return transaction.id;
+  });
+  const transactionId = create();
+
+  return {
+    ok: true,
+    data: {
+      booking_id: booking.id,
+      transaction_id: transactionId,
+      reference,
+      amount_pence: booking.amount_pence,
+      currency: booking.currency,
+      client_secret: reference + "_secret",
+      provider: process.env.PAYMENT_PROVIDER || "local",
+    },
+    effects: [
+      {
+        type: "call",
+        payload: {
+          service: "payment",
+          action: "create_intent",
+          provider: process.env.PAYMENT_PROVIDER || "local",
+          reference,
+          amount_pence: booking.amount_pence,
+          currency: booking.currency,
+          booking_id: booking.id,
+          transaction_id: transactionId,
+        },
+      },
+    ],
+  };
+}
+
+export function handlePaymentWebhook(db: Database, input: PaymentWebhookInput): OpResult<PaymentWebhookResult> {
+  if (!input.reference || typeof input.reference !== "string") {
+    return { ok: false, error: "reference is required", code: "invalid" };
+  }
+  if (input.status !== "succeeded" && input.status !== "failed") {
+    return { ok: false, error: "unsupported payment status", code: "invalid" };
+  }
+
+  const transaction = db.query("SELECT * FROM [transaction] WHERE reference = ?").get(input.reference) as T.Transaction | null;
+  if (!transaction) return { ok: false, error: "transaction not found", code: "not_found" };
+  const booking = db.query("SELECT * FROM booking WHERE payment_reference = ?").get(input.reference) as T.Booking | null;
+  if (!booking) return { ok: false, error: "booking not found", code: "not_found" };
+
+  if (input.status === "succeeded") {
+    if (transaction.status === "completed" && booking.status === "paid") {
+      return { ok: true, data: { booking_id: booking.id, transaction_id: transaction.id, status: "paid", idempotent: true } };
+    }
+    if (booking.status !== "checkout_pending") {
+      return { ok: false, error: "booking is not awaiting payment", code: "bad_state" };
+    }
+    const complete = db.transaction(() => {
+      db.query("UPDATE [transaction] SET status = 'completed' WHERE id = ?").run(transaction.id);
+      db.query("UPDATE booking SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(booking.id);
+      db.query("UPDATE ticket SET status = 'confirmed' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?)").run(booking.id);
+    });
+    complete();
+    return {
+      ok: true,
+      data: { booking_id: booking.id, transaction_id: transaction.id, status: "paid", idempotent: false },
+      effects: [
+        { type: "emit", payload: { event: "booking.paid", booking_id: booking.id, transaction_id: transaction.id, reference: input.reference } },
+        { type: "notify", payload: { channel: "email", template: "receipt", to: "customer", booking_id: booking.id, transaction_id: transaction.id } },
+        { type: "call", payload: { service: "analytics", action: "track_purchase", booking_id: booking.id, transaction_id: transaction.id, amount_pence: booking.amount_pence } },
+      ],
+    };
+  }
+
+  if (transaction.status === "failed" && booking.status === "cancelled") {
+    return { ok: true, data: { booking_id: booking.id, transaction_id: transaction.id, status: "cancelled", idempotent: true } };
+  }
+  const fail = db.transaction(() => {
+    db.query("UPDATE [transaction] SET status = 'failed' WHERE id = ?").run(transaction.id);
+    db.query("UPDATE booking SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(booking.id);
+    db.query("UPDATE ticket SET status = 'cancelled' WHERE id IN (SELECT ticket_id FROM booking_ticket WHERE booking_id = ?)").run(booking.id);
+  });
+  fail();
+  return {
+    ok: true,
+    data: { booking_id: booking.id, transaction_id: transaction.id, status: "cancelled", idempotent: false },
+    effects: [
+      { type: "emit", payload: { event: "booking.payment_failed", booking_id: booking.id, transaction_id: transaction.id, reference: input.reference } },
+    ],
+  };
+}
+
+export function expireCheckoutBookings(db: Database, now: Date = new Date()): Result<{ expired: number }> {
+  const rows = db.query("SELECT id FROM booking WHERE status = 'checkout_pending' AND expires_at < ?").all(now.toISOString()) as { id: number }[];
+  return { ok: true, data: { expired: expireBookingIds(db, rows.map(row => row.id)) } };
+}
+`;
+}
+
 export function genServices(schema: Schema): string {
   const chunks: string[] = [
     "// Generated by schema/codegen.ts — do not edit\n",
@@ -883,6 +1187,10 @@ export function genServices(schema: Schema): string {
       if (CRUD_ACTIONS.has(opName)) continue;
       chunks.push(genOperationService(entity, opName, op, schema.tables));
     }
+  }
+
+  if (hasCommerceWorkflow(schema)) {
+    chunks.push(genCommerceServices());
   }
 
   return chunks.join("\n");

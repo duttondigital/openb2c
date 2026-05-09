@@ -1,4 +1,4 @@
-import type { AppMetadata, OrganizationMetadata } from "./types";
+import type { AppMetadata, OrganizationMetadata, Schema, Tables } from "./types";
 
 export const TS_TYPE_MAP: Record<string, string> = {
   integer: "number",
@@ -68,4 +68,16 @@ export function getAppMetadata(schema: {
 
 export function getDefaultDatabasePath(app: AppMetadata): string {
   return `${safeSlug(app.slug)}.db`;
+}
+
+export function hasCommerceWorkflow(schema: { tables: Tables } | Schema): boolean {
+  return [
+    "booking",
+    "booking_ticket",
+    "ticket",
+    "transaction",
+    "transaction_ticket",
+    "performance",
+  ].every(table => schema.tables[table])
+    && !!schema.tables.performance.price_pence;
 }

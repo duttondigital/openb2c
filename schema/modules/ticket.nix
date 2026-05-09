@@ -22,6 +22,11 @@ in
     columns = [ "performance_id" "status" ];
   };
 
+  indexes.ticket.unique_performance_seat = {
+    columns = [ "performance_id" "seat" ];
+    unique = true;
+  };
+
   operations.ticket = {
     confirm = {
       guard = E.and

@@ -1,8 +1,81 @@
 import type { Schema } from "./types";
 import { requiredProductionEnvVars } from "./config";
-import { getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase } from "./utils";
+import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
+function genCommerceRoutes(): string[] {
+  return [
+`  // Commerce
+  { method: "POST", path: "/commerce/bookings/reserve", handler: async (req, _, auth, signal) => {
+    const input = await readJson<S.ReserveBookingInput>(req, signal);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const r = S.reserveBooking(db, input.data, auth);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "commerce.reserve_booking",
+        entity: "booking",
+        recordId: r.data.booking_id,
+        result: r.data,
+        idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
+      });
+    }
+    return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
+  { method: "POST", path: "/commerce/bookings/:id/payment-intent", handler: async (req, p, auth) => {
+    const r = S.createPaymentIntentForBooking(db, +p.id, auth);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "commerce.create_payment_intent",
+        entity: "booking",
+        recordId: r.data.booking_id,
+        result: r.data,
+        idempotencyKey: req.headers.get("Idempotency-Key") || ("booking-payment-intent:" + r.data.booking_id),
+      });
+    }
+    return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
+  { method: "POST", path: "/commerce/payments/webhook", handler: async (req, _, __, signal) => {
+    const contentType = req.headers.get("content-type") || "";
+    const mediaType = contentType.split(";")[0]?.trim().toLowerCase();
+    if (mediaType !== "application/json" && !mediaType?.endsWith("+json")) {
+      return corsResponse({ ok: false, error: "content-type must be application/json", code: "unsupported_media_type" }, { status: 415 });
+    }
+    const raw = await readRequestBody(req, signal);
+    if (!raw.ok) return corsResponse(raw, { status: S.statusForResult(raw) });
+    if (!(await verifyPaymentWebhookSignature(req, raw.data))) {
+      return corsResponse({ error: "invalid payment webhook signature", code: "invalid" }, { status: 401 });
+    }
+    let input: S.PaymentWebhookInput;
+    try {
+      input = JSON.parse(raw.data) as S.PaymentWebhookInput;
+    } catch {
+      return corsResponse({ ok: false, error: "malformed JSON", code: "invalid" }, { status: 400 });
+    }
+    const r = S.handlePaymentWebhook(db, input);
+    if (r.ok) {
+      await FX.dispatchEffects(db, r.effects || [], {
+        source: "rest",
+        operation: "commerce.payment_webhook",
+        entity: "booking",
+        recordId: r.data.booking_id,
+        result: r.data,
+        idempotencyKey: "payment-webhook:" + input.reference + ":" + input.status,
+      });
+    }
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
+  { method: "POST", path: "/commerce/bookings/expire", handler: (_, __, auth) => {
+    if (!S.hasScope(auth, "booking.expire") && !S.hasScope(auth, "*")) {
+      return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    }
+    const r = S.expireCheckoutBookings(db);
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
+  }},`,
+  ];
+}
 
 export function genRoutes(schema: Schema): string {
   const app = getAppMetadata(schema);
@@ -13,6 +86,11 @@ export function genRoutes(schema: Schema): string {
   const requiredProductionEnv = requiredProductionEnvVars(schema);
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
+
+  if (hasCommerceWorkflow(schema)) {
+    routes.push(...genCommerceRoutes());
+    routes.push("");
+  }
 
   for (const entity of entities) {
     const Entity = pascalCase(entity);
@@ -221,6 +299,37 @@ async function readJson<T>(req: Request, signal: AbortSignal): Promise<S.Result<
   } catch {
     return { ok: false, error: "malformed JSON", code: "invalid" };
   }
+}
+
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+}
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+}
+
+async function verifyPaymentWebhookSignature(req: Request, body: string): Promise<boolean> {
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+  if (!secret) return !PRODUCTION;
+  const header = req.headers.get("X-OpenB2C-Signature") || "";
+  const signature = header.trim().replace(/^sha256=/, "");
+  if (!signature) return false;
+  return safeEqual(signature, await hmacSha256Hex(secret, body));
 }
 
 function parseIntegerParam(value: string | null, fallback: number): number {
@@ -451,7 +560,7 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 }
 
 const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key";
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
   return Response.json(body, init);
@@ -535,9 +644,9 @@ export const server = Bun.serve({
     if (url.pathname.startsWith("/identity/")) {
       // handled by routes
     }
-    // Auth check for API endpoints. Missing credentials remain anonymous so
+    // Auth check for protected endpoints. Missing credentials remain anonymous so
     // per-route authorization can distinguish public endpoints from protected ones.
-    else if (AUTH_ENABLED && url.pathname.startsWith("/api/")) {
+    else if (AUTH_ENABLED && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/commerce/") || url.pathname.startsWith("/ops/"))) {
       const authHeader = req.headers.get("Authorization");
       const certHeader = req.headers.get("X-Certificate");
       const sigHeader = req.headers.get("X-Signature");
