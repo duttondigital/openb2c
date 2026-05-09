@@ -1,6 +1,8 @@
 import type { Schema } from "./types";
 import { getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase } from "./utils";
 
+const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
 export function genMcpServer(schema: Schema): string {
   const app = getAppMetadata(schema);
   const appConfig = {
@@ -15,6 +17,11 @@ export function genMcpServer(schema: Schema): string {
     const Entity = pascalCase(entity);
     const cols = schema.tables[entity];
     const ops = schema.operations[entity] || {};
+    const createRelationshipFields = new Set(
+      (ops.create?.relationships ?? [])
+        .filter(rel => rel.field.table === entity)
+        .map(rel => rel.field.field)
+    );
 
     // Input properties for create/update
     const inputProps: Record<string, { type: string; description: string }> = {};
@@ -25,7 +32,7 @@ export function genMcpServer(schema: Schema): string {
         type: c.type === "integer" ? "number" : "string",
         description: col.replace(/_/g, " "),
       };
-      if (c.required && c.default === null) requiredProps.push(col);
+      if (c.required && c.default === null && !createRelationshipFields.has(col)) requiredProps.push(col);
     }
 
     // List tool
@@ -87,7 +94,7 @@ export function genMcpServer(schema: Schema): string {
         return { content: [{ type: "text", text: "Deleted" }] };`);
 
     // Custom operations
-    for (const opName of Object.keys(ops)) {
+    for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
       tools.push(`    {
       name: "${opName}_${entity}",

@@ -1,7 +1,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.project = {
@@ -14,55 +13,25 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  operations.project = {
+  relationships.project.owner.field = config.refs.project.owner_id;
+
+  operations.project =
+    let rel = config.relationships.project;
+    in {
+    read.relationships = with rel; [ owner ];
+    create.relationships = with rel; [ owner ];
+    update.relationships = with rel; [ owner ];
+
     archive = {
+      relationships = with rel; [ owner ];
       guard = E.eq (E.f "status") (E.lit "active");
       set = { status = "archived"; };
     };
 
     unarchive = {
+      relationships = with rel; [ owner ];
       guard = E.eq (E.f "status") (E.lit "archived");
       set = { status = "active"; };
-    };
-  };
-
-  authorization.project = {
-    ownerFields = [ "owner_id" ];
-    read.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "project.read" "read" ])
-      (A.scopedAny [ "project.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "project.create" "write" ])
-      (A.scopedAny [ "project.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "project.update" "write" ])
-      (A.scopedAny [ "project.update" "write" ])
-    ];
-    delete.allow = [
-      A.admin
-      (A.scopedAny [ "project.delete" ])
-    ];
-    operations = {
-      archive.allow = [
-        A.operator
-        A.ownerUser
-        (A.ownerService [ "project.archive" "write" ])
-        (A.scopedAny [ "project.archive" ])
-      ];
-      unarchive.allow = [
-        A.operator
-        A.ownerUser
-        (A.ownerService [ "project.unarchive" "write" ])
-        (A.scopedAny [ "project.unarchive" ])
-      ];
     };
   };
 }

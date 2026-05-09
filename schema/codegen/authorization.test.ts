@@ -9,7 +9,7 @@ import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
-import type { Schema } from "./types";
+import type { Operation, Relationship, Schema } from "./types";
 import { DEFAULT_ORGANIZATION_METADATA } from "./utils";
 
 const baseColumn = {
@@ -21,6 +21,23 @@ const baseColumn = {
   references: null,
 };
 
+const ownerRel: Relationship = {
+  field: { table: "ticket", field: "user_id", references: "user(id)" },
+};
+
+function operation(overrides: Partial<Operation> = {}): Operation {
+  return {
+    guard: null,
+    relationships: [],
+    public: false,
+    scope: null,
+    set: {},
+    cascade: [],
+    effects: [],
+    ...overrides,
+  };
+}
+
 const schema: Schema = {
   organization: DEFAULT_ORGANIZATION_METADATA,
   tables: {
@@ -31,7 +48,7 @@ const schema: Schema = {
     },
     api_key: {
       id: { ...baseColumn, type: "integer", pk: true, auto: true },
-      user_id: { ...baseColumn, type: "integer", references: "user(id)" },
+      user_id: { ...baseColumn, type: "integer", required: true, references: "user(id)" },
       key_hash: { ...baseColumn, type: "text", required: true },
       key_prefix: { ...baseColumn, type: "text", required: true },
       name: { ...baseColumn, type: "text", required: true },
@@ -47,101 +64,42 @@ const schema: Schema = {
       status: { ...baseColumn, type: "text", default: "'reserved'" },
     },
   },
+  relationships: {
+    ticket: {
+      owner: ownerRel,
+    },
+  },
   operations: {
     ticket: {
-      confirm: {
-        guard: null,
+      read: operation({ relationships: [ownerRel] }),
+      create: operation({ relationships: [ownerRel] }),
+      update: operation({ relationships: [ownerRel] }),
+      delete: operation({ relationships: [ownerRel] }),
+      confirm: operation({
+        relationships: [ownerRel],
         set: { status: "confirmed" },
-        cascade: [],
-        effects: [],
-      },
+      }),
     },
   },
-  authorization: {
-    ticket: {
-      ownerFields: ["user_id"],
-      read: {
-        allow: [
-          { principals: ["admin"], roles: [], scopes: [], owner: false, ownerFields: [] },
-          { principals: ["user"], roles: [], scopes: [], owner: true, ownerFields: [] },
-          { principals: [], roles: [], scopes: ["ticket.read"], owner: false, ownerFields: [] },
-        ],
-      },
-      create: {
-        allow: [
-          { principals: ["admin"], roles: [], scopes: [], owner: false, ownerFields: [] },
-          { principals: ["user"], roles: [], scopes: [], owner: true, ownerFields: [] },
-        ],
-      },
-      update: {
-        allow: [
-          { principals: ["admin"], roles: [], scopes: [], owner: false, ownerFields: [] },
-          { principals: ["user"], roles: [], scopes: [], owner: true, ownerFields: [] },
-        ],
-      },
-      delete: {
-        allow: [
-          { principals: ["admin"], roles: [], scopes: [], owner: false, ownerFields: [] },
-        ],
-      },
-      operations: {
-        confirm: {
-          allow: [
-            { principals: ["admin"], roles: [], scopes: [], owner: false, ownerFields: [] },
-            { principals: ["user"], roles: [], scopes: [], owner: true, ownerFields: [] },
-            { principals: [], roles: [], scopes: ["ticket.confirm"], owner: false, ownerFields: [] },
-          ],
-        },
-      },
-    },
-  },
-};
-
-const cert = {
-  email: "user@example.com",
-  publicKey: "00",
-  issuedAt: "2026-01-01T00:00:00.000Z",
-  expiresAt: "2027-01-01T00:00:00.000Z",
-  signature: "00",
 };
 
 const user1 = {
-  kind: "identity",
-  provider: "certificate",
-  subject: "user:1",
   userId: 1,
-  email: "user1@example.com",
-  publicKey: "00",
-  certificate: cert,
-  principals: ["user"],
-  roles: [],
-  scopes: [],
-  claims: {},
+  scopes: ["ticket.read", "ticket.create", "ticket.confirm"],
 } as const;
 
 const user2 = {
-  ...user1,
-  subject: "user:2",
   userId: 2,
-  email: "user2@example.com",
+  scopes: ["ticket.read", "ticket.create", "ticket.confirm"],
 } as const;
 
 const serviceWithWriteOnly = {
-  kind: "api_key",
-  provider: "api_key",
-  subject: "api_key:1",
-  keyId: 1,
-  userId: null,
-  principals: ["service"],
-  roles: [],
+  userId: 1,
   scopes: ["write"],
-  claims: {},
 } as const;
 
 const serviceWithConfirm = {
-  ...serviceWithWriteOnly,
-  subject: "api_key:2",
-  keyId: 2,
+  userId: 1,
   scopes: ["ticket.confirm"],
 } as const;
 
@@ -165,23 +123,23 @@ function seedDb(db: Database): void {
 function writeGenerated(): string {
   const dir = mkdtempSync(join(tmpdir(), "openb2c-authz-"));
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
-  writeFileSync(join(dir, "types.ts"), genTypes(schema.tables));
+  writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   writeFileSync(join(dir, "mcp.ts"), genMcpServer(schema));
   return dir;
 }
 
-async function seedApiKey(db: Database, id: number, key: string, scopes: string): Promise<void> {
+async function seedApiKey(db: Database, id: number, userId: number, key: string, scopes: string): Promise<void> {
   const hash = await Bun.password.hash(key, { algorithm: "bcrypt", cost: 4 });
   db.query(`
     INSERT INTO api_key (id, user_id, key_hash, key_prefix, name, scopes, active)
-    VALUES (?, NULL, ?, ?, ?, ?, 1)
-  `).run(id, hash, key.slice(0, 11), `key-${id}`, scopes);
+    VALUES (?, ?, ?, ?, ?, ?, 1)
+  `).run(id, userId, hash, key.slice(0, 11), `key-${id}`, scopes);
 }
 
 describe("generated authorization enforcement", () => {
-  test("services enforce owner rules and operation-specific scopes", async () => {
+  test("services enforce operation scopes and record relationships", async () => {
     const dir = writeGenerated();
     const services = await import(pathToFileURL(join(dir, "services.ts")).href);
     const db = createDb();
@@ -189,7 +147,11 @@ describe("generated authorization enforcement", () => {
     expect(services.findAllTickets(db, {}, user1).map((t: { id: number }) => t.id)).toEqual([1, 2, 3]);
     expect(services.findAllTickets(db, {}, user2)).toEqual([]);
 
-    expect(services.createTicket(db, { user_id: 1 }, user1).ok).toBe(true);
+    const created = services.createTicket(db, { status: "reserved" }, user1);
+    expect(created.ok).toBe(true);
+    const createdRow = db.query("SELECT user_id FROM ticket WHERE id = ?").get(created.data.id) as { user_id: number };
+    expect(createdRow.user_id).toBe(1);
+
     const crossOwnerCreate = services.createTicket(db, { user_id: 1 }, user2);
     expect(crossOwnerCreate.ok).toBe(false);
     expect(crossOwnerCreate.code).toBe("forbidden");
@@ -201,8 +163,9 @@ describe("generated authorization enforcement", () => {
     const specificScope = services.confirmTicket(db, 2, serviceWithConfirm);
     expect(specificScope.ok).toBe(true);
 
-    const ownerOperation = services.confirmTicket(db, 3, user1);
-    expect(ownerOperation.ok).toBe(true);
+    const crossOwnerOperation = services.confirmTicket(db, 3, user2);
+    expect(crossOwnerOperation.ok).toBe(false);
+    expect(crossOwnerOperation.code).toBe("forbidden");
   });
 
   test("REST returns denied and allowed operation responses from generated policy", async () => {
@@ -215,8 +178,8 @@ describe("generated authorization enforcement", () => {
     seedDb(db);
     const writeKey = "do_write_only_abcdefghijklmnopqrstuvwxyz";
     const confirmKey = "do_confirm__abcdefghijklmnopqrstuvwxyz";
-    await seedApiKey(db, 1, writeKey, "write");
-    await seedApiKey(db, 2, confirmKey, "ticket.confirm");
+    await seedApiKey(db, 1, 1, writeKey, "write");
+    await seedApiKey(db, 2, 1, confirmKey, "ticket.confirm");
     db.close();
 
     process.env.DB_PATH = dbPath;

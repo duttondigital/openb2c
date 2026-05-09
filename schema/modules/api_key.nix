@@ -1,11 +1,10 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in {
   tables.api_key = {
     id = { type = "integer"; pk = true; auto = true; };
-    user_id = { type = "integer"; required = false; references = "user(id)"; };  # optional: scope to user
+    user_id = { type = "integer"; required = true; references = "user(id)"; };
     key_hash = { type = "text"; required = true; };  # bcrypt hash, never expose
     key_prefix = { type = "text"; required = true; };  # first 8 chars for identification
     name = { type = "text"; required = true; };  # description e.g. "mobile app"
@@ -16,43 +15,19 @@ in {
     expires_at = { type = "text"; required = false; };
   };
 
-  operations.api_key = {
-    revoke = {
-      guard = E.eq (E.f "active") (E.lit 1);
-      set = { active = "0"; };
-    };
-  };
+  relationships.api_key.owner.field = config.refs.api_key.user_id;
 
-  authorization.api_key = {
-    ownerFields = [ "user_id" ];
-    read.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "api_key.read" "read" ])
-      (A.scopedAny [ "api_key.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      A.ownerUser
-      (A.scopedAny [ "api_key.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "api_key.update" "write" ])
-      (A.scopedAny [ "api_key.update" "write" ])
-    ];
-    delete.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "api_key.delete" "write" ])
-      (A.scopedAny [ "api_key.delete" "write" ])
-    ];
-    operations.revoke.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "api_key.revoke" "write" ])
-      (A.scopedAny [ "api_key.revoke" ])
-    ];
+  operations.api_key =
+    let rel = config.relationships.api_key;
+    in {
+      read.relationships = with rel; [ owner ];
+      create.relationships = with rel; [ owner ];
+      update.relationships = with rel; [ owner ];
+      delete.relationships = with rel; [ owner ];
+      revoke = {
+        relationships = with rel; [ owner ];
+        guard = E.eq (E.f "active") (E.lit 1);
+        set = { active = "0"; };
+      };
   };
 }

@@ -1,6 +1,8 @@
 import type { Schema } from "./types";
 import { getAppMetadata, getDefaultDatabasePath, pascalCase, camelCase } from "./utils";
 
+const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
 export function genRoutes(schema: Schema): string {
   const app = getAppMetadata(schema);
   const appConfig = {
@@ -66,7 +68,7 @@ export function genRoutes(schema: Schema): string {
   }},`);
 
     // Custom operations
-    for (const opName of Object.keys(ops)) {
+    for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
       routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: (_, p, auth) => {
     const r = S.${OpName}${Entity}(db, +p.id, auth);
@@ -252,23 +254,9 @@ export const server = Bun.serve({
           }
           // Ensure user record exists for this identity
           const userId = S.ensureUser(db, identity.email);
-          const userAttrs = S.getUserAuthAttributes(db, userId);
           authContext = {
-            kind: "identity",
-            provider: "certificate",
-            subject: \`user:\${userId}\`,
             userId,
-            email: identity.email,
-            publicKey: identity.publicKey,
-            certificate: identity.certificate,
-            principals: userAttrs.principals.length ? userAttrs.principals : ["user"],
-            roles: userAttrs.roles,
-            scopes: ["read", "write"],
-            claims: {
-              ...userAttrs.claims,
-              email: identity.email,
-              publicKey: identity.publicKey,
-            },
+            scopes: [...S.SELF_SERVICE_SCOPES],
           };
           log("debug", "authenticated", { email: identity.email, userId });
         } catch {

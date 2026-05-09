@@ -1,7 +1,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.performance = {
@@ -25,6 +24,8 @@ in
   };
 
   operations.performance = {
+    read.public = true;
+
     cancel = {
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "cancelled"; };
@@ -52,60 +53,5 @@ in
       ];
     };
   };
-
-  authorization.performance = {
-    read.allow = [
-      A.public
-      A.operator
-      A.service
-      (A.scopedAny [ "performance.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      (A.scopedAny [ "performance.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      (A.scopedAny [ "performance.update" "write" ])
-    ];
-    delete.allow = [
-      A.admin
-      (A.scopedAny [ "performance.delete" ])
-    ];
-    operations = {
-      cancel.allow = [
-        A.operator
-        (A.scopedAny [ "performance.cancel" ])
-      ];
-      complete.allow = [
-        A.operator
-        (A.scopedAny [ "performance.complete" ])
-      ];
-      reschedule.allow = [
-        A.operator
-        (A.scopedAny [ "performance.reschedule" ])
-      ];
-    };
-  };
-
-  authorization.performance_artist = {
-    read.allow = [
-      A.public
-      A.operator
-      A.service
-      (A.scopedAny [ "performance_artist.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      (A.scopedAny [ "performance_artist.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      (A.scopedAny [ "performance_artist.update" "write" ])
-    ];
-    delete.allow = [
-      A.operator
-      (A.scopedAny [ "performance_artist.delete" "write" ])
-    ];
-  };
+  operations.performance_artist.read.public = true;
 }

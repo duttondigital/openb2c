@@ -2,43 +2,56 @@ import type { Column, Operation, Schema, Tables } from "./types";
 import { pascalCase, camelCase } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
+const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
+function defaultOperation(): Operation {
+  return { guard: null, relationships: [], public: false, scope: null, set: {}, cascade: [], effects: [] };
+}
+
+function operationsForEntity(schema: Schema, entity: string): Record<string, Operation> {
+  return {
+    read: defaultOperation(),
+    create: defaultOperation(),
+    update: defaultOperation(),
+    delete: defaultOperation(),
+    ...(schema.operations[entity] || {}),
+  };
+}
+
+function operationScope(entity: string, action: string, op: Operation): string {
+  return op.scope ?? `${entity}.${action}`;
+}
+
+function operationPolicies(schema: Schema): Record<string, Record<string, unknown>> {
+  const policies: Record<string, Record<string, unknown>> = {};
+  for (const entity of Object.keys(schema.tables)) {
+    policies[entity] = {};
+    for (const [action, op] of Object.entries(operationsForEntity(schema, entity))) {
+      policies[entity][action] = {
+        scope: operationScope(entity, action, op),
+        public: op.public,
+        relationships: op.relationships,
+      };
+    }
+  }
+  return policies;
+}
+
+function selfServiceScopes(schema: Schema): string[] {
+  const scopes = new Set<string>();
+  for (const entity of Object.keys(schema.tables)) {
+    for (const [action, op] of Object.entries(operationsForEntity(schema, entity))) {
+      if (!op.public && op.relationships.length > 0) {
+        scopes.add(operationScope(entity, action, op));
+      }
+    }
+  }
+  return [...scopes].sort();
+}
+
 function genServiceImports(schema: Schema): string {
-  const policy = JSON.stringify(schema.authorization ?? {}, null, 2);
-  const userCols = schema.tables.user;
-  const userSelectCols = userCols
-    ? ["id", userCols.role ? "role" : null, userCols.status ? "status" : null, userCols.customer_type ? "customer_type" : null]
-      .filter(Boolean)
-      .join(", ")
-    : "";
-  const userAuthAttributes = userCols ? `
-export function getUserAuthAttributes(db: Database, userId: number | null): UserAuthAttributes {
-  const attrs = emptyUserAuthAttributes();
-  if (userId === null) return attrs;
-
-  const row = db.query("SELECT ${userSelectCols} FROM user WHERE id = ?").get(userId) as ${`{ id: number${userCols.role ? "; role: string | null" : ""}${userCols.status ? "; status: string | null" : ""}${userCols.customer_type ? "; customer_type: string | null" : ""} }`} | null;
-  if (!row) return attrs;
-
-  addPrincipal(attrs.principals, "user");
-  attrs.claims.userId = userId;
-${userCols.status ? `  if (row.status) attrs.claims.status = row.status;
-` : ""}${userCols.role ? `  if (row.role) {
-    addRole(attrs.roles, row.role);
-    attrs.claims.role = row.role;
-    addPrincipal(attrs.principals, "staff");
-    if (row.role === "admin") addPrincipal(attrs.principals, "admin");
-  }
-` : ""}${userCols.customer_type ? `  if (row.customer_type) {
-    addRole(attrs.roles, row.customer_type);
-    attrs.claims.customerType = row.customer_type;
-    addPrincipal(attrs.principals, "customer");
-  }
-` : ""}  return attrs;
-}
-` : `
-export function getUserAuthAttributes(_db: Database, _userId: number | null): UserAuthAttributes {
-  return emptyUserAuthAttributes();
-}
-`;
+  const policy = JSON.stringify(operationPolicies(schema), null, 2);
+  const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
   return `import { Database } from "bun:sqlite";
 import * as T from "./types";
 
@@ -126,13 +139,15 @@ export async function hashApiKey(key: string): Promise<string> {
   return Bun.password.hash(key, { algorithm: "bcrypt", cost: 10 });
 }
 
-export async function verifyApiKey(db: Database, key: string): Promise<T.ApiKeyAuthContext | null> {
+export const SELF_SERVICE_SCOPES = ${selfScopes} as const;
+
+export async function verifyApiKey(db: Database, key: string): Promise<T.AuthContext | null> {
   // Use key prefix to narrow candidates, then bcrypt verify
   const prefix = key.slice(0, 11);
   const rows = db.query(\`
     SELECT id, user_id, scopes, active, expires_at, key_hash
     FROM api_key WHERE active = 1 AND key_prefix = ?
-  \`).all(prefix) as { id: number; user_id: number | null; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
+  \`).all(prefix) as { id: number; user_id: number; scopes: string; active: number; expires_at: string | null; key_hash: string }[];
 
   for (const row of rows) {
     if (row.expires_at && new Date(row.expires_at) < new Date()) continue;
@@ -140,17 +155,9 @@ export async function verifyApiKey(db: Database, key: string): Promise<T.ApiKeyA
     if (valid) {
       // Update last_used_at
       db.query("UPDATE api_key SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
-      const userAttrs = getUserAuthAttributes(db, row.user_id);
       return {
-        kind: "api_key",
-        provider: "api_key",
-        subject: \`api_key:\${row.id}\`,
-        keyId: row.id,
         userId: row.user_id,
-        principals: uniquePrincipals(["service", ...userAttrs.principals]),
-        roles: userAttrs.roles,
         scopes: row.scopes.split(",").map(s => s.trim()).filter(Boolean),
-        claims: { ...userAttrs.claims, keyId: row.id, userId: row.user_id },
       };
     }
   }
@@ -161,115 +168,60 @@ export function hasScope(ctx: T.AuthContext, required: string): boolean {
   return ctx.scopes.includes("*") || ctx.scopes.includes(required);
 }
 
-export interface UserAuthAttributes {
-  principals: T.PlatformPrincipal[];
-  roles: string[];
-  claims: Record<string, unknown>;
-}
-
-function emptyUserAuthAttributes(): UserAuthAttributes {
-  return { principals: [], roles: [], claims: {} };
-}
-
-function addPrincipal(principals: T.PlatformPrincipal[], principal: T.PlatformPrincipal): void {
-  if (!principals.includes(principal)) principals.push(principal);
-}
-
-function addRole(roles: string[], role: string): void {
-  if (!roles.includes(role)) roles.push(role);
-}
-
-function uniquePrincipals(principals: T.PlatformPrincipal[]): T.PlatformPrincipal[] {
-  return [...new Set(principals)];
-}
-
-${userAuthAttributes}
-
 // ============================================================================
 // Authorization
 // ============================================================================
 
-const AUTHORIZATION_POLICY = ${policy} as Record<string, T.EntityAuthorizationPolicy>;
+const OPERATION_POLICY = ${policy} as Record<string, Record<string, T.OperationPolicy>>;
 
-export type AuthorizationAction = "read" | "create" | "update" | "delete" | \`operation:\${string}\`;
+export type AuthorizationAction = string;
 
 export interface AuthorizationScope {
   denied: boolean;
   unrestricted: boolean;
-  ownerFields: string[];
+  relationshipFields: string[];
 }
 
-function getActionPolicy(entity: string, action: AuthorizationAction): T.ActionAuthorizationPolicy | null {
-  const entityPolicy = AUTHORIZATION_POLICY[entity];
-  if (!entityPolicy) return null;
-  if (action.startsWith("operation:")) {
-    return entityPolicy.operations?.[action.slice("operation:".length)] ?? null;
-  }
-  return entityPolicy[action] ?? null;
+function getActionPolicy(entity: string, action: AuthorizationAction): T.OperationPolicy | null {
+  return OPERATION_POLICY[entity]?.[action] ?? null;
 }
 
-function hasAny<T>(actual: readonly T[], expected: readonly T[] | undefined): boolean {
-  return !expected?.length || expected.some(v => actual.includes(v));
+function relationshipFields(policy: T.OperationPolicy | null): string[] {
+  return [...new Set((policy?.relationships ?? []).map(rel => rel.field.field))];
 }
 
-function nonOwnerRuleMatches(rule: T.AuthorizationRule, auth: T.AuthContext): boolean {
-  if (!hasAny(auth.principals, rule.principals)) return false;
-  if (!hasAny(auth.roles, rule.roles)) return false;
-  if (rule.scopes?.length && !rule.scopes.some(scope => hasScope(auth, scope))) return false;
-  return true;
-}
-
-function ownerFieldsForRule(rule: T.AuthorizationRule, entityPolicy: T.EntityAuthorizationPolicy): string[] {
-  return rule.ownerFields?.length ? rule.ownerFields : entityPolicy.ownerFields ?? [];
-}
-
-function ownerMatches(rule: T.AuthorizationRule, entityPolicy: T.EntityAuthorizationPolicy, auth: T.AuthContext, record?: Record<string, unknown>): boolean {
-  if (!rule.owner) return true;
+function matchesRelationship(auth: T.AuthContext, policy: T.OperationPolicy, record?: Record<string, unknown>): boolean {
+  if (auth.scopes.includes("*")) return true;
+  if (policy.relationships.length === 0) return true;
   if (auth.userId === null || !record) return false;
-  const fields = ownerFieldsForRule(rule, entityPolicy);
-  return fields.some(field => Number(record[field]) === auth.userId);
+  return policy.relationships.some(rel => Number(record[rel.field.field]) === auth.userId);
+}
+
+export function operationRelationshipFields(entity: string, action: AuthorizationAction): string[] {
+  return relationshipFields(getActionPolicy(entity, action));
 }
 
 export function can(entity: string, action: AuthorizationAction, auth: T.AuthContext, record?: Record<string, unknown>): boolean {
-  const entityPolicy = AUTHORIZATION_POLICY[entity];
-  if (!entityPolicy) return true;
   const policy = getActionPolicy(entity, action);
-  const rules = policy?.allow ?? [];
-  if (rules.length === 0) return false;
-  return rules.some(rule =>
-    nonOwnerRuleMatches(rule, auth) && ownerMatches(rule, entityPolicy, auth, record)
-  );
+  if (!policy) return true;
+  if (policy.public) return true;
+  return hasScope(auth, policy.scope) && matchesRelationship(auth, policy, record);
 }
 
 export function authorizationScope(entity: string, action: AuthorizationAction, auth: T.AuthContext): AuthorizationScope {
-  const entityPolicy = AUTHORIZATION_POLICY[entity];
-  if (!entityPolicy) return { denied: false, unrestricted: true, ownerFields: [] };
   const policy = getActionPolicy(entity, action);
-  const rules = policy?.allow ?? [];
-  if (rules.length === 0) return { denied: true, unrestricted: false, ownerFields: [] };
-
-  if (rules.some(rule => !rule.owner && nonOwnerRuleMatches(rule, auth))) {
-    return { denied: false, unrestricted: true, ownerFields: [] };
-  }
-
-  if (auth.userId !== null) {
-    const ownerFields = [
-      ...new Set(rules
-        .filter(rule => rule.owner && nonOwnerRuleMatches(rule, auth))
-        .flatMap(rule => ownerFieldsForRule(rule, entityPolicy)))
-    ];
-    if (ownerFields.length > 0) {
-      return { denied: false, unrestricted: false, ownerFields };
-    }
-  }
-
-  return { denied: true, unrestricted: false, ownerFields: [] };
+  if (!policy || policy.public) return { denied: false, unrestricted: true, relationshipFields: [] };
+  if (!hasScope(auth, policy.scope)) return { denied: true, unrestricted: false, relationshipFields: [] };
+  if (auth.scopes.includes("*")) return { denied: false, unrestricted: true, relationshipFields: [] };
+  const fields = relationshipFields(policy);
+  if (fields.length === 0) return { denied: false, unrestricted: true, relationshipFields: [] };
+  if (auth.userId === null) return { denied: true, unrestricted: false, relationshipFields: [] };
+  return { denied: false, unrestricted: false, relationshipFields: fields };
 }
 
 export function authorizationError<D>(entity: string, action: AuthorizationAction, auth: T.AuthContext): Result<D> {
-  const code: ErrorCode = auth.kind === "anonymous" ? "unauthorized" : "forbidden";
-  const verb = action.startsWith("operation:") ? action.slice("operation:".length) : action;
-  return { ok: false, error: \`not authorized to \${verb} \${entity}\`, code };
+  const code: ErrorCode = auth.userId === null && !auth.scopes.includes("*") ? "unauthorized" : "forbidden";
+  return { ok: false, error: \`not authorized to \${action} \${entity}\`, code };
 }
 
 export function authorizeCollection(entity: string, action: AuthorizationAction, auth: T.AuthContext): Result<true> {
@@ -559,12 +511,12 @@ export function findAll${Entity}s(db: Database, opts: ListOptions = {}, auth: T.
   const params: unknown[] = [];
   const clauses: string[] = [];
   if (!authz.unrestricted) {
-    const ownerClauses = authz.ownerFields
+    const relationshipClauses = authz.relationshipFields
       .filter(field => ${entity}Cols.has(field))
       .map(field => \`\${field} = ?\`);
-    if (!ownerClauses.length) return [];
-    clauses.push(\`(\${ownerClauses.join(" OR ")})\`);
-    for (let i = 0; i < ownerClauses.length; i++) params.push(auth.userId);
+    if (!relationshipClauses.length) return [];
+    clauses.push(\`(\${relationshipClauses.join(" OR ")})\`);
+    for (let i = 0; i < relationshipClauses.length; i++) params.push(auth.userId);
   }
   if (opts.filter) {
     for (const [k, v] of Object.entries(opts.filter)) {
@@ -589,12 +541,12 @@ export function count${Entity}s(db: Database, filter?: Record<string, unknown>, 
   const params: unknown[] = [];
   const clauses: string[] = [];
   if (!authz.unrestricted) {
-    const ownerClauses = authz.ownerFields
+    const relationshipClauses = authz.relationshipFields
       .filter(field => ${entity}Cols.has(field))
       .map(field => \`\${field} = ?\`);
-    if (!ownerClauses.length) return 0;
-    clauses.push(\`(\${ownerClauses.join(" OR ")})\`);
-    for (let i = 0; i < ownerClauses.length; i++) params.push(auth.userId);
+    if (!relationshipClauses.length) return 0;
+    clauses.push(\`(\${relationshipClauses.join(" OR ")})\`);
+    for (let i = 0; i < relationshipClauses.length; i++) params.push(auth.userId);
   }
   if (filter) {
     for (const [k, v] of Object.entries(filter)) {
@@ -609,6 +561,12 @@ export function count${Entity}s(db: Database, filter?: Record<string, unknown>, 
 }
 
 export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ id: number }> {
+  const inputRecord = input as Record<string, unknown>;
+  for (const field of operationRelationshipFields("${entity}", "create")) {
+    if (${entity}Cols.has(field) && inputRecord[field] === undefined && auth.userId !== null) {
+      inputRecord[field] = auth.userId;
+    }
+  }
   if (!can("${entity}", "create", auth, input as Record<string, unknown>)) {
     return authorizationError("${entity}", "create", auth);
   }
@@ -639,6 +597,12 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
   if (!can("${entity}", "update", auth, existing as Record<string, unknown>)) {
     return authorizationError("${entity}", "update", auth);
+  }
+  const inputRecord = input as Record<string, unknown>;
+  for (const field of operationRelationshipFields("${entity}", "update")) {
+    if (inputRecord[field] !== undefined && Number(inputRecord[field]) !== Number((existing as Record<string, unknown>)[field])) {
+      return { ok: false, error: \`cannot change relationship field \${field}\`, code: "forbidden" };
+    }
   }
 
   // Validate formats
@@ -724,8 +688,8 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
 export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<{ id: number; status: string }> {
   const ${entity} = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!${entity}) return { ok: false, error: "not found", code: "not_found" };
-  if (!can("${entity}", "operation:${opName}", auth, ${entity} as Record<string, unknown>)) {
-    return authorizationError("${entity}", "operation:${opName}", auth);
+  if (!can("${entity}", "${opName}", auth, ${entity} as Record<string, unknown>)) {
+    return authorizationError("${entity}", "${opName}", auth);
   }
 
 ${relLoads}
@@ -767,6 +731,7 @@ export function genServices(schema: Schema): string {
   // Generate operations
   for (const [entity, ops] of Object.entries(schema.operations)) {
     for (const [opName, op] of Object.entries(ops)) {
+      if (CRUD_ACTIONS.has(opName)) continue;
       chunks.push(genOperationService(entity, opName, op, schema.tables));
     }
   }

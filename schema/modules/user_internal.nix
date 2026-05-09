@@ -2,7 +2,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.user = {
@@ -32,20 +31,5 @@ in
         (E.eq (E.f "status") (E.lit "active"));
       set = { role = "admin"; };
     };
-  };
-
-  authorization.user.operations = {
-    suspend.allow = [
-      A.admin
-      (A.scopedAny [ "user.suspend" ])
-    ];
-    reactivate.allow = [
-      A.admin
-      (A.scopedAny [ "user.reactivate" ])
-    ];
-    promote_to_admin.allow = [
-      A.admin
-      (A.scopedAny [ "user.promote_to_admin" ])
-    ];
   };
 }

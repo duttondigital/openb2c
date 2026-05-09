@@ -1,7 +1,4 @@
 { config, lib, ... }:
-let
-  A = import ../lib/auth.nix;
-in
 {
   # Identity registry for federated auth
   # Verifies email ownership, issues signed certificates
@@ -22,19 +19,5 @@ in
     public_key = { type = "text"; required = true; };
     verified_at = { type = "text"; required = false; default = "CURRENT_TIMESTAMP"; };
     revoked = { type = "integer"; required = false; default = "0"; };
-  };
-
-  authorization.identity_challenge = {
-    read.allow = [ A.admin (A.scopedAny [ "identity_challenge.read" ]) ];
-    create.allow = [ A.admin (A.scopedAny [ "identity_challenge.create" ]) ];
-    update.allow = [ A.admin (A.scopedAny [ "identity_challenge.update" ]) ];
-    delete.allow = [ A.admin (A.scopedAny [ "identity_challenge.delete" ]) ];
-  };
-
-  authorization.identity_registry = {
-    read.allow = [ A.admin (A.scopedAny [ "identity_registry.read" ]) ];
-    create.allow = [ A.admin (A.scopedAny [ "identity_registry.create" ]) ];
-    update.allow = [ A.admin (A.scopedAny [ "identity_registry.update" ]) ];
-    delete.allow = [ A.admin (A.scopedAny [ "identity_registry.delete" ]) ];
   };
 }

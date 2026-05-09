@@ -27,6 +27,7 @@ let
 in {
   organization = modules.config.organization;
   tables = modules.config.tables;
-  operations = composeLib.processOperations modules.config.operations;
-  authorization = modules.config.authorization;
+  refs = modules.config.refs;
+  relationships = modules.config.relationships;
+  operations = composeLib.processOperations modules.config.tables modules.config.operations;
 }

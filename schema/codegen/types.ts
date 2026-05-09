@@ -10,6 +10,20 @@ export interface Column {
 
 export type Tables = Record<string, Record<string, Column>>;
 
+export interface FieldRef {
+  table: string;
+  field: string;
+  references: string | null;
+}
+
+export type Refs = Record<string, Record<string, FieldRef>>;
+
+export interface Relationship {
+  field: FieldRef;
+}
+
+export type Relationships = Record<string, Record<string, Relationship>>;
+
 export interface Expr {
   _t: "field" | "rel" | "lit" | "bin" | "un" | "agg";
   [key: string]: unknown;
@@ -29,35 +43,15 @@ export interface Effect {
 
 export interface Operation {
   guard: Expr | null;
+  relationships: Relationship[];
+  public: boolean;
+  scope: string | null;
   set: Record<string, string>;
   cascade: Cascade[];
   effects: Effect[];
 }
 
 export type Operations = Record<string, Record<string, Operation>>;
-
-export interface AuthorizationRule {
-  principals: string[];
-  roles: string[];
-  scopes: string[];
-  owner: boolean;
-  ownerFields: string[];
-}
-
-export interface ActionAuthorization {
-  allow: AuthorizationRule[];
-}
-
-export interface EntityAuthorization {
-  ownerFields: string[];
-  read: ActionAuthorization;
-  create: ActionAuthorization;
-  update: ActionAuthorization;
-  delete: ActionAuthorization;
-  operations: Record<string, ActionAuthorization>;
-}
-
-export type Authorization = Record<string, EntityAuthorization>;
 
 export interface OrganizationMetadata {
   name: string;
@@ -80,6 +74,7 @@ export interface AppMetadata {
 export interface Schema {
   organization: OrganizationMetadata;
   tables: Tables;
+  refs?: Refs;
+  relationships?: Relationships;
   operations: Operations;
-  authorization?: Authorization;
 }

@@ -19,6 +19,9 @@ const schema: Schema = {
     note: {
       publish: {
         guard: null,
+        relationships: [],
+        public: false,
+        scope: null,
         set: { status: "published" },
         cascade: [],
         effects: [],
@@ -28,42 +31,42 @@ const schema: Schema = {
 };
 
 describe("auth context generation", () => {
-  test("generated types include shared auth context shapes", () => {
-    const types = genTypes(schema.tables);
+  test("generated types include minimal shared auth context shape", () => {
+    const types = genTypes(schema.tables, schema.operations);
 
-    expect(types).toContain("export const PLATFORM_PRINCIPALS");
-    expect(types).toContain("export type PlatformPrincipal");
-    expect(types).toContain("\"anonymous\"");
-    expect(types).toContain("\"customer\"");
-    expect(types).toContain("\"staff\"");
-    expect(types).toContain("\"admin\"");
-    expect(types).toContain("\"service\"");
-    expect(types).toContain("\"owner\"");
-    expect(types).toContain("export const POLICY_ONLY_PLATFORM_PRINCIPALS");
-    expect(types).toContain("export interface BaseAuthContext");
-    expect(types).toContain("principals: PlatformPrincipal[]");
-    expect(types).toContain("roles: DomainRole[]");
-    expect(types).toContain("claims: Record<string, unknown>");
-    expect(types).toContain("export interface ApiKeyAuthContext");
-    expect(types).toContain("export interface IdentityAuthContext");
-    expect(types).toContain("export type AuthContext");
+    expect(types).toContain("export type PermissionScope = string");
+    expect(types).toContain("export interface AuthContext");
+    expect(types).toContain("userId: number | null");
+    expect(types).toContain("scopes: PermissionScope[]");
     expect(types).toContain("export const ANONYMOUS_AUTH_CONTEXT");
+    expect(types).toContain("export const SYSTEM_AUTH_CONTEXT");
+    expect(types).toContain("export interface FieldRef");
+    expect(types).toContain("export interface Relationship");
+    expect(types).toContain("export interface OperationPolicy");
+    expect(types).not.toContain("PlatformPrincipal");
+    expect(types).not.toContain("principals:");
+    expect(types).not.toContain("roles:");
+    expect(types).not.toContain("claims:");
+    expect(types).not.toContain("ApiKeyAuthContext");
   });
 
   test("generated services accept auth context", () => {
     const services = genServices(schema);
 
     expect(services).toContain("import * as T from \"./types\";");
-    expect(services).toContain("Promise<T.ApiKeyAuthContext | null>");
-    expect(services).toContain("kind: \"api_key\"");
-    expect(services).toContain("provider: \"api_key\"");
-    expect(services).toContain("principals: uniquePrincipals([\"service\", ...userAttrs.principals])");
-    expect(services).toContain("claims: { ...userAttrs.claims, keyId: row.id, userId: row.user_id }");
-    expect(services).toContain("export function getUserAuthAttributes");
+    expect(services).toContain("Promise<T.AuthContext | null>");
+    expect(services).toContain("userId: row.user_id");
+    expect(services).toContain("scopes: row.scopes.split");
+    expect(services).toContain("export const SELF_SERVICE_SCOPES");
+    expect(services).toContain("const OPERATION_POLICY");
+    expect(services).toContain("return hasScope(auth, policy.scope) && matchesRelationship(auth, policy, record);");
     expect(services).toContain("findNoteById(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("findAllNotes(db: Database, opts: ListOptions = {}, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("createNote(db: Database, input: T.NoteInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("publishNote(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
+    expect(services).not.toContain("principals");
+    expect(services).not.toContain("roles");
+    expect(services).not.toContain("claims");
   });
 
   test("generated REST and MCP handlers pass auth context to services", () => {
@@ -74,10 +77,11 @@ describe("auth context generation", () => {
     expect(server).toContain("type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext)");
     expect(server).toContain("let authContext: T.AuthContext = AUTH_ENABLED ? T.ANONYMOUS_AUTH_CONTEXT : T.SYSTEM_AUTH_CONTEXT;");
     expect(server).toContain("authContext = auth;");
-    expect(server).toContain("kind: \"identity\"");
-    expect(server).toContain("provider: \"certificate\"");
-    expect(server).toContain("principals: userAttrs.principals.length ? userAttrs.principals : [\"user\"]");
-    expect(server).toContain("roles: userAttrs.roles");
+    expect(server).toContain("scopes: [...S.SELF_SERVICE_SCOPES]");
+    expect(server).not.toContain("kind: \"identity\"");
+    expect(server).not.toContain("provider: \"certificate\"");
+    expect(server).not.toContain("principals:");
+    expect(server).not.toContain("roles:");
     expect(server).toContain("S.findAllNotes(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined }, auth)");
     expect(server).toContain("S.publishNote(db, +p.id, auth)");
     expect(server).toContain("result.route.handler(req, result.params, authContext)");

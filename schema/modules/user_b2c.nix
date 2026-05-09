@@ -2,7 +2,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.user = {
@@ -11,6 +10,7 @@ in
 
   operations.user = {
     upgrade_to_patron = {
+      relationships = with config.relationships.user; [ self ];
       guard = E.and
         (E.ne (E.f "customer_type") (E.lit "patron"))
         (E.notNull (E.f "email"));
@@ -20,11 +20,4 @@ in
       ];
     };
   };
-
-  authorization.user.operations.upgrade_to_patron.allow = [
-    A.operator
-    A.ownerUser
-    (A.ownerService [ "user.upgrade_to_patron" "write" ])
-    (A.scopedAny [ "user.upgrade_to_patron" ])
-  ];
 }

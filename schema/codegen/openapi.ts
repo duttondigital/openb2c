@@ -1,6 +1,8 @@
 import type { Schema } from "./types";
 import { getAppMetadata, pascalCase } from "./utils";
 
+const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const paths: Record<string, unknown> = {};
@@ -11,7 +13,7 @@ export function genOpenAPI(schema: Schema): string {
     type: "object",
     properties: {
       error: { type: "string" },
-      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict"] },
+      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict", "unauthorized", "forbidden"] },
       details: { type: "object", additionalProperties: { type: "string" } },
     },
     required: ["error", "code"],
@@ -31,6 +33,11 @@ export function genOpenAPI(schema: Schema): string {
   for (const [entity, cols] of Object.entries(schema.tables)) {
     const Entity = pascalCase(entity);
     const ops = schema.operations[entity] || {};
+    const createRelationshipFields = new Set(
+      (ops.create?.relationships ?? [])
+        .filter(rel => rel.field.table === entity)
+        .map(rel => rel.field.field)
+    );
 
     // Entity schema
     const properties: Record<string, unknown> = {};
@@ -50,7 +57,7 @@ export function genOpenAPI(schema: Schema): string {
     for (const [col, c] of Object.entries(cols)) {
       if (c.pk && c.auto) continue;
       inputProps[col] = { type: c.type === "integer" ? "integer" : "string" };
-      if (c.required && c.default === null) inputRequired.push(col);
+      if (c.required && c.default === null && !createRelationshipFields.has(col)) inputRequired.push(col);
     }
     schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };
 
@@ -117,7 +124,7 @@ export function genOpenAPI(schema: Schema): string {
     };
 
     // Custom operations
-    for (const opName of Object.keys(ops)) {
+    for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
         post: {
           summary: `${opName.replace(/_/g, " ")} ${entity}`,

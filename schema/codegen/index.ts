@@ -37,7 +37,7 @@ if (import.meta.main) {
   mkdirSync(outDir, { recursive: true });
 
   writeFileSync(join(outDir, "schema.sql"), genSQL(schema.tables));
-  writeFileSync(join(outDir, "types.ts"), genTypes(schema.tables));
+  writeFileSync(join(outDir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(outDir, "services.ts"), genServices(schema));
   writeFileSync(join(outDir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(outDir, "server.ts"), genRoutes(schema));

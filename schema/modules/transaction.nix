@@ -1,7 +1,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.transaction = {
@@ -22,7 +21,14 @@ in
     ticket_id = { type = "integer"; required = true; references = "ticket(id)"; };
   };
 
-  operations.transaction = {
+  relationships.transaction.owner.field = config.refs.transaction.user_id;
+
+  operations.transaction =
+    let rel = config.relationships.transaction;
+    in {
+    read.relationships = with rel; [ owner ];
+    create.relationships = with rel; [ owner ];
+
     complete = {
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "completed"; };
@@ -60,62 +66,5 @@ in
         { call = { service = "payment"; action = "process_refund"; }; }
       ];
     };
-  };
-
-  authorization.transaction = {
-    ownerFields = [ "user_id" ];
-    read.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "transaction.read" "read" ])
-      (A.scopedAny [ "transaction.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "transaction.create" "write" ])
-      (A.scopedAny [ "transaction.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      (A.scopedAny [ "transaction.update" "write" ])
-    ];
-    delete.allow = [
-      A.admin
-      (A.scopedAny [ "transaction.delete" ])
-    ];
-    operations = {
-      complete.allow = [
-        A.operator
-        (A.scopedAny [ "transaction.complete" ])
-      ];
-      fail.allow = [
-        A.operator
-        (A.scopedAny [ "transaction.fail" ])
-      ];
-      refund.allow = [
-        A.operator
-        (A.scopedAny [ "transaction.refund" ])
-      ];
-    };
-  };
-
-  authorization.transaction_ticket = {
-    read.allow = [
-      A.operator
-      (A.scopedAny [ "transaction_ticket.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      (A.scopedAny [ "transaction_ticket.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      (A.scopedAny [ "transaction_ticket.update" "write" ])
-    ];
-    delete.allow = [
-      A.operator
-      (A.scopedAny [ "transaction_ticket.delete" "write" ])
-    ];
   };
 }

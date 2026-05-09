@@ -1,10 +1,31 @@
-# Composition helper: processes operations to auto-generate event names
+# Composition helper: processes operations to add implicit CRUD operation
+# contracts and auto-generate event names.
 { lib }:
 
+let
+  crudActions = [ "read" "create" "update" "delete" ];
+  defaultOperation = {
+    guard = null;
+    relationships = [];
+    public = false;
+    scope = null;
+    set = {};
+    cascade = [];
+    effects = [];
+  };
+in
 {
+  crudActions = crudActions;
+
   # Auto-generate emit event names for operations
   # Only emits events if there are other effects (notify, call) or explicit emit
-  processOperations = ops: lib.mapAttrs (table: tableOps:
+  processOperations = tables: ops:
+    let
+      withCrud = lib.mapAttrs (table: _:
+        (lib.genAttrs crudActions (_: defaultOperation)) // (ops.${table} or {})
+      ) tables;
+    in
+    lib.mapAttrs (table: tableOps:
     lib.mapAttrs (opName: op:
       let
         eventName = "${table}.${opName}";
@@ -27,5 +48,5 @@
             [];
       }
     ) tableOps
-  ) ops;
+  ) withCrud;
 }

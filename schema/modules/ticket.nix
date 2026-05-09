@@ -1,7 +1,6 @@
 { config, lib, ... }:
 let
   E = import ../lib/expr.nix;
-  A = import ../lib/auth.nix;
 in
 {
   tables.ticket = {
@@ -15,8 +14,18 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  operations.ticket = {
+  relationships.ticket.owner.field = config.refs.ticket.user_id;
+
+  operations.ticket =
+    let rel = config.relationships.ticket;
+    in {
+    read.relationships = with rel; [ owner ];
+    create.relationships = with rel; [ owner ];
+    update.relationships = with rel; [ owner ];
+    delete.relationships = with rel; [ owner ];
+
     confirm = {
+      relationships = with rel; [ owner ];
       guard = E.and
         (E.eq (E.f "status") (E.lit "reserved"))
         # Can't confirm if performance is cancelled
@@ -28,6 +37,7 @@ in
     };
 
     cancel = {
+      relationships = with rel; [ owner ];
       guard = E.or
         (E.eq (E.f "status") (E.lit "reserved"))
         (E.eq (E.f "status") (E.lit "confirmed"));
@@ -42,61 +52,11 @@ in
     };
 
     upgrade = {
+      relationships = with rel; [ owner ];
       guard = E.and
         (E.eq (E.f "ticket_type") (E.lit "standard"))
         (E.eq (E.f "status") (E.lit "confirmed"));
       set = { ticket_type = "vip"; };
-    };
-  };
-
-  authorization.ticket = {
-    ownerFields = [ "user_id" ];
-    read.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "ticket.read" "read" ])
-      (A.scopedAny [ "ticket.read" "read" ])
-    ];
-    create.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "ticket.create" "write" ])
-      (A.scopedAny [ "ticket.create" "write" ])
-    ];
-    update.allow = [
-      A.operator
-      A.ownerUser
-      (A.ownerService [ "ticket.update" "write" ])
-      (A.scopedAny [ "ticket.update" "write" ])
-    ];
-    delete.allow = [
-      A.operator
-      (A.ownerService [ "ticket.delete" "write" ])
-      (A.scopedAny [ "ticket.delete" ])
-    ];
-    operations = {
-      confirm.allow = [
-        A.operator
-        A.ownerUser
-        (A.ownerService [ "ticket.confirm" "write" ])
-        (A.scopedAny [ "ticket.confirm" ])
-      ];
-      cancel.allow = [
-        A.operator
-        A.ownerUser
-        (A.ownerService [ "ticket.cancel" "write" ])
-        (A.scopedAny [ "ticket.cancel" ])
-      ];
-      use.allow = [
-        A.operator
-        (A.scopedAny [ "ticket.use" ])
-      ];
-      upgrade.allow = [
-        A.operator
-        A.ownerUser
-        (A.ownerService [ "ticket.upgrade" "write" ])
-        (A.scopedAny [ "ticket.upgrade" ])
-      ];
     };
   };
 }
