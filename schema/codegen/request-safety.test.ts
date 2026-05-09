@@ -88,4 +88,39 @@ describe("generated request safety", () => {
       delete process.env.MAX_REQUEST_BODY_BYTES;
     }
   });
+
+  test("list endpoints clamp pagination limits and offsets", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "pagination.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+    process.env.MAX_PAGE_LIMIT = "2";
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      for (const title of ["one", "two", "three"]) {
+        const created = await fetch(`${base}/api/notes`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title }),
+        });
+        expect(created.status).toBe(201);
+      }
+
+      const response = await fetch(`${base}/api/notes?limit=9999&offset=-20`);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { items: unknown[]; total: number; limit: number; offset: number };
+      expect(body.limit).toBe(2);
+      expect(body.offset).toBe(0);
+      expect(body.total).toBe(3);
+      expect(body.items).toHaveLength(2);
+    } finally {
+      server.stop(true);
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+      delete process.env.MAX_PAGE_LIMIT;
+    }
+  });
 });

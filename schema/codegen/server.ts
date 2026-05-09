@@ -21,8 +21,8 @@ export function genRoutes(schema: Schema): string {
     const authz = S.authorizeCollection("${entity}", "read", auth);
     if (!authz.ok) return corsResponse(authz, { status: S.statusForResult(authz) });
     const url = new URL(req.url);
-    const limit = parseInt(url.searchParams.get("limit") || "100");
-    const offset = parseInt(url.searchParams.get("offset") || "0");
+    const limit = clampLimit(url.searchParams.get("limit"));
+    const offset = clampOffset(url.searchParams.get("offset"));
     const sort = url.searchParams.get("sort") || undefined;
     const order = url.searchParams.get("order") as "asc" | "desc" | undefined;
     const filter: Record<string, string> = {};
@@ -96,6 +96,7 @@ const DB_PATH = process.env.DB_PATH || APP_CONFIG.databasePath;
 const PORT = parseInt(process.env.PORT || String(APP_CONFIG.defaultPorts.server), 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || "1048576", 10);
+const MAX_PAGE_LIMIT = parseInt(process.env.MAX_PAGE_LIMIT || "1000", 10);
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
 const PRODUCTION = process.env.NODE_ENV === "production";
 const REGISTRY_PRIVATE_KEY = process.env.REGISTRY_PRIVATE_KEY;  // hex-encoded Ed25519 private key
@@ -151,6 +152,20 @@ async function readJson<T>(req: Request): Promise<S.Result<T>> {
   } catch {
     return { ok: false, error: "malformed JSON", code: "invalid" };
   }
+}
+
+function parseIntegerParam(value: string | null, fallback: number): number {
+  if (value === null) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampLimit(value: string | null): number {
+  return Math.min(Math.max(parseIntegerParam(value, 100), 1), MAX_PAGE_LIMIT);
+}
+
+function clampOffset(value: string | null): number {
+  return Math.max(parseIntegerParam(value, 0), 0);
 }
 
 const db = new Database(DB_PATH);
