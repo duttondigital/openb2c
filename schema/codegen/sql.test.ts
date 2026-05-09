@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { sqlType, genSQL } from "./sql";
 import type { Column } from "./types";
-import type { Tables } from "./types";
+import type { Indexes, Tables } from "./types";
 
 describe("sqlType", () => {
   const baseCol: Column = {
@@ -148,5 +148,49 @@ describe("genSQL", () => {
     };
     const sql = genSQL(tables);
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS [order]");
+  });
+
+  test("generates indexes from schema metadata", () => {
+    const tables: Tables = {
+      ticket: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+        user_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "user(id)" },
+        status: { type: "text", pk: false, auto: false, required: false, unique: false, default: "'reserved'", references: null },
+      },
+      user: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      },
+    };
+    const indexes: Indexes = {
+      ticket: {
+        by_user_status: { columns: ["user_id", "status"], unique: false },
+        unique_user_status: { columns: ["user_id", "status"], unique: true },
+      },
+    };
+
+    const sql = genSQL(tables, indexes);
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS ticket_by_user_status ON ticket (user_id, status);");
+    expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS ticket_unique_user_status ON ticket (user_id, status);");
+    expect(sql.indexOf("CREATE TABLE IF NOT EXISTS ticket")).toBeLessThan(sql.indexOf("CREATE INDEX IF NOT EXISTS ticket_by_user_status"));
+  });
+
+  test("validates index table and column references", () => {
+    const tables: Tables = {
+      ticket: {
+        id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      },
+    };
+
+    expect(() => genSQL(tables, {
+      missing: {
+        by_id: { columns: ["id"], unique: false },
+      },
+    })).toThrow("Index configured for non-existent table: missing");
+
+    expect(() => genSQL(tables, {
+      ticket: {
+        by_missing: { columns: ["missing_id"], unique: false },
+      },
+    })).toThrow("Index by_missing on ticket references non-existent column: missing_id");
   });
 });

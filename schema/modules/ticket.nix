@@ -14,6 +14,14 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
+  indexes.ticket.by_user_status = {
+    columns = [ "user_id" "status" ];
+  };
+
+  indexes.ticket.by_performance_status = {
+    columns = [ "performance_id" "status" ];
+  };
+
   operations.ticket = {
     confirm = {
       guard = E.and

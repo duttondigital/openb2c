@@ -18,6 +18,14 @@ in
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
+  indexes.issue.by_project_status = {
+    columns = [ "project_id" "status" ];
+  };
+
+  indexes.issue.by_assignee_status = {
+    columns = [ "assignee_id" "status" ];
+  };
+
   operations.issue = {
     read.relationships = [ "creator" "assignee" ];
     create.relationships = [ "creator" ];

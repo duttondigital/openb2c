@@ -93,8 +93,8 @@ These must be complete before calling any generated app production-ready.
 
 ### Data Integrity And Migrations
 
-- [ ] Add ontology support for indexes.
-- [ ] Generate `CREATE INDEX` statements from schema metadata.
+- [x] Add ontology support for indexes.
+- [x] Generate `CREATE INDEX` statements from schema metadata.
 - [ ] Add unique constraints to junction tables such as `performance_artist`, `transaction_ticket`, and `issue_label`.
 - [ ] Add a migration system for evolving schemas without data loss.
 - [ ] Store applied migration history in the database.

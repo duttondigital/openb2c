@@ -1,5 +1,5 @@
 import assert from "assert/strict";
-import type { Column, Tables } from "./types";
+import type { Column, Indexes, Tables } from "./types";
 import { quoteReserved } from "./utils";
 
 export function sqlType(col: Column, availableTables?: string[]): string {
@@ -26,7 +26,26 @@ export function sqlType(col: Column, availableTables?: string[]): string {
   return parts.join(" ");
 }
 
-export function genSQL(tables: Tables): string {
+function genIndexSQL(tables: Tables, indexes: Indexes): string[] {
+  const stmts: string[] = [];
+  for (const [table, tableIndexes] of Object.entries(indexes)) {
+    const cols = tables[table];
+    assert(cols, `Index configured for non-existent table: ${table}`);
+    for (const [name, index] of Object.entries(tableIndexes)) {
+      assert(index.columns.length > 0, `Index ${name} on ${table} must include at least one column`);
+      for (const column of index.columns) {
+        assert(cols[column], `Index ${name} on ${table} references non-existent column: ${column}`);
+      }
+      const unique = index.unique ? "UNIQUE " : "";
+      const tableName = quoteReserved(table);
+      const indexName = `${table}_${name}`;
+      stmts.push(`CREATE ${unique}INDEX IF NOT EXISTS ${quoteReserved(indexName)} ON ${tableName} (${index.columns.join(", ")});`);
+    }
+  }
+  return stmts;
+}
+
+export function genSQL(tables: Tables, indexes: Indexes = {}): string {
   // Topological sort: tables with no FK deps first
   const tableNames = Object.keys(tables);
   const deps: Record<string, string[]> = {};
@@ -63,5 +82,6 @@ export function genSQL(tables: Tables): string {
     const tableName = quoteReserved(table);
     stmts.push(`CREATE TABLE IF NOT EXISTS ${tableName} (\n${defs.join(",\n")}\n);`);
   }
+  stmts.push(...genIndexSQL(tables, indexes));
   return stmts.join("\n\n") + "\n";
 }

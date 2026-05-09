@@ -10,6 +10,13 @@ export interface Column {
 
 export type Tables = Record<string, Record<string, Column>>;
 
+export interface Index {
+  columns: string[];
+  unique: boolean;
+}
+
+export type Indexes = Record<string, Record<string, Index>>;
+
 export interface FieldRef {
   table: string;
   field: string;
@@ -74,6 +81,7 @@ export interface AppMetadata {
 export interface Schema {
   organization: OrganizationMetadata;
   tables: Tables;
+  indexes?: Indexes;
   refs?: Refs;
   relationships?: Relationships;
   operations: Operations;

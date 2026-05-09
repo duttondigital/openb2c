@@ -15,6 +15,10 @@ in
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
+  indexes.performance.by_venue_date = {
+    columns = [ "venue_id" "date" ];
+  };
+
   # Junction table for performance-artist many-to-many
   tables.performance_artist = {
     id = { type = "integer"; pk = true; auto = true; };

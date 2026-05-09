@@ -53,6 +53,20 @@ let
 
   relationshipSpecType = lib.types.either lib.types.str relationshipType;
 
+  indexType = lib.types.submodule {
+    options = {
+      columns = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        description = "Columns covered by the index, in order.";
+      };
+      unique = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether this index enforces uniqueness.";
+      };
+    };
+  };
+
   # Effect types
   effectType = lib.types.submodule {
     options = {
@@ -158,6 +172,12 @@ in {
       type = lib.types.attrsOf (lib.types.attrsOf relationshipType);
       default = {};
       description = "Record relationship definitions per entity.";
+    };
+
+    indexes = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf indexType);
+      default = {};
+      description = "Database indexes per table.";
     };
 
     operations = lib.mkOption {
