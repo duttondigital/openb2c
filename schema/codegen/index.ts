@@ -17,8 +17,9 @@ export { genMcpServer } from "./mcp";
 export { genEffectsInterface } from "./effects";
 export { genOpenAPI } from "./openapi";
 export { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
+export { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
 
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import type { Schema } from "./types";
 import { genSQL } from "./sql";
@@ -30,6 +31,7 @@ import { genMcpServer } from "./mcp";
 import { genOpenAPI } from "./openapi";
 import { genAdminAppShell, genPublicAppShell } from "./ui";
 import { genEnvExample } from "./config";
+import { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
 
 if (import.meta.main) {
   const input = await Bun.stdin.text();
@@ -64,9 +66,13 @@ if (import.meta.main) {
   mkdirSync(uiDir, { recursive: true });
   mkdirSync(adminUiDir, { recursive: true });
   writeFileSync(join(uiDir, "index.html"), genPublicAppShell(schema));
+  writeFileSync(join(uiDir, "styles.css"), genPublicStylesheet());
   writeFileSync(join(uiDir, "openapi.json"), openApiJson);
   writeFileSync(join(adminUiDir, "index.html"), genAdminAppShell(schema));
+  writeFileSync(join(adminUiDir, "styles.css"), genAdminStylesheet());
   writeFileSync(join(adminUiDir, "openapi.json"), openApiJson);
+  rmSync(join(uiDir, "chunks"), { recursive: true, force: true });
+  rmSync(join(adminUiDir, "chunks"), { recursive: true, force: true });
 
   // Bundle public and admin web components separately so customer-facing pages
   // do not ship generated admin data-management code.
@@ -75,7 +81,12 @@ if (import.meta.main) {
   const publicResult = await Bun.build({
     entrypoints: [publicUiEntry],
     outdir: uiDir,
-    naming: "app.js",
+    naming: {
+      entry: "app.js",
+      chunk: "chunks/[name]-[hash].js",
+    },
+    splitting: true,
+    format: "esm",
     minify: true,
   });
   if (!publicResult.success) {
@@ -86,7 +97,12 @@ if (import.meta.main) {
   const adminResult = await Bun.build({
     entrypoints: [adminUiEntry],
     outdir: adminUiDir,
-    naming: "app.js",
+    naming: {
+      entry: "app.js",
+      chunk: "chunks/[name]-[hash].js",
+    },
+    splitting: true,
+    format: "esm",
     minify: true,
   });
   if (!adminResult.success) {
@@ -95,7 +111,9 @@ if (import.meta.main) {
   }
 
   console.log(`wrote ${uiDir}/index.html`);
+  console.log(`wrote ${uiDir}/styles.css`);
   console.log(`wrote ${uiDir}/app.js`);
   console.log(`wrote ${adminUiDir}/index.html`);
+  console.log(`wrote ${adminUiDir}/styles.css`);
   console.log(`wrote ${adminUiDir}/app.js`);
 }

@@ -22,28 +22,7 @@ function genShell(title: string, tagName: "ob-app" | "ob-admin-app", apiBase: st
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapedTitle}</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --ob-shell-bg: #f7f7f4;
-      --ob-shell-text: #242521;
-      --ob-shell-border: #dedbd2;
-      --ob-shell-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
-      --ob-nav-width: 248px;
-    }
-    html {
-      min-height: 100%;
-      background: var(--ob-shell-bg);
-    }
-    body {
-      background: var(--ob-shell-bg);
-      min-height: 100%;
-    }
-    ${tagName} {
-      display: block;
-      min-height: 100vh;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <${tagName} src="openapi.json" api-base="${escapedApiBase}"></${tagName}>

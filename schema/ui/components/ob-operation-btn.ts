@@ -3,7 +3,7 @@
  * Executes an operation (POST) and refreshes parent on success.
  */
 import { ObApi } from "./ob-api";
-import { button, reset, theme } from "../styles";
+import { stylesheetLink } from "../style-link";
 
 export class ObOperationBtn extends HTMLElement {
   constructor() {
@@ -28,11 +28,7 @@ export class ObOperationBtn extends HTMLElement {
     const label = op.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${button}
-        .msg { font-size: 13px; margin-top: 4px; }
-        .msg.error { color: var(--ob-danger, #dc2626); }
-        .msg.success { color: var(--ob-success, #16a34a); }
-      </style>
+      ${stylesheetLink()}
       <button class="primary">${label}</button>
       <div class="msg" data-role="message"></div>
     `;

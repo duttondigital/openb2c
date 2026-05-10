@@ -2,8 +2,8 @@
  * <ob-nav> - Admin sidebar navigation derived from OpenAPI spec entities.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset } from "../styles";
 import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
+import { stylesheetLink } from "../style-link";
 import "./ob-auth-menu";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
@@ -28,92 +28,7 @@ export class ObNav extends HTMLElement {
     const appDescription = escapeHtml(api.spec?.info.description || "");
 
     this.shadowRoot!.innerHTML = `
-      <style>
-        ${theme} ${reset}
-        :host {
-          position: sticky;
-          top: 0;
-          height: 100vh;
-          z-index: 2;
-        }
-        nav {
-          width: var(--ob-nav-width);
-          min-height: 100vh;
-          background: var(--ob-bg);
-          border-right: 1px solid var(--ob-border);
-          padding: 18px 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 18px;
-        }
-        .brand {
-          padding: 0 8px 14px;
-          border-bottom: 1px solid var(--ob-border);
-        }
-        .title {
-          font-weight: 800;
-          font-size: 17px;
-          line-height: 1.2;
-        }
-        .description {
-          color: var(--ob-text-muted);
-          font-size: 12px;
-          line-height: 1.4;
-          margin-top: 5px;
-        }
-        .group { display: grid; gap: 4px; }
-        .account {
-          margin-top: auto;
-          padding: 14px 8px 0;
-          border-top: 1px solid var(--ob-border);
-        }
-        .group-title {
-          padding: 0 8px 4px;
-          color: var(--ob-text-muted);
-          font-size: 12px;
-          font-weight: 800;
-        }
-        .nav-link {
-          display: flex;
-          align-items: center;
-          width: 100%;
-          min-height: 38px;
-          padding: 8px 10px;
-          background: transparent;
-          color: var(--ob-text);
-          font-size: 14px;
-          font-weight: 600;
-          font-family: inherit;
-          text-decoration: none;
-          border-radius: var(--ob-radius);
-          border: 1px solid transparent;
-          text-align: left;
-          cursor: pointer;
-        }
-        .nav-link:hover {
-          background: var(--ob-bg-alt);
-          border-color: var(--ob-border);
-          text-decoration: none;
-        }
-        .nav-link.active {
-          background: var(--ob-primary);
-          color: white;
-          border-color: var(--ob-primary);
-          box-shadow: var(--ob-shadow-sm);
-        }
-        @media (max-width: 780px) {
-          :host {
-            position: static;
-            height: auto;
-          }
-          nav {
-            width: 100%;
-            min-height: auto;
-            border-right: 0;
-            border-bottom: 1px solid var(--ob-border);
-          }
-        }
-      </style>
+      ${stylesheetLink()}
       <nav aria-label="Primary">
         <div class="brand">
           <div class="title">${appTitle}</div>

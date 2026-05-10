@@ -3,8 +3,8 @@
  * Derives form fields from OpenAPI spec.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset, form, button, card } from "../styles";
 import { displayName, escapeAttr, escapeHtml, fieldLabel, labelFor } from "../format";
+import { stylesheetLink } from "../style-link";
 
 export class ObEntityForm extends HTMLElement {
   private _error = "";
@@ -70,26 +70,7 @@ export class ObEntityForm extends HTMLElement {
     }
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${form} ${button} ${card}
-        :host { max-width: 760px; display: block; }
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 16px;
-        }
-        .form-group.full { grid-column: 1 / -1; }
-        .actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 4px;
-        }
-        @media (max-width: 720px) {
-          .card-header { align-items: flex-start; flex-direction: column; }
-          .form-grid { grid-template-columns: 1fr; }
-          .actions button { width: 100%; }
-        }
-      </style>
+      ${stylesheetLink()}
       <div class="card">
         <div class="card-header">
           <div>

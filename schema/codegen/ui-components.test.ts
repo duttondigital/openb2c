@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
+import { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
 import type { Schema } from "./types";
 
 const PROJECT_ROOT = join(import.meta.dir, "..", "..");
@@ -23,6 +25,7 @@ describe("generated UI web components", () => {
     const shell = genAppShell(shellSchema);
 
     expect(shell).toContain('<ob-app src="openapi.json" api-base="http://localhost:3085"></ob-app>');
+    expect(shell).toContain('<link rel="stylesheet" href="styles.css" />');
     expect(shell).not.toContain('id="content"');
     expect(shell).not.toContain("#content");
     expect(shell).not.toContain("<ob-api");
@@ -91,6 +94,8 @@ describe("generated UI web components", () => {
     expect(authMenu).toContain("clearAuthContext");
     expect(authMenu).toContain('observedAttributes');
     expect(authMenu).toContain('placement');
+    expect(authMenu).toContain("../style-link");
+    expect(authMenu).not.toContain("../styles");
     expect(publicRoute).toContain("./ob-commerce");
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-entity-list");
@@ -105,24 +110,42 @@ describe("generated UI web components", () => {
     const adminOut = join(tmp, "admin");
 
     try {
+      await mkdir(publicOut, { recursive: true });
+      await mkdir(adminOut, { recursive: true });
+      await writeFile(join(publicOut, "styles.css"), genPublicStylesheet());
+      await writeFile(join(adminOut, "styles.css"), genAdminStylesheet());
       const publicResult = await Bun.build({
         entrypoints: [join(UI_DIR, "public.ts")],
         outdir: publicOut,
-        naming: "app.js",
+        naming: {
+          entry: "app.js",
+          chunk: "chunks/[name]-[hash].js",
+        },
+        splitting: true,
+        format: "esm",
         minify: true,
       });
       const adminResult = await Bun.build({
         entrypoints: [join(UI_DIR, "admin.ts")],
         outdir: adminOut,
-        naming: "app.js",
+        naming: {
+          entry: "app.js",
+          chunk: "chunks/[name]-[hash].js",
+        },
+        splitting: true,
+        format: "esm",
         minify: true,
       });
 
       expect(publicResult.success).toBe(true);
       expect(adminResult.success).toBe(true);
 
-      const publicBundle = await Bun.file(join(publicOut, "app.js")).text();
-      const adminBundle = await Bun.file(join(adminOut, "app.js")).text();
+      const publicFiles = await assetFiles(publicOut);
+      const adminFiles = await assetFiles(adminOut);
+      const publicBundle = await readFiles(publicFiles.filter((file) => file.endsWith(".js")));
+      const adminBundle = await readFiles(adminFiles.filter((file) => file.endsWith(".js")));
+      const publicEntryBytes = await Bun.file(join(publicOut, "app.js")).arrayBuffer();
+      const adminEntryBytes = await Bun.file(join(adminOut, "app.js")).arrayBuffer();
 
       expect(publicBundle).toContain("ob-commerce");
       expect(publicBundle).toContain("ob-auth-menu");
@@ -137,8 +160,33 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-entity-detail");
       expect(adminBundle).toContain("ob-auth-menu");
       expect(adminBundle).not.toContain("ob-commerce");
+      expect(publicEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);
+      expect(adminEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);
+      await expect(gzipSize(publicFiles)).resolves.toBeLessThanOrEqual(14 * 1024);
+      await expect(gzipSize(adminFiles)).resolves.toBeLessThanOrEqual(14 * 1024);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
   });
 });
+
+async function assetFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return assetFiles(path);
+    if (entry.name.endsWith(".js") || entry.name.endsWith(".css")) return [path];
+    return [];
+  }));
+  return files.flat().sort();
+}
+
+async function readFiles(files: string[]): Promise<string> {
+  const contents = await Promise.all(files.map((file) => Bun.file(file).text()));
+  return contents.join("\n");
+}
+
+async function gzipSize(files: string[]): Promise<number> {
+  const buffers = await Promise.all(files.map(async (file) => Buffer.from(await Bun.file(file).arrayBuffer())));
+  return buffers.reduce((total, buffer) => total + gzipSync(buffer, { level: 9 }).byteLength, 0);
+}

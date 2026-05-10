@@ -2,13 +2,11 @@
  * <ob-admin-route-outlet> - Admin dashboard router for generated data views.
  */
 import { ObApi } from "./ob-api";
-import "./ob-entity-detail";
-import "./ob-entity-form";
-import "./ob-entity-list";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
 export class ObAdminRouteOutlet extends HTMLElement {
+  private _routeSeq = 0;
   private _onHashChange = () => {
     void this._route();
   };
@@ -32,15 +30,18 @@ export class ObAdminRouteOutlet extends HTMLElement {
   }
 
   private async _route() {
+    const routeSeq = ++this._routeSeq;
     const content = this._content();
     if (!content) return;
 
     const api = ObApi.instance;
     if (!api) return;
     await api.ready();
+    if (routeSeq !== this._routeSeq) return;
 
     const hash = location.hash.slice(1) || "/";
-    const routed = this._match(hash, api);
+    const routed = await this._match(hash, api);
+    if (routeSeq !== this._routeSeq) return;
     if (routed.redirect) {
       location.hash = routed.redirect;
       return;
@@ -50,22 +51,26 @@ export class ObAdminRouteOutlet extends HTMLElement {
     this.focusContent();
   }
 
-  private _match(hash: string, api: ObApi): { node: Node; redirect?: never } | { node?: never; redirect: string } {
+  private async _match(hash: string, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
     let match: RegExpMatchArray | null;
 
     if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
+      await import("./ob-entity-form");
       return { node: entityElement("ob-entity-form", match[1], { mode: "create" }) };
     }
 
     if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)\/edit$/))) {
+      await import("./ob-entity-form");
       return { node: entityElement("ob-entity-form", match[1], { mode: "edit", "record-id": match[2] }) };
     }
 
     if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)$/))) {
+      await import("./ob-entity-detail");
       return { node: entityElement("ob-entity-detail", match[1], { "record-id": match[2] }) };
     }
 
     if ((match = hash.match(/^\/([a-z_]+s)$/))) {
+      await import("./ob-entity-list");
       return { node: entityElement("ob-entity-list", match[1]) };
     }
 

@@ -2,9 +2,9 @@
  * <ob-route-outlet> - Public web app router.
  */
 import { ObApi } from "./ob-api";
-import "./ob-commerce";
 
 export class ObRouteOutlet extends HTMLElement {
+  private _routeSeq = 0;
   private _onHashChange = () => {
     void this._route();
   };
@@ -28,15 +28,18 @@ export class ObRouteOutlet extends HTMLElement {
   }
 
   private async _route() {
+    const routeSeq = ++this._routeSeq;
     const content = this._content();
     if (!content) return;
 
     const api = ObApi.instance;
     if (!api) return;
     await api.ready();
+    if (routeSeq !== this._routeSeq) return;
 
     const hash = location.hash.slice(1) || "/";
-    const routed = this._match(hash, api);
+    const routed = await this._match(hash, api);
+    if (routeSeq !== this._routeSeq) return;
     if (routed.redirect) {
       location.hash = routed.redirect;
       return;
@@ -46,8 +49,9 @@ export class ObRouteOutlet extends HTMLElement {
     this.focusContent();
   }
 
-  private _match(hash: string, api: ObApi): { node: Node; redirect?: never } | { node?: never; redirect: string } {
+  private async _match(hash: string, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
     if (hash === "/commerce" && api.hasCommerceWorkflow()) {
+      await import("./ob-commerce");
       return { node: document.createElement("ob-commerce") };
     }
     if (api.hasCommerceWorkflow()) return { redirect: "#/commerce" };

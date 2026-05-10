@@ -2,8 +2,8 @@
  * <ob-entity-detail entity="issues" record-id="5"> — Detail view for a single record.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset, detail, button, card, form } from "../styles";
 import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, statusClass } from "../format";
+import { stylesheetLink } from "../style-link";
 
 export class ObEntityDetail extends HTMLElement {
   private _confirmDelete = false;
@@ -61,49 +61,7 @@ export class ObEntityDetail extends HTMLElement {
     const title = `${displayName(this.entity)} #${this.recordId}`;
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${detail} ${button} ${card} ${form}
-        .header-actions {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-        .actions {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-top: 18px;
-          padding-top: 18px;
-          border-top: 1px solid var(--ob-border);
-        }
-        .delete-confirm {
-          margin: 0 0 14px;
-          padding: 10px 12px;
-          border-radius: var(--ob-radius);
-          background: var(--ob-danger-soft);
-          color: var(--ob-danger);
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .badge {
-          display: inline-flex;
-          align-items: center;
-          min-height: 24px;
-          padding: 3px 8px;
-          border-radius: 999px;
-          background: var(--ob-bg-alt);
-          color: var(--ob-text-muted);
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .badge.success { background: var(--ob-success-soft); color: var(--ob-success); }
-        .badge.warning { background: var(--ob-warning-soft); color: var(--ob-warning); }
-        .badge.danger { background: var(--ob-danger-soft); color: var(--ob-danger); }
-        @media (max-width: 720px) {
-          .card-header { align-items: flex-start; flex-direction: column; }
-          .header-actions, .header-actions button, .actions button { width: 100%; }
-        }
-      </style>
+      ${stylesheetLink()}
       <div class="card">
         <div class="card-header">
           <div>

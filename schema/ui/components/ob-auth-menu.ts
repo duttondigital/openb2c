@@ -2,8 +2,8 @@
  * <ob-auth-menu> - Account menu for generated identity sign-in.
  */
 import { ObApi } from "./ob-api";
-import { button, form, reset, theme } from "../styles";
 import { escapeAttr, escapeHtml } from "../format";
+import { stylesheetLink } from "../style-link";
 
 export class ObAuthMenu extends HTMLElement {
   static get observedAttributes() {
@@ -93,117 +93,7 @@ export class ObAuthMenu extends HTMLElement {
     const signedIn = api.authContext.userId !== null;
     const placement = this.getAttribute("placement") === "sidebar" ? "sidebar" : "topbar";
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${form} ${button}
-        :host {
-          display: inline-block;
-          position: relative;
-          font-family: system-ui, -apple-system, sans-serif;
-        }
-        :host([placement="sidebar"]) {
-          display: block;
-          width: 100%;
-        }
-        .account-button {
-          min-height: 36px;
-          padding: 8px 12px;
-          border: 1px solid var(--ob-border-strong);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg);
-          color: var(--ob-text);
-          font: inherit;
-          font-size: 14px;
-          font-weight: 800;
-          cursor: pointer;
-        }
-        :host([placement="sidebar"]) .account-button {
-          width: 100%;
-          text-align: left;
-        }
-        .account-button:hover {
-          background: var(--ob-bg-alt);
-        }
-        .menu {
-          position: absolute;
-          top: calc(100% + 8px);
-          right: 0;
-          z-index: 20;
-          width: min(340px, calc(100vw - 32px));
-          padding: 16px;
-          border: 1px solid var(--ob-border);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg);
-          box-shadow: var(--ob-shadow);
-        }
-        :host([placement="sidebar"]) .menu {
-          position: static;
-          width: 100%;
-          margin-top: 8px;
-          box-shadow: var(--ob-shadow-sm);
-        }
-        .menu-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-        .menu-title {
-          font-size: 16px;
-          line-height: 1.3;
-          font-weight: 800;
-        }
-        .menu-subtitle {
-          color: var(--ob-text-muted);
-          font-size: 13px;
-          line-height: 1.4;
-          margin-top: 2px;
-        }
-        .close {
-          width: 32px;
-          min-height: 32px;
-          padding: 0;
-          border: 1px solid var(--ob-border);
-          background: var(--ob-bg-subtle);
-          color: var(--ob-text);
-          font-size: 18px;
-          line-height: 1;
-        }
-        .session {
-          display: grid;
-          gap: 12px;
-        }
-        .session-box {
-          padding: 12px;
-          border: 1px solid var(--ob-border);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg-subtle);
-        }
-        .session-box strong,
-        .session-box span {
-          display: block;
-        }
-        .session-box span {
-          color: var(--ob-text-muted);
-          font-size: 13px;
-          margin-top: 3px;
-        }
-        .actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        .actions button {
-          flex: 1;
-        }
-        @media (max-width: 560px) {
-          :host { position: static; }
-          .menu {
-            left: 16px;
-            right: 16px;
-            width: auto;
-          }
-        }
-      </style>
+      ${stylesheetLink()}
 
       <button type="button" class="account-button" data-action="toggle" aria-haspopup="dialog" aria-expanded="${this._open ? "true" : "false"}">
         ${signedIn ? `User #${escapeHtml(api.authContext.userId)}` : "Sign in"}

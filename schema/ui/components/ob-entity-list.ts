@@ -2,8 +2,8 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { theme, reset, table, button, pagination } from "../styles";
 import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, pluralDisplayName, statusClass } from "../format";
+import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
   private _sort = "";
@@ -81,32 +81,7 @@ export class ObEntityList extends HTMLElement {
     const currentPage = Math.floor(this._offset / this._limit) + 1;
 
     this.shadowRoot!.innerHTML = `
-      <style>${theme} ${reset} ${table} ${button} ${pagination}
-        .header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          margin-bottom: 18px;
-        }
-        .eyebrow {
-          color: var(--ob-text-muted);
-          font-size: 13px;
-          font-weight: 700;
-          margin-bottom: 4px;
-        }
-        .header h1 {
-          font-size: 26px;
-          line-height: 1.15;
-          font-weight: 800;
-        }
-        .arrow { font-size: 11px; margin-left: 6px; }
-        @media (max-width: 640px) {
-          .header { align-items: flex-start; flex-direction: column; }
-          .header h1 { font-size: 22px; }
-          [data-action="create"] { width: 100%; }
-        }
-      </style>
+      ${stylesheetLink()}
       <div class="header">
         <div>
           <div class="eyebrow">${this._total} record${this._total !== 1 ? "s" : ""}</div>
