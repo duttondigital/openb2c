@@ -69,6 +69,7 @@ describe("generated UI web components", () => {
     const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
     const adminApp = await Bun.file(join(UI_DIR, "components", "ob-admin-app.ts")).text();
     const authMenu = await Bun.file(join(UI_DIR, "components", "ob-auth-menu.ts")).text();
+    const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
 
@@ -84,8 +85,12 @@ describe("generated UI web components", () => {
     expect(adminApp).toContain("../shell");
     expect(adminApp).not.toContain("ob-auth-menu");
     expect(adminApp).not.toContain("function escapeAttr");
+    expect(adminNav).toContain("./ob-auth-menu");
+    expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
     expect(authMenu).toContain("setCertificateAuth");
     expect(authMenu).toContain("clearAuthContext");
+    expect(authMenu).toContain('observedAttributes');
+    expect(authMenu).toContain('placement');
     expect(publicRoute).toContain("./ob-commerce");
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-entity-list");
@@ -130,8 +135,8 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-entity-list");
       expect(adminBundle).toContain("ob-entity-form");
       expect(adminBundle).toContain("ob-entity-detail");
+      expect(adminBundle).toContain("ob-auth-menu");
       expect(adminBundle).not.toContain("ob-commerce");
-      expect(adminBundle).not.toContain("ob-auth-menu");
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

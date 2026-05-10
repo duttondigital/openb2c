@@ -4,6 +4,7 @@
 import { ObApi } from "./ob-api";
 import { theme, reset } from "../styles";
 import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
+import "./ob-auth-menu";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
@@ -61,6 +62,11 @@ export class ObNav extends HTMLElement {
           margin-top: 5px;
         }
         .group { display: grid; gap: 4px; }
+        .account {
+          margin-top: auto;
+          padding: 14px 8px 0;
+          border-top: 1px solid var(--ob-border);
+        }
         .group-title {
           padding: 0 8px 4px;
           color: var(--ob-text-muted);
@@ -116,6 +122,9 @@ export class ObNav extends HTMLElement {
         <div class="group">
           <div class="group-title">Data</div>
           ${entities.map((e) => `<button type="button" class="nav-link" data-href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</button>`).join("")}
+        </div>
+        <div class="account">
+          <ob-auth-menu placement="sidebar"></ob-auth-menu>
         </div>
       </nav>
     `;

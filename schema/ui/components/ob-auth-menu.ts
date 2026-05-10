@@ -1,11 +1,15 @@
 /**
- * <ob-auth-menu> - Public account menu for generated identity sign-in.
+ * <ob-auth-menu> - Account menu for generated identity sign-in.
  */
 import { ObApi } from "./ob-api";
 import { button, form, reset, theme } from "../styles";
 import { escapeAttr, escapeHtml } from "../format";
 
 export class ObAuthMenu extends HTMLElement {
+  static get observedAttributes() {
+    return ["placement"];
+  }
+
   private _open = false;
   private _email = "";
   private _challengeId: number | null = null;
@@ -21,6 +25,43 @@ export class ObAuthMenu extends HTMLElement {
     this._open = true;
     void this._render();
   };
+  private _onClick = (event: Event) => {
+    const action = this._actionFromEvent(event);
+
+    if (!action && !this._open) {
+      this._open = true;
+      void this._render();
+      return;
+    }
+
+    if (action === "toggle") {
+      this._open = !this._open;
+      void this._render();
+      return;
+    }
+    if (action === "close") {
+      this._open = false;
+      void this._render();
+      return;
+    }
+    if (action === "logout") {
+      this._resetSignIn();
+      ObApi.instance?.clearAuthContext();
+      this._open = false;
+      void this._render();
+      return;
+    }
+    if (action === "reset-auth") {
+      event.preventDefault();
+      this._resetSignIn();
+      void this._render();
+      return;
+    }
+    if (action === "submit-auth") {
+      event.preventDefault();
+      void this._submitSignIn();
+    }
+  };
 
   constructor() {
     super();
@@ -30,12 +71,18 @@ export class ObAuthMenu extends HTMLElement {
   async connectedCallback() {
     document.addEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
     document.addEventListener("ob-auth-required", this._onAuthRequired as EventListener);
+    this.addEventListener("click", this._onClick);
     await this._render();
+  }
+
+  attributeChangedCallback() {
+    if (this.isConnected) void this._render();
   }
 
   disconnectedCallback() {
     document.removeEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
     document.removeEventListener("ob-auth-required", this._onAuthRequired as EventListener);
+    this.removeEventListener("click", this._onClick);
   }
 
   private async _render() {
@@ -44,12 +91,17 @@ export class ObAuthMenu extends HTMLElement {
     await api.ready();
 
     const signedIn = api.authContext.userId !== null;
+    const placement = this.getAttribute("placement") === "sidebar" ? "sidebar" : "topbar";
     this.shadowRoot!.innerHTML = `
       <style>${theme} ${reset} ${form} ${button}
         :host {
           display: inline-block;
           position: relative;
           font-family: system-ui, -apple-system, sans-serif;
+        }
+        :host([placement="sidebar"]) {
+          display: block;
+          width: 100%;
         }
         .account-button {
           min-height: 36px;
@@ -62,6 +114,10 @@ export class ObAuthMenu extends HTMLElement {
           font-size: 14px;
           font-weight: 800;
           cursor: pointer;
+        }
+        :host([placement="sidebar"]) .account-button {
+          width: 100%;
+          text-align: left;
         }
         .account-button:hover {
           background: var(--ob-bg-alt);
@@ -77,6 +133,12 @@ export class ObAuthMenu extends HTMLElement {
           border-radius: var(--ob-radius);
           background: var(--ob-bg);
           box-shadow: var(--ob-shadow);
+        }
+        :host([placement="sidebar"]) .menu {
+          position: static;
+          width: 100%;
+          margin-top: 8px;
+          box-shadow: var(--ob-shadow-sm);
         }
         .menu-header {
           display: flex;
@@ -151,7 +213,7 @@ export class ObAuthMenu extends HTMLElement {
           <div class="menu-header">
             <div>
               <div class="menu-title">Account</div>
-              <div class="menu-subtitle">${signedIn ? "Manage your current session." : "Sign in to check out."}</div>
+              <div class="menu-subtitle">${signedIn ? "Manage your current session." : placement === "sidebar" ? "Sign in to manage admin data." : "Sign in to check out."}</div>
             </div>
             <button type="button" class="close" data-action="close" aria-label="Close account menu">x</button>
           </div>
@@ -160,37 +222,15 @@ export class ObAuthMenu extends HTMLElement {
       ` : ""}
     `;
 
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="toggle"]')?.addEventListener("click", () => {
-      this._open = !this._open;
-      void this._render();
-    });
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="close"]')?.addEventListener("click", () => {
-      this._open = false;
-      void this._render();
-    });
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="logout"]')?.addEventListener("click", () => {
-      this._resetSignIn();
-      ObApi.instance?.clearAuthContext();
-      this._open = false;
-      void this._render();
-    });
     this.shadowRoot!.querySelector<HTMLFormElement>('[data-form="signin"]')?.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (this._challengeId === null) {
-        void this._startSignIn();
-      } else {
-        void this._verifySignIn();
-      }
+      void this._submitSignIn();
     });
     this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="email"]')?.addEventListener("input", (event) => {
       this._email = (event.target as HTMLInputElement).value;
     });
     this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="code"]')?.addEventListener("input", (event) => {
       this._code = (event.target as HTMLInputElement).value;
-    });
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="reset-auth"]')?.addEventListener("click", () => {
-      this._resetSignIn();
-      void this._render();
     });
   }
 
@@ -224,11 +264,56 @@ export class ObAuthMenu extends HTMLElement {
           </div>
         ` : ""}
         <div class="actions">
-          <button type="submit" class="primary" ${this._loading ? "disabled" : ""}>${this._loading ? "Working" : this._challengeId === null ? "Send code" : "Sign in"}</button>
+          <button type="submit" class="primary" data-action="submit-auth" ${this._loading ? "disabled" : ""}>${this._loading ? "Working" : this._challengeId === null ? "Send code" : "Sign in"}</button>
           ${this._challengeId !== null ? `<button type="button" data-action="reset-auth">Use another email</button>` : ""}
         </div>
       </form>
     `;
+  }
+
+  private _actionFromEvent(event: Event): string | undefined {
+    const actionTarget = event.composedPath().find((node): node is HTMLElement => {
+      return node instanceof HTMLElement && Boolean(node.dataset?.action);
+    });
+    if (actionTarget?.dataset.action) return actionTarget.dataset.action;
+
+    if (event instanceof MouseEvent) {
+      const pointedAction = this._actionFromPoint(event.clientX, event.clientY);
+      if (pointedAction) return pointedAction;
+    }
+
+    const active = this.shadowRoot?.activeElement;
+    if (active instanceof HTMLElement && active.dataset.action) {
+      return active.dataset.action;
+    }
+    return undefined;
+  }
+
+  private _actionFromPoint(x: number, y: number): string | undefined {
+    const actions = this.shadowRoot!.querySelectorAll<HTMLElement>("[data-action]");
+    for (const action of actions) {
+      const rect = action.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return action.dataset.action;
+      }
+    }
+    return undefined;
+  }
+
+  private _syncFieldState() {
+    const email = this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="email"]');
+    const code = this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="code"]');
+    if (email) this._email = email.value;
+    if (code) this._code = code.value;
+  }
+
+  private async _submitSignIn() {
+    this._syncFieldState();
+    if (this._challengeId === null) {
+      await this._startSignIn();
+    } else {
+      await this._verifySignIn();
+    }
   }
 
   private async _startSignIn() {
