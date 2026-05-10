@@ -34,8 +34,8 @@ export class ObApp extends HTMLElement {
             </div>
           </div>
           <div class="top-actions">
-            <button class="nav-button" type="button" data-action="checkout" hidden>Book tickets</button>
             <ob-auth-menu></ob-auth-menu>
+            <button class="nav-button" type="button" data-action="checkout" hidden>Book tickets</button>
           </div>
         </header>
         <ob-route-outlet></ob-route-outlet>

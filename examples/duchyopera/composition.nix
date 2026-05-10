@@ -9,7 +9,7 @@ let
       ({ config, ... }: {
         organization = {
           name = "Duchy Opera";
-          description = "Cornish charity opera company";
+          description = "The Cornish Opera Company";
           logo = {
             src = ./logo/duchy-opera-icon.svg;
             alt = "Duchy Opera";

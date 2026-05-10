@@ -329,9 +329,6 @@ export class ObCommerce extends HTMLElement {
           <span class="step">Step 3 of 4</span>
         </div>
         ${this._renderConfigureForm(optionDefs, item, config)}
-        <div class="actions">
-          <button type="button" data-action="back-to-variants">Change details</button>
-        </div>
       </section>
     `;
   }
@@ -459,7 +456,8 @@ export class ObCommerce extends HTMLElement {
           </div>
           ${Object.entries(optionDefs).map(([name, option]) => this._renderOptionInput(name, option)).join("")}
         </div>
-        <div class="actions">
+        <div class="actions split-actions">
+          <button type="button" data-action="back-to-variants">Change details</button>
           <button type="submit" class="primary">Add to cart</button>
         </div>
       </form>

@@ -89,6 +89,8 @@ const publicShell = `
   ob-app .top-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    margin-left: auto;
     gap: 10px;
   }
   ob-app .nav-button {
@@ -401,6 +403,13 @@ const commerce = `
     gap: 10px;
     margin-top: 16px;
   }
+  :host(ob-commerce) .split-actions {
+    align-items: center;
+    justify-content: space-between;
+  }
+  :host(ob-commerce) .split-actions .primary {
+    margin-left: auto;
+  }
   :host(ob-commerce) .cart-list {
     display: grid;
     gap: 10px;
@@ -480,6 +489,8 @@ const commerce = `
     :host(ob-commerce) .page-header h1 { font-size: 24px; }
     :host(ob-commerce) .panel-header { flex-direction: column; }
     :host(ob-commerce) .configure-grid { grid-template-columns: 1fr; }
+    :host(ob-commerce) .split-actions { align-items: stretch; }
+    :host(ob-commerce) .split-actions .primary { margin-left: 0; }
     :host(ob-commerce) .actions button,
     :host(ob-commerce) .cart-chip { width: 100%; }
   }

@@ -104,6 +104,27 @@ describe("generated UI web components", () => {
     expect(adminRoute).not.toContain("./ob-commerce");
   });
 
+  test("public commerce actions keep the primary path visually last", async () => {
+    const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
+    const commerceComponent = await Bun.file(join(UI_DIR, "components", "ob-commerce.ts")).text();
+    const publicStyles = genPublicStylesheet();
+
+    const accountIndex = publicApp.indexOf("<ob-auth-menu></ob-auth-menu>");
+    const checkoutIndex = publicApp.indexOf('<button class="nav-button" type="button" data-action="checkout" hidden>Book tickets</button>');
+    expect(accountIndex).toBeGreaterThan(-1);
+    expect(checkoutIndex).toBeGreaterThan(accountIndex);
+
+    const changeDetailsIndex = commerceComponent.indexOf('data-action="back-to-variants"');
+    const addToCartIndex = commerceComponent.indexOf('type="submit" class="primary">Add to cart</button>');
+    const changeDetailsButtonCount = commerceComponent.match(/<button type="button" data-action="back-to-variants">Change details<\/button>/g)?.length ?? 0;
+    expect(commerceComponent).toContain('class="actions split-actions"');
+    expect(changeDetailsIndex).toBeGreaterThan(-1);
+    expect(changeDetailsButtonCount).toBe(1);
+    expect(addToCartIndex).toBeGreaterThan(changeDetailsIndex);
+    expect(publicStyles).toContain(":host(ob-commerce) .split-actions");
+    expect(publicStyles).toContain("margin-left:auto");
+  });
+
   test("public and admin bundles only include their required components", async () => {
     const tmp = await mkdtemp(join(tmpdir(), "openb2c-ui-"));
     const publicOut = join(tmp, "public");

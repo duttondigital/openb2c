@@ -1,6 +1,6 @@
 # Duchy Opera
 
-Cornish charity opera company ticketing platform built with OpenB2C.
+The Cornish Opera Company ticketing platform built with OpenB2C.
 
 ## About
 

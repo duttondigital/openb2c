@@ -47,7 +47,7 @@ describe("application metadata", () => {
 
     expect(duchyOpera.organization).toMatchObject({
       name: "Duchy Opera",
-      description: "Cornish charity opera company",
+      description: "The Cornish Opera Company",
       logo: {
         alt: "Duchy Opera",
       },
@@ -65,11 +65,11 @@ describe("application metadata", () => {
     expect(duchyOpenApi.info).toMatchObject({
       title: "Duchy Opera API",
       version: "0.1.0",
-      description: "Cornish charity opera company",
+      description: "The Cornish Opera Company",
     });
     expect(duchyOpenApi["x-openb2c-organization"]).toMatchObject({
       name: "Duchy Opera",
-      description: "Cornish charity opera company",
+      description: "The Cornish Opera Company",
       logo: {
         alt: "Duchy Opera",
       },
