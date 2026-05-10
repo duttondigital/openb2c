@@ -2,11 +2,12 @@
  * <ob-app> - Public generated web app shell.
  */
 import { ObApi } from "./ob-api";
+import { apiDescription, apiTitle, focusOutlet, readShellAttributes, renderApiProvider, renderSkipLink, SHELL_OBSERVED_ATTRIBUTES, shellBaseStyles } from "../shell";
 import "./ob-route-outlet";
 
 export class ObApp extends HTMLElement {
   static get observedAttributes() {
-    return ["src", "api-base"];
+    return SHELL_OBSERVED_ATTRIBUTES;
   }
 
   connectedCallback() {
@@ -18,42 +19,11 @@ export class ObApp extends HTMLElement {
   }
 
   private _render() {
-    const src = this.getAttribute("src") || "openapi.json";
-    const apiBase = this.getAttribute("api-base") || "";
+    const attributes = readShellAttributes(this);
 
     this.innerHTML = `
       <style>
-        ob-app {
-          --ob-shell-bg: #f7f7f4;
-          --ob-shell-text: #242521;
-          --ob-shell-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
-          display: block;
-          min-height: 100vh;
-          font-family: system-ui, -apple-system, sans-serif;
-          color: var(--ob-shell-text);
-          background: var(--ob-shell-bg);
-        }
-        ob-app *, ob-app *::before, ob-app *::after { box-sizing: border-box; }
-        ob-app .skip-link {
-          position: fixed;
-          top: 12px;
-          left: 12px;
-          z-index: 10;
-          transform: translateY(-140%);
-          padding: 8px 12px;
-          border: 0;
-          border-radius: 8px;
-          background: #ffffff;
-          color: #111111;
-          box-shadow: var(--ob-shell-focus);
-          font: inherit;
-          font-weight: 700;
-          text-decoration: none;
-          cursor: pointer;
-        }
-        ob-app .skip-link:focus {
-          transform: translateY(0);
-        }
+        ${shellBaseStyles("ob-app")}
         ob-app .topbar {
           display: flex;
           align-items: center;
@@ -119,8 +89,8 @@ export class ObApp extends HTMLElement {
           }
         }
       </style>
-      <button class="skip-link" type="button" data-action="skip">Skip to content</button>
-      <ob-api src="${escapeAttr(src)}" api-base="${escapeAttr(apiBase)}">
+      ${renderSkipLink()}
+      ${renderApiProvider(attributes, `
         <header class="topbar">
           <div class="brand">
             <div class="title" data-role="title">OpenB2C</div>
@@ -129,12 +99,11 @@ export class ObApp extends HTMLElement {
           <button class="nav-button" type="button" data-action="checkout" hidden>Checkout</button>
         </header>
         <ob-route-outlet></ob-route-outlet>
-      </ob-api>
+      `)}
     `;
 
     this.querySelector<HTMLButtonElement>('[data-action="skip"]')?.addEventListener("click", () => {
-      const outlet = this.querySelector("ob-route-outlet") as HTMLElement & { focusContent?: () => void };
-      outlet?.focusContent?.();
+      focusOutlet(this, "ob-route-outlet");
     });
     this.querySelector<HTMLButtonElement>('[data-action="checkout"]')?.addEventListener("click", () => {
       location.hash = "#/commerce";
@@ -143,24 +112,14 @@ export class ObApp extends HTMLElement {
     const api = this.querySelector("ob-api") as ObApi | null;
     if (!api) return;
     void api.ready().then(() => {
-      const title = api.spec?.info?.title?.replace(/\s+API$/, "") || "App";
-      const description = api.spec?.info?.description || "";
       const titleEl = this.querySelector<HTMLElement>('[data-role="title"]');
       const descriptionEl = this.querySelector<HTMLElement>('[data-role="description"]');
       const checkoutButton = this.querySelector<HTMLButtonElement>('[data-action="checkout"]');
-      if (titleEl) titleEl.textContent = title;
-      if (descriptionEl) descriptionEl.textContent = description;
+      if (titleEl) titleEl.textContent = apiTitle(api);
+      if (descriptionEl) descriptionEl.textContent = apiDescription(api);
       if (checkoutButton) checkoutButton.hidden = !api.hasCommerceWorkflow();
     });
   }
-}
-
-function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 customElements.define("ob-app", ObApp);

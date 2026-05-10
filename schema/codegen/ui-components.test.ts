@@ -44,9 +44,7 @@ describe("generated UI web components", () => {
   test("component behavior is not wired through id lookups", async () => {
     const componentDir = join(UI_DIR, "components");
     const files = [
-      join(UI_DIR, "index.ts"),
-      join(UI_DIR, "public.ts"),
-      join(UI_DIR, "admin.ts"),
+      ...(await readdir(UI_DIR)).filter((file) => file.endsWith(".ts")).map((file) => join(UI_DIR, file)),
       ...(await readdir(componentDir)).filter((file) => file.endsWith(".ts")).map((file) => join(componentDir, file)),
     ];
 
@@ -67,13 +65,21 @@ describe("generated UI web components", () => {
   test("public and admin bundles are isolated at their entrypoints", async () => {
     const publicEntry = await Bun.file(join(UI_DIR, "public.ts")).text();
     const adminEntry = await Bun.file(join(UI_DIR, "admin.ts")).text();
+    const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
+    const adminApp = await Bun.file(join(UI_DIR, "components", "ob-admin-app.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
 
-    expect(publicEntry).toContain("ob-app");
+    expect(publicEntry).toContain("./components/ob-app");
     expect(publicEntry).not.toContain("ob-admin-app");
-    expect(adminEntry).toContain("ob-admin-app");
+    expect(publicEntry).not.toContain("./index");
+    expect(adminEntry).toContain("./components/ob-admin-app");
     expect(adminEntry).not.toContain("ob-app");
+    expect(adminEntry).not.toContain("./index");
+    expect(publicApp).toContain("../shell");
+    expect(publicApp).not.toContain("function escapeAttr");
+    expect(adminApp).toContain("../shell");
+    expect(adminApp).not.toContain("function escapeAttr");
     expect(publicRoute).toContain("./ob-commerce");
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-entity-list");
