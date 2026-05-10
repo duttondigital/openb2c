@@ -58,6 +58,7 @@ describe("generated UI web components", () => {
     expect(index).not.toContain("#content");
     expect(index).toContain('export { ObApp }');
     expect(index).toContain('export { ObAdminApp }');
+    expect(index).toContain('export { ObAuthMenu }');
     expect(index).toContain('export { ObRouteOutlet }');
     expect(index).toContain('export { ObAdminRouteOutlet }');
   });
@@ -67,6 +68,7 @@ describe("generated UI web components", () => {
     const adminEntry = await Bun.file(join(UI_DIR, "admin.ts")).text();
     const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
     const adminApp = await Bun.file(join(UI_DIR, "components", "ob-admin-app.ts")).text();
+    const authMenu = await Bun.file(join(UI_DIR, "components", "ob-auth-menu.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
 
@@ -77,9 +79,13 @@ describe("generated UI web components", () => {
     expect(adminEntry).not.toContain("ob-app");
     expect(adminEntry).not.toContain("./index");
     expect(publicApp).toContain("../shell");
+    expect(publicApp).toContain("./ob-auth-menu");
     expect(publicApp).not.toContain("function escapeAttr");
     expect(adminApp).toContain("../shell");
+    expect(adminApp).not.toContain("ob-auth-menu");
     expect(adminApp).not.toContain("function escapeAttr");
+    expect(authMenu).toContain("setCertificateAuth");
+    expect(authMenu).toContain("clearAuthContext");
     expect(publicRoute).toContain("./ob-commerce");
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-entity-list");
@@ -114,6 +120,7 @@ describe("generated UI web components", () => {
       const adminBundle = await Bun.file(join(adminOut, "app.js")).text();
 
       expect(publicBundle).toContain("ob-commerce");
+      expect(publicBundle).toContain("ob-auth-menu");
       expect(publicBundle).not.toContain("ob-admin-app");
       expect(publicBundle).not.toContain("ob-entity-list");
       expect(publicBundle).not.toContain("ob-entity-form");
@@ -124,6 +131,7 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-entity-form");
       expect(adminBundle).toContain("ob-entity-detail");
       expect(adminBundle).not.toContain("ob-commerce");
+      expect(adminBundle).not.toContain("ob-auth-menu");
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }

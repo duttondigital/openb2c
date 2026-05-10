@@ -54,19 +54,15 @@ export class ObCommerce extends HTMLElement {
   private _cart: CartLine[] = [];
   private _checkoutResult: any = null;
   private _paymentIntent: any = null;
-  private _expiryResult: any = null;
   private _error = "";
   private _loading = false;
+  private _reviewingCart = false;
   private _availableItems: Record<string, unknown>[] = [];
-  private _authEmail = "";
-  private _authChallengeId: number | null = null;
-  private _authCode = "";
-  private _authDevCode = "";
-  private _authPrivateKey: CryptoKey | null = null;
-  private _authError = "";
-  private _authLoading = false;
   private _renderSeq = 0;
   private _onAuthChanged = () => {
+    if (ObApi.instance?.authContext.userId !== null && this._error === "Sign in from the account menu to continue.") {
+      this._error = "";
+    }
     void this._render();
   };
 
@@ -171,7 +167,12 @@ export class ObCommerce extends HTMLElement {
       <style>${theme} ${reset} ${form} ${button}
         :host { display: block; }
         .page-header {
-          margin-bottom: 18px;
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 16px;
+          margin: 0 auto 18px;
+          max-width: 900px;
         }
         .eyebrow {
           color: var(--ob-text-muted);
@@ -184,31 +185,36 @@ export class ObCommerce extends HTMLElement {
           line-height: 1.15;
           font-weight: 800;
         }
-        .layout {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(340px, 0.44fr);
-          gap: 18px;
-          align-items: start;
+        .cart-chip {
+          min-height: 36px;
+          padding: 8px 12px;
+          border: 1px solid var(--ob-border);
+          border-radius: var(--ob-radius);
+          background: var(--ob-bg);
+          color: var(--ob-text);
+          font-size: 13px;
+          font-weight: 800;
         }
-        .flow {
-          display: grid;
-          gap: 14px;
+        .commerce-shell {
+          max-width: 900px;
+          margin: 0 auto;
         }
         .panel {
           background: var(--ob-bg);
           border: 1px solid var(--ob-border);
           border-radius: var(--ob-radius);
-          padding: 18px;
+          padding: 20px;
           box-shadow: var(--ob-shadow-sm);
         }
         .panel-header {
           display: flex;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 14px;
-          margin-bottom: 14px;
+          margin-bottom: 16px;
         }
         .panel-header h2 {
-          font-size: 18px;
+          font-size: 20px;
           line-height: 1.25;
           font-weight: 800;
         }
@@ -222,7 +228,7 @@ export class ObCommerce extends HTMLElement {
         }
         .selector-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
           gap: 10px;
         }
         .selector-card {
@@ -265,18 +271,11 @@ export class ObCommerce extends HTMLElement {
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 14px;
         }
-        .configure-grid .full { grid-column: 1 / -1; }
         .actions {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          margin-top: 4px;
-        }
-        .cart {
-          position: sticky;
-          top: 18px;
-          display: grid;
-          gap: 14px;
+          margin-top: 16px;
         }
         .cart-list {
           display: grid;
@@ -298,10 +297,14 @@ export class ObCommerce extends HTMLElement {
           font-weight: 800;
           margin-bottom: 4px;
         }
-        .cart-line p {
+        .cart-line p,
+        .notice {
           color: var(--ob-text-muted);
           font-size: 13px;
           line-height: 1.4;
+        }
+        .notice {
+          margin-top: 12px;
         }
         .icon-btn {
           width: 34px;
@@ -333,35 +336,6 @@ export class ObCommerce extends HTMLElement {
           font-weight: 800;
           overflow-wrap: anywhere;
         }
-        .session-box {
-          display: grid;
-          grid-template-columns: auto minmax(0, 1fr);
-          gap: 10px;
-          align-items: center;
-          padding: 12px;
-          border: 1px solid var(--ob-border);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg-subtle);
-        }
-        .session-box strong,
-        .session-box span {
-          display: block;
-        }
-        .session-box strong {
-          font-size: 14px;
-          line-height: 1.3;
-        }
-        .session-box span {
-          color: var(--ob-text-muted);
-          font-size: 13px;
-          line-height: 1.35;
-        }
-        .status-dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          background: var(--ob-success);
-        }
         .total-row {
           font-size: 16px;
         }
@@ -374,113 +348,30 @@ export class ObCommerce extends HTMLElement {
           border-radius: var(--ob-radius);
           background: var(--ob-bg-subtle);
         }
-        .links {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 12px;
-          font-size: 13px;
-        }
-        .links a {
-          display: inline-flex;
-          align-items: center;
-          min-height: 32px;
-          padding: 6px 10px;
-          border: 1px solid var(--ob-border);
-          border-radius: var(--ob-radius);
-          background: var(--ob-bg);
-          font-weight: 800;
-        }
-        .links a:hover {
-          background: var(--ob-bg-alt);
-          text-decoration: none;
-        }
-        details {
-          color: var(--ob-text-muted);
-          font-size: 13px;
-        }
-        summary {
-          cursor: pointer;
-          font-weight: 800;
-        }
-        pre {
-          margin-top: 10px;
-          padding: 12px;
-          border-radius: var(--ob-radius);
-          background: #242521;
-          color: #fbfbf9;
-          overflow: auto;
-          font-size: 12px;
-          line-height: 1.5;
-        }
-        @media (max-width: 980px) {
-          .layout { grid-template-columns: 1fr; }
-          .cart { position: static; }
-        }
         @media (max-width: 680px) {
+          .page-header {
+            align-items: stretch;
+            flex-direction: column;
+          }
           .page-header h1 { font-size: 24px; }
           .panel-header { flex-direction: column; }
           .configure-grid { grid-template-columns: 1fr; }
-          .actions button { width: 100%; }
+          .actions button,
+          .cart-chip { width: 100%; }
         }
       </style>
 
       <div class="page-header">
-        <div class="eyebrow">Commerce</div>
-        <h1>Checkout</h1>
+        <div>
+          <div class="eyebrow">Commerce</div>
+          <h1>Checkout</h1>
+        </div>
+        ${this._cart.length > 0 ? this._renderCartChip(config) : ""}
       </div>
       ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
 
-      <div class="layout">
-        <div class="flow">
-          <section class="panel" aria-labelledby="choose-subject-title">
-            <div class="panel-header">
-              <h2 id="choose-subject-title">Choose ${escapeHtml(displayName(catalogEntity))}</h2>
-              <span class="step">Step 1</span>
-            </div>
-            ${groups.size === 0 ? `<div class="empty">No available items.</div>` : this._renderGroups(groups, config)}
-          </section>
-
-          <section class="panel" aria-labelledby="choose-variant-title">
-            <div class="panel-header">
-              <h2 id="choose-variant-title">Choose details</h2>
-              <span class="step">Step 2</span>
-            </div>
-            ${this._selectedGroup ? this._renderVariants(selectedItems, selectedItem, config, lookups) : `<div class="empty">Choose ${escapeHtml(displayName(catalogEntity))} first.</div>`}
-          </section>
-
-          <section class="panel" aria-labelledby="configure-title">
-            <div class="panel-header">
-              <h2 id="configure-title">Configure item</h2>
-              <span class="step">Step 3</span>
-            </div>
-            ${selectedItem ? this._renderConfigureForm(optionDefs, selectedItem, config) : `<div class="empty">Choose details before configuring.</div>`}
-          </section>
-        </div>
-
-        <aside class="cart" aria-live="polite">
-          <section class="panel" aria-labelledby="cart-title">
-            <div class="panel-header">
-              <h2 id="cart-title">Cart</h2>
-              <span class="step">${this._cart.length} line${this._cart.length === 1 ? "" : "s"}</span>
-            </div>
-            ${this._renderCart(config)}
-          </section>
-
-          <section class="panel" aria-labelledby="checkout-title">
-            <div class="panel-header">
-              <h2 id="checkout-title">Checkout</h2>
-            </div>
-            ${this._renderCheckoutForm(api)}
-          </section>
-
-          <section class="panel" aria-labelledby="status-title">
-            <div class="panel-header">
-              <h2 id="status-title">Status</h2>
-            </div>
-            ${this._renderStatus()}
-          </section>
-        </aside>
+      <div class="commerce-shell" aria-live="polite">
+        ${this._renderCurrentTask(api, catalogEntity, groups, selectedItems, selectedItem, config, lookups, optionDefs)}
       </div>
     `;
 
@@ -488,6 +379,7 @@ export class ObCommerce extends HTMLElement {
       button.addEventListener("click", () => {
         this._selectedGroup = button.dataset.group || "";
         this._selectedItemId = "";
+        this._reviewingCart = false;
         this._error = "";
         this._render();
       });
@@ -495,6 +387,7 @@ export class ObCommerce extends HTMLElement {
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-item-id]").forEach((button) => {
       button.addEventListener("click", () => {
         this._selectedItemId = button.dataset.itemId || "";
+        this._reviewingCart = false;
         this._error = "";
         this._render();
       });
@@ -519,6 +412,7 @@ export class ObCommerce extends HTMLElement {
         this._cart = this._cart.filter((line) => line.id !== button.dataset.removeLine);
         this._checkoutResult = null;
         this._paymentIntent = null;
+        if (this._cart.length === 0) this._reviewingCart = false;
         this._render();
       });
     });
@@ -526,30 +420,184 @@ export class ObCommerce extends HTMLElement {
       event.preventDefault();
       this._checkout();
     });
-    this.shadowRoot!.querySelector<HTMLFormElement>('[data-form="signin"]')?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (this._authChallengeId === null) {
-        this._startSignIn();
-      } else {
-        this._verifySignIn();
-      }
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back-to-groups"]')?.addEventListener("click", () => {
+      this._selectedGroup = "";
+      this._selectedItemId = "";
+      this._reviewingCart = false;
+      this._error = "";
+      this._render();
     });
-    this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="auth-email"]')?.addEventListener("input", (event) => {
-      this._authEmail = (event.target as HTMLInputElement).value;
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back-to-variants"]')?.addEventListener("click", () => {
+      this._selectedItemId = "";
+      this._reviewingCart = false;
+      this._error = "";
+      this._render();
     });
-    this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="auth-code"]')?.addEventListener("input", (event) => {
-      this._authCode = (event.target as HTMLInputElement).value;
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="add-another"]')?.addEventListener("click", () => {
+      this._selectedGroup = "";
+      this._selectedItemId = "";
+      this._quantity = "1";
+      this._reviewingCart = false;
+      this._error = "";
+      this._render();
     });
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="reset-auth"]')?.addEventListener("click", () => {
-      this._authChallengeId = null;
-      this._authCode = "";
-      this._authDevCode = "";
-      this._authPrivateKey = null;
-      this._authError = "";
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="review-cart"]')?.addEventListener("click", () => {
+      this._reviewingCart = true;
+      this._error = "";
+      this._render();
+    });
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="request-auth"]')?.addEventListener("click", () => {
+      document.dispatchEvent(new CustomEvent("ob-auth-required"));
+      this._error = "Sign in from the account menu to continue.";
       this._render();
     });
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="payment-intent"]')?.addEventListener("click", () => this._createPaymentIntent());
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="expire-orders"]')?.addEventListener("click", () => this._expireStale());
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="start-over"]')?.addEventListener("click", () => {
+      this._selectedGroup = "";
+      this._selectedItemId = "";
+      this._quantity = "1";
+      this._cart = [];
+      this._checkoutResult = null;
+      this._paymentIntent = null;
+      this._reviewingCart = false;
+      this._error = "";
+      this._render();
+    });
+  }
+
+  private _renderCurrentTask(
+    api: ObApi,
+    catalogEntity: string,
+    groups: Map<string, Record<string, unknown>[]>,
+    selectedItems: Record<string, unknown>[],
+    selectedItem: Record<string, unknown> | null,
+    config: CommerceConfig,
+    lookups: LookupMap,
+    optionDefs: Record<string, CommerceOption>,
+  ): string {
+    if (this._paymentIntent) return this._renderCompleteStep();
+    if (this._checkoutResult) return this._renderPaymentStep();
+    if (this._cart.length > 0 && this._reviewingCart) return this._renderReviewStep(api, config);
+    if (selectedItem) return this._renderConfigureStep(optionDefs, selectedItem, config);
+    if (this._selectedGroup) return this._renderVariantStep(selectedItems, selectedItem, config, lookups);
+    return this._renderGroupStep(catalogEntity, groups, config);
+  }
+
+  private _renderGroupStep(catalogEntity: string, groups: Map<string, Record<string, unknown>[]>, config: CommerceConfig): string {
+    return `
+      <section class="panel" aria-labelledby="choose-subject-title">
+        <div class="panel-header">
+          <h2 id="choose-subject-title">Choose ${escapeHtml(displayName(catalogEntity))}</h2>
+          <span class="step">Step 1 of 4</span>
+        </div>
+        ${groups.size === 0 ? `<div class="empty">No available items.</div>` : this._renderGroups(groups, config)}
+      </section>
+    `;
+  }
+
+  private _renderVariantStep(items: Record<string, unknown>[], selected: Record<string, unknown> | null, config: CommerceConfig, lookups: LookupMap): string {
+    return `
+      <section class="panel" aria-labelledby="choose-variant-title">
+        <div class="panel-header">
+          <div>
+            <h2 id="choose-variant-title">Choose details</h2>
+            <p class="notice">${escapeHtml(this._selectedGroup)}</p>
+          </div>
+          <span class="step">Step 2 of 4</span>
+        </div>
+        ${this._renderVariants(items, selected, config, lookups)}
+        <div class="actions">
+          <button type="button" data-action="back-to-groups">Change selection</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private _renderConfigureStep(optionDefs: Record<string, CommerceOption>, item: Record<string, unknown>, config: CommerceConfig): string {
+    return `
+      <section class="panel" aria-labelledby="configure-title">
+        <div class="panel-header">
+          <div>
+            <h2 id="configure-title">Configure item</h2>
+            <p class="notice">${escapeHtml(this._itemTitle(item, config))} · ${escapeHtml(this._priceLabel(item, config))}</p>
+          </div>
+          <span class="step">Step 3 of 4</span>
+        </div>
+        ${this._renderConfigureForm(optionDefs, item, config)}
+        <div class="actions">
+          <button type="button" data-action="back-to-variants">Change details</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private _renderReviewStep(api: ObApi, config: CommerceConfig): string {
+    const signedIn = api.authContext.userId !== null;
+    return `
+      <section class="panel" aria-labelledby="review-title">
+        <div class="panel-header">
+          <div>
+            <h2 id="review-title">Review cart</h2>
+            <p class="notice">${this._cart.length} line${this._cart.length === 1 ? "" : "s"} ready for checkout.</p>
+          </div>
+          <span class="step">Step 4 of 4</span>
+        </div>
+        ${this._renderCart(config)}
+        ${signedIn ? `
+          <form data-form="checkout">
+            <div class="actions">
+              <button type="submit" class="primary" ${this._loading ? "disabled" : ""}>${this._loading ? "Working" : "Checkout"}</button>
+              <button type="button" data-action="add-another">Add another</button>
+            </div>
+          </form>
+        ` : `
+          <p class="notice">Sign in from the account menu before checking out.</p>
+          <div class="actions">
+            <button type="button" class="primary" data-action="request-auth">Sign in to checkout</button>
+            <button type="button" data-action="add-another">Add another</button>
+          </div>
+        `}
+      </section>
+    `;
+  }
+
+  private _renderPaymentStep(): string {
+    return `
+      <section class="panel" aria-labelledby="payment-title">
+        <div class="panel-header">
+          <h2 id="payment-title">Confirm payment</h2>
+          <span class="step">Payment</span>
+        </div>
+        ${this._renderCheckoutSummary()}
+        <div class="actions">
+          <button type="button" class="primary" data-action="payment-intent">Create payment intent</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private _renderCompleteStep(): string {
+    return `
+      <section class="panel" aria-labelledby="complete-title">
+        <div class="panel-header">
+          <h2 id="complete-title">Payment ready</h2>
+          <span class="step">Complete</span>
+        </div>
+        ${this._renderCheckoutSummary()}
+        ${this._renderPaymentSummary()}
+        <div class="actions">
+          <button type="button" data-action="start-over">Start another order</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private _renderCartChip(config: CommerceConfig): string {
+    return `
+      <button type="button" class="cart-chip" data-action="review-cart">
+        Cart: ${escapeHtml(this._cart.length)} · ${escapeHtml(formatValue("amount_pence", this._cartTotal(config)))}
+      </button>
+    `;
   }
 
   private _renderGroups(groups: Map<string, Record<string, unknown>[]>, config: CommerceConfig): string {
@@ -670,66 +718,6 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderCheckoutForm(api: ObApi): string {
-    if (api.authContext.userId === null) {
-      return this._renderSignInForm();
-    }
-
-    const canCheckout = this._cart.length > 0;
-    const canExpire = api.authContext.scopes.includes("*") || api.authContext.scopes.includes("commerce.expire");
-    return `
-      <form data-form="checkout">
-        <div class="session-box" aria-label="Signed in session">
-          <span class="status-dot" aria-hidden="true"></span>
-          <div>
-            <strong>Signed in</strong>
-            <span>User #${escapeHtml(api.authContext.userId)}</span>
-          </div>
-        </div>
-        <div class="actions">
-          <button type="submit" class="primary" ${canCheckout && !this._loading ? "" : "disabled"}>${this._loading ? "Working" : "Checkout"}</button>
-          <button type="button" data-action="payment-intent" ${this._checkoutResult ? "" : "disabled"}>Create payment intent</button>
-          ${canExpire ? `<button type="button" data-action="expire-orders">Expire stale orders</button>` : ""}
-        </div>
-      </form>
-    `;
-  }
-
-  private _renderSignInForm(): string {
-    return `
-      <form data-form="signin">
-        <div class="empty">Sign in to check out.</div>
-        ${this._authError ? `<div class="error-msg" role="alert">${escapeHtml(this._authError)}</div>` : ""}
-        <div class="form-group">
-          <label for="auth-email">Email <span class="required">*</span></label>
-          <input id="auth-email" type="text" inputmode="email" name="email" data-field="auth-email" autocomplete="email" value="${escapeAttr(this._authEmail)}" required ${this._authChallengeId !== null ? "disabled" : ""} />
-        </div>
-        ${this._authChallengeId !== null ? `
-          <div class="form-group">
-            <label for="auth-code">Verification code <span class="required">*</span></label>
-            <input id="auth-code" type="text" inputmode="numeric" pattern="[0-9]*" name="code" data-field="auth-code" autocomplete="one-time-code" value="${escapeAttr(this._authCode)}" required />
-            ${this._authDevCode ? `<div class="help-text">Development code: ${escapeHtml(this._authDevCode)}</div>` : ""}
-          </div>
-        ` : ""}
-        <div class="actions">
-          <button type="submit" class="primary" ${this._authLoading ? "disabled" : ""}>${this._authLoading ? "Working" : this._authChallengeId === null ? "Send code" : "Sign in"}</button>
-          ${this._authChallengeId !== null ? `<button type="button" data-action="reset-auth">Use another email</button>` : ""}
-        </div>
-      </form>
-    `;
-  }
-
-  private _renderStatus(): string {
-    if (!this._checkoutResult && !this._paymentIntent && !this._expiryResult) {
-      return `<div class="empty">No checkout activity yet.</div>`;
-    }
-    return `
-      ${this._checkoutResult ? this._renderCheckoutSummary() : ""}
-      ${this._paymentIntent ? this._renderPaymentSummary() : ""}
-      ${this._expiryResult ? this._renderExpirySummary() : ""}
-    `;
-  }
-
   private _renderCheckoutSummary(): string {
     return `
       <div class="summary">
@@ -746,14 +734,6 @@ export class ObCommerce extends HTMLElement {
       <div class="summary">
         <div class="summary-row"><span>Transaction</span><span>#${escapeHtml(this._paymentIntent.transaction_id)}</span></div>
         <div class="summary-row"><span>Reference</span><span>${escapeHtml(this._paymentIntent.reference || "-")}</span></div>
-      </div>
-    `;
-  }
-
-  private _renderExpirySummary(): string {
-    return `
-      <div class="summary">
-        <div class="summary-row"><span>Expired</span><span>${escapeHtml(this._expiryResult.expired ?? 0)}</span></div>
       </div>
     `;
   }
@@ -806,7 +786,7 @@ export class ObCommerce extends HTMLElement {
     ];
     this._checkoutResult = null;
     this._paymentIntent = null;
-    this._expiryResult = null;
+    this._reviewingCart = true;
     this._error = "";
     this._render();
   }
@@ -839,87 +819,11 @@ export class ObCommerce extends HTMLElement {
     return { ok: true, data };
   }
 
-  private async _startSignIn() {
-    const email = this._authEmail.trim();
-    if (!email) {
-      this._authError = "Email is required";
-      await this._render();
-      return;
-    }
-
-    this._authLoading = true;
-    this._authError = "";
-    try {
-      const keypair = await ObApi.createIdentityKeypair();
-      const res = await ObApi.instance!.request("/identity/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, publicKey: keypair.publicKey }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        this._authError = data.error || "Could not send verification code";
-        this._authLoading = false;
-        await this._render();
-        return;
-      }
-      this._authPrivateKey = keypair.privateKey;
-      this._authChallengeId = data.challengeId;
-      this._authDevCode = data.code || "";
-      this._authCode = data.code || "";
-      this._authLoading = false;
-      await this._render();
-    } catch (error: any) {
-      this._authError = error.message || "Could not start sign in";
-      this._authLoading = false;
-      await this._render();
-    }
-  }
-
-  private async _verifySignIn() {
-    if (this._authChallengeId === null || !this._authPrivateKey) return;
-    const code = this._authCode.trim();
-    if (!code) {
-      this._authError = "Verification code is required";
-      await this._render();
-      return;
-    }
-
-    this._authLoading = true;
-    this._authError = "";
-    try {
-      const signature = await ObApi.signWithIdentityKey(this._authPrivateKey, code);
-      const res = await ObApi.instance!.request("/identity/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeId: this._authChallengeId, code, signature }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        this._authError = data.error || "Sign in failed";
-        this._authLoading = false;
-        await this._render();
-        return;
-      }
-      await ObApi.instance!.setCertificateAuth(data.certificate, this._authPrivateKey);
-      this._authChallengeId = null;
-      this._authCode = "";
-      this._authDevCode = "";
-      this._authPrivateKey = null;
-      this._authError = "";
-      this._authLoading = false;
-      await this._render();
-    } catch (error: any) {
-      this._authError = error.message || "Sign in failed";
-      this._authLoading = false;
-      await this._render();
-    }
-  }
-
   private async _checkout() {
     if (this._cart.length === 0) return;
     if (ObApi.instance!.authContext.userId === null) {
-      this._error = "Sign in before checkout";
+      document.dispatchEvent(new CustomEvent("ob-auth-required"));
+      this._error = "Sign in from the account menu to continue.";
       await this._render();
       return;
     }
@@ -950,8 +854,8 @@ export class ObCommerce extends HTMLElement {
       }
       this._checkoutResult = await res.json();
       this._paymentIntent = null;
-      this._expiryResult = null;
       this._cart = [];
+      this._reviewingCart = false;
       this._loading = false;
       await this._render();
     } catch (error: any) {
@@ -976,24 +880,6 @@ export class ObCommerce extends HTMLElement {
       await this._render();
     } catch (error: any) {
       this._error = error.message || "Payment intent failed";
-      await this._render();
-    }
-  }
-
-  private async _expireStale() {
-    try {
-      const res = await ObApi.instance!.request("/commerce/orders/expire", { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json();
-        this._error = err.error || "Expiry failed";
-        await this._render();
-        return;
-      }
-      this._expiryResult = await res.json();
-      this._error = "";
-      await this._render();
-    } catch (error: any) {
-      this._error = error.message || "Expiry failed";
       await this._render();
     }
   }

@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { apiDescription, apiTitle, focusOutlet, readShellAttributes, renderApiProvider, renderSkipLink, SHELL_OBSERVED_ATTRIBUTES, shellBaseStyles } from "../shell";
+import "./ob-auth-menu";
 import "./ob-route-outlet";
 
 export class ObApp extends HTMLElement {
@@ -48,6 +49,11 @@ export class ObApp extends HTMLElement {
           font-size: 12px;
           line-height: 1.4;
         }
+        ob-app .top-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
         ob-app .nav-button {
           min-height: 36px;
           padding: 8px 12px;
@@ -81,8 +87,11 @@ export class ObApp extends HTMLElement {
             flex-direction: column;
             padding: 16px 20px;
           }
-          ob-app .nav-button {
+          ob-app .top-actions {
             width: 100%;
+          }
+          ob-app .nav-button {
+            flex: 1;
           }
           ob-app ob-route-outlet {
             padding: 20px;
@@ -96,7 +105,10 @@ export class ObApp extends HTMLElement {
             <div class="title" data-role="title">OpenB2C</div>
             <div class="description" data-role="description"></div>
           </div>
-          <button class="nav-button" type="button" data-action="checkout" hidden>Checkout</button>
+          <div class="top-actions">
+            <button class="nav-button" type="button" data-action="checkout" hidden>Book tickets</button>
+            <ob-auth-menu></ob-auth-menu>
+          </div>
         </header>
         <ob-route-outlet></ob-route-outlet>
       `)}
