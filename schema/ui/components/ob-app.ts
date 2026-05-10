@@ -1,8 +1,7 @@
 /**
- * <ob-app> - Generated application shell.
+ * <ob-app> - Public generated web app shell.
  */
-import "./ob-api";
-import "./ob-nav";
+import { ObApi } from "./ob-api";
 import "./ob-route-outlet";
 
 export class ObApp extends HTMLElement {
@@ -28,7 +27,6 @@ export class ObApp extends HTMLElement {
           --ob-shell-bg: #f7f7f4;
           --ob-shell-text: #242521;
           --ob-shell-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
-          --ob-nav-width: 248px;
           display: block;
           min-height: 100vh;
           font-family: system-ui, -apple-system, sans-serif;
@@ -56,15 +54,44 @@ export class ObApp extends HTMLElement {
         ob-app .skip-link:focus {
           transform: translateY(0);
         }
-        ob-app .app {
+        ob-app .topbar {
           display: flex;
-          min-height: 100vh;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          min-height: 72px;
+          padding: 16px 32px;
+          border-bottom: 1px solid #dedbd2;
+          background: #ffffff;
         }
-        ob-app ob-nav {
-          flex: 0 0 var(--ob-nav-width);
+        ob-app .brand {
+          display: grid;
+          gap: 3px;
+        }
+        ob-app .title {
+          font-weight: 800;
+          font-size: 17px;
+          line-height: 1.2;
+        }
+        ob-app .description {
+          color: #68675f;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        ob-app .nav-button {
+          min-height: 36px;
+          padding: 8px 12px;
+          border: 1px solid #111111;
+          border-radius: 8px;
+          background: #111111;
+          color: white;
+          font: inherit;
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
         }
         ob-app ob-route-outlet {
-          flex: 1;
+          display: block;
           min-width: 0;
           width: 100%;
           max-width: 1280px;
@@ -79,11 +106,13 @@ export class ObApp extends HTMLElement {
           color: #68675f;
         }
         @media (max-width: 780px) {
-          ob-app .app {
+          ob-app .topbar {
+            align-items: flex-start;
             flex-direction: column;
+            padding: 16px 20px;
           }
-          ob-app ob-nav {
-            flex-basis: auto;
+          ob-app .nav-button {
+            width: 100%;
           }
           ob-app ob-route-outlet {
             padding: 20px;
@@ -92,16 +121,36 @@ export class ObApp extends HTMLElement {
       </style>
       <button class="skip-link" type="button" data-action="skip">Skip to content</button>
       <ob-api src="${escapeAttr(src)}" api-base="${escapeAttr(apiBase)}">
-        <div class="app">
-          <ob-nav></ob-nav>
-          <ob-route-outlet></ob-route-outlet>
-        </div>
+        <header class="topbar">
+          <div class="brand">
+            <div class="title" data-role="title">OpenB2C</div>
+            <div class="description" data-role="description"></div>
+          </div>
+          <button class="nav-button" type="button" data-action="checkout" hidden>Checkout</button>
+        </header>
+        <ob-route-outlet></ob-route-outlet>
       </ob-api>
     `;
 
     this.querySelector<HTMLButtonElement>('[data-action="skip"]')?.addEventListener("click", () => {
       const outlet = this.querySelector("ob-route-outlet") as HTMLElement & { focusContent?: () => void };
       outlet?.focusContent?.();
+    });
+    this.querySelector<HTMLButtonElement>('[data-action="checkout"]')?.addEventListener("click", () => {
+      location.hash = "#/commerce";
+    });
+
+    const api = this.querySelector("ob-api") as ObApi | null;
+    if (!api) return;
+    void api.ready().then(() => {
+      const title = api.spec?.info?.title?.replace(/\s+API$/, "") || "App";
+      const description = api.spec?.info?.description || "";
+      const titleEl = this.querySelector<HTMLElement>('[data-role="title"]');
+      const descriptionEl = this.querySelector<HTMLElement>('[data-role="description"]');
+      const checkoutButton = this.querySelector<HTMLButtonElement>('[data-action="checkout"]');
+      if (titleEl) titleEl.textContent = title;
+      if (descriptionEl) descriptionEl.textContent = description;
+      if (checkoutButton) checkoutButton.hidden = !api.hasCommerceWorkflow();
     });
   }
 }

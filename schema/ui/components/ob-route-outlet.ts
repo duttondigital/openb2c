@@ -1,13 +1,8 @@
 /**
- * <ob-route-outlet> - Hash router rendered as a component-scoped outlet.
+ * <ob-route-outlet> - Public web app router.
  */
 import { ObApi } from "./ob-api";
 import "./ob-commerce";
-import "./ob-entity-detail";
-import "./ob-entity-form";
-import "./ob-entity-list";
-
-const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
 export class ObRouteOutlet extends HTMLElement {
   private _onHashChange = () => {
@@ -52,43 +47,16 @@ export class ObRouteOutlet extends HTMLElement {
   }
 
   private _match(hash: string, api: ObApi): { node: Node; redirect?: never } | { node?: never; redirect: string } {
-    let match: RegExpMatchArray | null;
-
-    if (hash === "/commerce") {
+    if (hash === "/commerce" && api.hasCommerceWorkflow()) {
       return { node: document.createElement("ob-commerce") };
     }
-
-    if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
-      return { node: entityElement("ob-entity-form", match[1], { mode: "create" }) };
-    }
-
-    if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)\/edit$/))) {
-      return { node: entityElement("ob-entity-form", match[1], { mode: "edit", "record-id": match[2] }) };
-    }
-
-    if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)$/))) {
-      return { node: entityElement("ob-entity-detail", match[1], { "record-id": match[2] }) };
-    }
-
-    if ((match = hash.match(/^\/([a-z_]+s)$/))) {
-      return { node: entityElement("ob-entity-list", match[1]) };
-    }
-
-    const entities = api.getEntities().filter((entity) => !INTERNAL_PREFIXES.some((prefix) => entity.startsWith(prefix)));
-    if (entities.length > 0) return { redirect: `#/${entities[0]}s` };
+    if (api.hasCommerceWorkflow()) return { redirect: "#/commerce" };
 
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "Select an entity from the sidebar.";
+    empty.textContent = "No public web app routes are available for this composition.";
     return { node: empty };
   }
-}
-
-function entityElement(tagName: string, pluralEntity: string, attrs: Record<string, string> = {}): HTMLElement {
-  const element = document.createElement(tagName);
-  element.setAttribute("entity", pluralEntity.replace(/s$/, ""));
-  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
-  return element;
 }
 
 customElements.define("ob-route-outlet", ObRouteOutlet);

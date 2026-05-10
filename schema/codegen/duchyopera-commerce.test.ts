@@ -233,6 +233,8 @@ describe("Duchy Opera commerce workflow", () => {
     expect(commerceUi).not.toContain("checkout-customer");
     expect(commerceUi).not.toContain("Select a customer");
     expect(commerceUi).not.toContain("body.user_id");
+    expect(commerceUi).not.toContain("Response JSON");
+    expect(commerceUi).not.toContain("_renderLinks");
     expect(apiUi).toContain("setCertificateAuth");
     expect(apiUi).toContain("X-Certificate");
   });

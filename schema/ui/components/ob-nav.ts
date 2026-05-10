@@ -1,5 +1,5 @@
 /**
- * <ob-nav> — Sidebar navigation derived from OpenAPI spec entities.
+ * <ob-nav> - Admin sidebar navigation derived from OpenAPI spec entities.
  */
 import { ObApi } from "./ob-api";
 import { theme, reset } from "../styles";
@@ -113,12 +113,6 @@ export class ObNav extends HTMLElement {
           <div class="title">${appTitle}</div>
           ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
         </div>
-        ${api.hasCommerceWorkflow() ? `
-          <div class="group">
-            <div class="group-title">Commerce</div>
-            <button type="button" class="nav-link" data-href="#/commerce" data-entity="commerce">Checkout</button>
-          </div>
-        ` : ""}
         <div class="group">
           <div class="group-title">Data</div>
           ${entities.map((e) => `<button type="button" class="nav-link" data-href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</button>`).join("")}

@@ -478,7 +478,7 @@ export class ObCommerce extends HTMLElement {
             <div class="panel-header">
               <h2 id="status-title">Status</h2>
             </div>
-            ${this._renderStatus(config)}
+            ${this._renderStatus()}
           </section>
         </aside>
       </div>
@@ -719,7 +719,7 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderStatus(config: CommerceConfig): string {
+  private _renderStatus(): string {
     if (!this._checkoutResult && !this._paymentIntent && !this._expiryResult) {
       return `<div class="empty">No checkout activity yet.</div>`;
     }
@@ -727,11 +727,6 @@ export class ObCommerce extends HTMLElement {
       ${this._checkoutResult ? this._renderCheckoutSummary() : ""}
       ${this._paymentIntent ? this._renderPaymentSummary() : ""}
       ${this._expiryResult ? this._renderExpirySummary() : ""}
-      ${this._checkoutResult ? this._renderLinks(config) : ""}
-      <details>
-        <summary>Response JSON</summary>
-        <pre>${escapeHtml(JSON.stringify({ checkout: this._checkoutResult, paymentIntent: this._paymentIntent, expiry: this._expiryResult }, null, 2))}</pre>
-      </details>
     `;
   }
 
@@ -759,19 +754,6 @@ export class ObCommerce extends HTMLElement {
     return `
       <div class="summary">
         <div class="summary-row"><span>Expired</span><span>${escapeHtml(this._expiryResult.expired ?? 0)}</span></div>
-      </div>
-    `;
-  }
-
-  private _renderLinks(config: CommerceConfig): string {
-    const orderEntity = config.order?.entity || "order";
-    const lineItemEntity = config.lineItem?.entity || "item";
-    const transactionEntity = config.transaction?.entity || "transaction";
-    return `
-      <div class="links">
-        <a href="#/${escapeAttr(orderEntity)}s/${escapeAttr(this._checkoutResult.order_id)}">${escapeHtml(displayName(orderEntity))} #${escapeHtml(this._checkoutResult.order_id)}</a>
-        ${(this._checkoutResult.line_item_ids || []).map((id: number) => `<a href="#/${escapeAttr(lineItemEntity)}s/${escapeAttr(id)}">${escapeHtml(displayName(lineItemEntity))} #${escapeHtml(id)}</a>`).join("")}
-        ${this._paymentIntent ? `<a href="#/${escapeAttr(transactionEntity)}s/${escapeAttr(this._paymentIntent.transaction_id)}">${escapeHtml(displayName(transactionEntity))} #${escapeHtml(this._paymentIntent.transaction_id)}</a>` : ""}
       </div>
     `;
   }

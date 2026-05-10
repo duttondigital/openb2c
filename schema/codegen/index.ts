@@ -16,7 +16,7 @@ export { genRoutes } from "./server";
 export { genMcpServer } from "./mcp";
 export { genEffectsInterface } from "./effects";
 export { genOpenAPI } from "./openapi";
-export { genAppShell } from "./ui";
+export { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
 
 import { mkdirSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
@@ -28,7 +28,7 @@ import { genEffectsInterface } from "./effects";
 import { genRoutes } from "./server";
 import { genMcpServer } from "./mcp";
 import { genOpenAPI } from "./openapi";
-import { genAppShell } from "./ui";
+import { genAdminAppShell, genPublicAppShell } from "./ui";
 import { genEnvExample } from "./config";
 
 if (import.meta.main) {
@@ -45,7 +45,8 @@ if (import.meta.main) {
   writeFileSync(join(outDir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(outDir, "server.ts"), genRoutes(schema));
   writeFileSync(join(outDir, "mcp.ts"), genMcpServer(schema));
-  writeFileSync(join(outDir, "openapi.json"), genOpenAPI(schema));
+  const openApiJson = genOpenAPI(schema);
+  writeFileSync(join(outDir, "openapi.json"), openApiJson);
   writeFileSync(join(outDir, ".env.example"), genEnvExample(schema));
 
   console.log(`wrote ${outDir}/schema.sql`);
@@ -59,23 +60,42 @@ if (import.meta.main) {
 
   // Generate UI
   const uiDir = join(outDir, "ui");
+  const adminUiDir = join(uiDir, "admin");
   mkdirSync(uiDir, { recursive: true });
-  writeFileSync(join(uiDir, "index.html"), genAppShell(schema));
-  writeFileSync(join(uiDir, "openapi.json"), genOpenAPI(schema));
+  mkdirSync(adminUiDir, { recursive: true });
+  writeFileSync(join(uiDir, "index.html"), genPublicAppShell(schema));
+  writeFileSync(join(uiDir, "openapi.json"), openApiJson);
+  writeFileSync(join(adminUiDir, "index.html"), genAdminAppShell(schema));
+  writeFileSync(join(adminUiDir, "openapi.json"), openApiJson);
 
-  // Bundle web components
-  const uiEntry = resolve(import.meta.dir, "..", "ui", "index.ts");
-  const result = await Bun.build({
-    entrypoints: [uiEntry],
+  // Bundle public and admin web components separately so customer-facing pages
+  // do not ship generated admin data-management code.
+  const publicUiEntry = resolve(import.meta.dir, "..", "ui", "public.ts");
+  const adminUiEntry = resolve(import.meta.dir, "..", "ui", "admin.ts");
+  const publicResult = await Bun.build({
+    entrypoints: [publicUiEntry],
     outdir: uiDir,
     naming: "app.js",
     minify: true,
   });
-  if (!result.success) {
-    console.error("UI bundle failed:", result.logs);
+  if (!publicResult.success) {
+    console.error("Public UI bundle failed:", publicResult.logs);
+    process.exit(1);
+  }
+
+  const adminResult = await Bun.build({
+    entrypoints: [adminUiEntry],
+    outdir: adminUiDir,
+    naming: "app.js",
+    minify: true,
+  });
+  if (!adminResult.success) {
+    console.error("Admin UI bundle failed:", adminResult.logs);
     process.exit(1);
   }
 
   console.log(`wrote ${uiDir}/index.html`);
   console.log(`wrote ${uiDir}/app.js`);
+  console.log(`wrote ${adminUiDir}/index.html`);
+  console.log(`wrote ${adminUiDir}/app.js`);
 }
