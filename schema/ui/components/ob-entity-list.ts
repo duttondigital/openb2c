@@ -104,7 +104,7 @@ export class ObEntityList extends HTMLElement {
         @media (max-width: 640px) {
           .header { align-items: flex-start; flex-direction: column; }
           .header h1 { font-size: 22px; }
-          #create-btn { width: 100%; }
+          [data-action="create"] { width: 100%; }
         }
       </style>
       <div class="header">
@@ -112,7 +112,7 @@ export class ObEntityList extends HTMLElement {
           <div class="eyebrow">${this._total} record${this._total !== 1 ? "s" : ""}</div>
           <h1>${escapeHtml(pluralDisplayName(this.entity))}</h1>
         </div>
-        <button class="primary" id="create-btn">New ${escapeHtml(displayName(this.entity))}</button>
+        <button class="primary" type="button" data-action="create">New ${escapeHtml(displayName(this.entity))}</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -146,9 +146,9 @@ export class ObEntityList extends HTMLElement {
       <div class="pagination">
         <span>${this._total} record${this._total !== 1 ? "s" : ""}</span>
         <div class="controls">
-          <button id="prev" ${currentPage <= 1 ? "disabled" : ""} aria-label="Previous page">Previous</button>
+          <button data-action="previous-page" ${currentPage <= 1 ? "disabled" : ""} aria-label="Previous page">Previous</button>
           <span>Page ${currentPage} of ${totalPages}</span>
-          <button id="next" ${currentPage >= totalPages ? "disabled" : ""} aria-label="Next page">Next</button>
+          <button data-action="next-page" ${currentPage >= totalPages ? "disabled" : ""} aria-label="Next page">Next</button>
         </div>
       </div>
     `;
@@ -174,16 +174,16 @@ export class ObEntityList extends HTMLElement {
       });
     });
 
-    this.shadowRoot!.getElementById("create-btn")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="create"]')?.addEventListener("click", () => {
       location.hash = `#/${this.entity}s/new`;
     });
 
-    this.shadowRoot!.getElementById("prev")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="previous-page"]')?.addEventListener("click", () => {
       this._offset = Math.max(0, this._offset - this._limit);
       this._render();
     });
 
-    this.shadowRoot!.getElementById("next")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="next-page"]')?.addEventListener("click", () => {
       if (this._offset + this._limit < this._total) {
         this._offset += this._limit;
         this._render();

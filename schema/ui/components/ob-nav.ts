@@ -8,6 +8,8 @@ import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
 export class ObNav extends HTMLElement {
+  private _onHashChange = () => this._highlight();
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -65,24 +67,29 @@ export class ObNav extends HTMLElement {
           font-size: 12px;
           font-weight: 800;
         }
-        a {
+        .nav-link {
           display: flex;
           align-items: center;
+          width: 100%;
           min-height: 38px;
           padding: 8px 10px;
+          background: transparent;
           color: var(--ob-text);
           font-size: 14px;
           font-weight: 600;
+          font-family: inherit;
           text-decoration: none;
           border-radius: var(--ob-radius);
           border: 1px solid transparent;
+          text-align: left;
+          cursor: pointer;
         }
-        a:hover {
+        .nav-link:hover {
           background: var(--ob-bg-alt);
           border-color: var(--ob-border);
           text-decoration: none;
         }
-        a.active {
+        .nav-link.active {
           background: var(--ob-primary);
           color: white;
           border-color: var(--ob-primary);
@@ -109,29 +116,42 @@ export class ObNav extends HTMLElement {
         ${api.hasCommerceWorkflow() ? `
           <div class="group">
             <div class="group-title">Commerce</div>
-            <a href="#/commerce" data-entity="commerce">Checkout</a>
+            <button type="button" class="nav-link" data-href="#/commerce" data-entity="commerce">Checkout</button>
           </div>
         ` : ""}
         <div class="group">
           <div class="group-title">Data</div>
-          ${entities.map((e) => `<a href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</a>`).join("")}
+          ${entities.map((e) => `<button type="button" class="nav-link" data-href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</button>`).join("")}
         </div>
       </nav>
     `;
 
-    window.addEventListener("hashchange", () => this._highlight());
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const href = button.dataset.href || "";
+        if (!href.startsWith("#/")) return;
+        location.hash = href;
+        this._highlight();
+      });
+    });
+
+    window.addEventListener("hashchange", this._onHashChange);
     this._highlight();
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("hashchange", this._onHashChange);
   }
 
   private _highlight() {
     const hash = location.hash || "#/";
-    this.shadowRoot!.querySelectorAll("a").forEach((a) => {
-      const active = hash.startsWith(a.getAttribute("href")!);
-      a.classList.toggle("active", active);
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
+      const active = hash.startsWith(button.dataset.href || "");
+      button.classList.toggle("active", active);
       if (active) {
-        a.setAttribute("aria-current", "page");
+        button.setAttribute("aria-current", "page");
       } else {
-        a.removeAttribute("aria-current");
+        button.removeAttribute("aria-current");
       }
     });
   }

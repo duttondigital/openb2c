@@ -499,7 +499,7 @@ export class ObCommerce extends HTMLElement {
         this._render();
       });
     });
-    this.shadowRoot!.getElementById("configure-form")?.addEventListener("submit", (event) => {
+    this.shadowRoot!.querySelector<HTMLFormElement>('[data-form="configure"]')?.addEventListener("submit", (event) => {
       event.preventDefault();
       this._addSelectedToCart();
     });
@@ -511,7 +511,7 @@ export class ObCommerce extends HTMLElement {
         this._optionState[input.dataset.option || ""] = input.value;
       });
     });
-    this.shadowRoot!.getElementById("line-quantity")?.addEventListener("input", (event) => {
+    this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="quantity"]')?.addEventListener("input", (event) => {
       this._quantity = (event.target as HTMLInputElement).value;
     });
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-remove-line]").forEach((button) => {
@@ -522,11 +522,11 @@ export class ObCommerce extends HTMLElement {
         this._render();
       });
     });
-    this.shadowRoot!.getElementById("checkout-form")?.addEventListener("submit", (event) => {
+    this.shadowRoot!.querySelector<HTMLFormElement>('[data-form="checkout"]')?.addEventListener("submit", (event) => {
       event.preventDefault();
       this._checkout();
     });
-    this.shadowRoot!.getElementById("signin-form")?.addEventListener("submit", (event) => {
+    this.shadowRoot!.querySelector<HTMLFormElement>('[data-form="signin"]')?.addEventListener("submit", (event) => {
       event.preventDefault();
       if (this._authChallengeId === null) {
         this._startSignIn();
@@ -534,13 +534,13 @@ export class ObCommerce extends HTMLElement {
         this._verifySignIn();
       }
     });
-    this.shadowRoot!.getElementById("auth-email")?.addEventListener("input", (event) => {
+    this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="auth-email"]')?.addEventListener("input", (event) => {
       this._authEmail = (event.target as HTMLInputElement).value;
     });
-    this.shadowRoot!.getElementById("auth-code")?.addEventListener("input", (event) => {
+    this.shadowRoot!.querySelector<HTMLInputElement>('[data-field="auth-code"]')?.addEventListener("input", (event) => {
       this._authCode = (event.target as HTMLInputElement).value;
     });
-    this.shadowRoot!.getElementById("auth-reset")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="reset-auth"]')?.addEventListener("click", () => {
       this._authChallengeId = null;
       this._authCode = "";
       this._authDevCode = "";
@@ -548,8 +548,8 @@ export class ObCommerce extends HTMLElement {
       this._authError = "";
       this._render();
     });
-    this.shadowRoot!.getElementById("payment-btn")?.addEventListener("click", () => this._createPaymentIntent());
-    this.shadowRoot!.getElementById("expire-btn")?.addEventListener("click", () => this._expireStale());
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="payment-intent"]')?.addEventListener("click", () => this._createPaymentIntent());
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="expire-orders"]')?.addEventListener("click", () => this._expireStale());
   }
 
   private _renderGroups(groups: Map<string, Record<string, unknown>[]>, config: CommerceConfig): string {
@@ -593,11 +593,11 @@ export class ObCommerce extends HTMLElement {
   private _renderConfigureForm(optionDefs: Record<string, CommerceOption>, item: Record<string, unknown>, config: CommerceConfig): string {
     const maxQuantity = config.checkout?.maxQuantity || 20;
     return `
-      <form id="configure-form">
+      <form data-form="configure">
         <div class="configure-grid">
           <div class="form-group">
             <label for="line-quantity">${escapeHtml(fieldLabel("quantity"))} <span class="required">*</span></label>
-            <input id="line-quantity" type="text" inputmode="numeric" pattern="[0-9]*" name="quantity" value="${escapeAttr(this._quantity)}" required aria-describedby="line-quantity-help" />
+            <input id="line-quantity" type="text" inputmode="numeric" pattern="[0-9]*" name="quantity" data-field="quantity" value="${escapeAttr(this._quantity)}" required aria-describedby="line-quantity-help" />
             <div class="help-text" id="line-quantity-help">Max ${escapeHtml(maxQuantity)}</div>
           </div>
           <div class="form-group">
@@ -678,7 +678,7 @@ export class ObCommerce extends HTMLElement {
     const canCheckout = this._cart.length > 0;
     const canExpire = api.authContext.scopes.includes("*") || api.authContext.scopes.includes("commerce.expire");
     return `
-      <form id="checkout-form">
+      <form data-form="checkout">
         <div class="session-box" aria-label="Signed in session">
           <span class="status-dot" aria-hidden="true"></span>
           <div>
@@ -688,8 +688,8 @@ export class ObCommerce extends HTMLElement {
         </div>
         <div class="actions">
           <button type="submit" class="primary" ${canCheckout && !this._loading ? "" : "disabled"}>${this._loading ? "Working" : "Checkout"}</button>
-          <button type="button" id="payment-btn" ${this._checkoutResult ? "" : "disabled"}>Create payment intent</button>
-          ${canExpire ? `<button type="button" id="expire-btn">Expire stale orders</button>` : ""}
+          <button type="button" data-action="payment-intent" ${this._checkoutResult ? "" : "disabled"}>Create payment intent</button>
+          ${canExpire ? `<button type="button" data-action="expire-orders">Expire stale orders</button>` : ""}
         </div>
       </form>
     `;
@@ -697,23 +697,23 @@ export class ObCommerce extends HTMLElement {
 
   private _renderSignInForm(): string {
     return `
-      <form id="signin-form">
+      <form data-form="signin">
         <div class="empty">Sign in to check out.</div>
         ${this._authError ? `<div class="error-msg" role="alert">${escapeHtml(this._authError)}</div>` : ""}
         <div class="form-group">
           <label for="auth-email">Email <span class="required">*</span></label>
-          <input id="auth-email" type="text" inputmode="email" name="email" autocomplete="email" value="${escapeAttr(this._authEmail)}" required ${this._authChallengeId !== null ? "disabled" : ""} />
+          <input id="auth-email" type="text" inputmode="email" name="email" data-field="auth-email" autocomplete="email" value="${escapeAttr(this._authEmail)}" required ${this._authChallengeId !== null ? "disabled" : ""} />
         </div>
         ${this._authChallengeId !== null ? `
           <div class="form-group">
             <label for="auth-code">Verification code <span class="required">*</span></label>
-            <input id="auth-code" type="text" inputmode="numeric" pattern="[0-9]*" name="code" autocomplete="one-time-code" value="${escapeAttr(this._authCode)}" required />
+            <input id="auth-code" type="text" inputmode="numeric" pattern="[0-9]*" name="code" data-field="auth-code" autocomplete="one-time-code" value="${escapeAttr(this._authCode)}" required />
             ${this._authDevCode ? `<div class="help-text">Development code: ${escapeHtml(this._authDevCode)}</div>` : ""}
           </div>
         ` : ""}
         <div class="actions">
           <button type="submit" class="primary" ${this._authLoading ? "disabled" : ""}>${this._authLoading ? "Working" : this._authChallengeId === null ? "Send code" : "Sign in"}</button>
-          ${this._authChallengeId !== null ? `<button type="button" id="auth-reset">Use another email</button>` : ""}
+          ${this._authChallengeId !== null ? `<button type="button" data-action="reset-auth">Use another email</button>` : ""}
         </div>
       </form>
     `;

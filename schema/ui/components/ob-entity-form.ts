@@ -95,7 +95,7 @@ export class ObEntityForm extends HTMLElement {
           <div>
             <h1>${this.mode === "edit" ? "Edit" : "New"} ${escapeHtml(displayName(this.entity))}</h1>
           </div>
-          <button id="back-btn" type="button">Back</button>
+          <button type="button" data-action="back">Back</button>
         </div>
         ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
         <form>
@@ -140,7 +140,7 @@ export class ObEntityForm extends HTMLElement {
           </div>
           <div class="actions">
             <button type="submit" class="primary">${this.mode === "edit" ? "Save" : "Create"}</button>
-            <button type="button" id="cancel-btn">Cancel</button>
+            <button type="button" data-action="cancel">Cancel</button>
           </div>
         </form>
       </div>
@@ -158,8 +158,8 @@ export class ObEntityForm extends HTMLElement {
         location.hash = `#/${this.entity}s`;
       }
     };
-    this.shadowRoot!.getElementById("back-btn")?.addEventListener("click", goBack);
-    this.shadowRoot!.getElementById("cancel-btn")?.addEventListener("click", goBack);
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", goBack);
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="cancel"]')?.addEventListener("click", goBack);
   }
 
   private async _submit() {

@@ -11,7 +11,19 @@ export class ObOperationBtn extends HTMLElement {
     this.attachShadow({ mode: "open" });
   }
 
+  static get observedAttributes() {
+    return ["entity", "op", "record-id"];
+  }
+
   connectedCallback() {
+    this._render();
+  }
+
+  attributeChangedCallback() {
+    if (this.isConnected) this._render();
+  }
+
+  private _render() {
     const op = this.getAttribute("op") || "";
     const label = op.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -22,7 +34,7 @@ export class ObOperationBtn extends HTMLElement {
         .msg.success { color: var(--ob-success, #16a34a); }
       </style>
       <button class="primary">${label}</button>
-      <div class="msg" id="msg"></div>
+      <div class="msg" data-role="message"></div>
     `;
 
     this.shadowRoot!.querySelector("button")!.addEventListener("click", () => this._exec());
@@ -33,7 +45,7 @@ export class ObOperationBtn extends HTMLElement {
     const op = this.getAttribute("op")!;
     const id = this.getAttribute("record-id")!;
     const btn = this.shadowRoot!.querySelector("button")!;
-    const msg = this.shadowRoot!.getElementById("msg")!;
+    const msg = this.shadowRoot!.querySelector<HTMLElement>('[data-role="message"]')!;
 
     btn.disabled = true;
     msg.textContent = "";

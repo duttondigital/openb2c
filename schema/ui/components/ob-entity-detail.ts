@@ -110,10 +110,10 @@ export class ObEntityDetail extends HTMLElement {
             <h1>${escapeHtml(title)}</h1>
           </div>
           <div class="header-actions">
-            <button id="edit-btn" type="button">Edit</button>
-            <button class="danger" id="delete-btn" type="button">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>
-            ${this._confirmDelete ? `<button id="delete-cancel-btn">Cancel Delete</button>` : ""}
-            <button id="back-btn" type="button">Back</button>
+            <button type="button" data-action="edit">Edit</button>
+            <button class="danger" type="button" data-action="delete">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>
+            ${this._confirmDelete ? `<button type="button" data-action="cancel-delete">Cancel Delete</button>` : ""}
+            <button type="button" data-action="back">Back</button>
           </div>
         </div>
         ${this._confirmDelete ? `<div class="delete-confirm" role="alert">Confirm deletion of ${escapeHtml(title)}.</div>` : ""}
@@ -130,20 +130,20 @@ export class ObEntityDetail extends HTMLElement {
               <button class="secondary op-btn" type="button" data-op="${escapeAttr(op)}">${escapeHtml(displayOperation(op))}</button>
             `).join("")}
           </div>
-          <div id="op-msg" class="status-line" role="status" aria-live="polite"></div>
+          <div class="status-line" data-role="operation-status" role="status" aria-live="polite"></div>
         ` : ""}
       </div>
     `;
 
-    this.shadowRoot!.getElementById("back-btn")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", () => {
       location.hash = `#/${this.entity}s`;
     });
 
-    this.shadowRoot!.getElementById("edit-btn")?.addEventListener("click", () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="edit"]')?.addEventListener("click", () => {
       location.hash = `#/${this.entity}s/${this.recordId}/edit`;
     });
 
-    this.shadowRoot!.getElementById("delete-btn")?.addEventListener("click", async () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="delete"]')?.addEventListener("click", async () => {
       if (!this._confirmDelete) {
         this._confirmDelete = true;
         await this._render();
@@ -161,7 +161,7 @@ export class ObEntityDetail extends HTMLElement {
       location.hash = `#/${this.entity}s`;
     });
 
-    this.shadowRoot!.getElementById("delete-cancel-btn")?.addEventListener("click", async () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="cancel-delete"]')?.addEventListener("click", async () => {
       this._confirmDelete = false;
       this._deleteError = "";
       await this._render();
@@ -174,7 +174,7 @@ export class ObEntityDetail extends HTMLElement {
 
   private async _runOperation(op: string) {
     if (!op) return;
-    const msg = this.shadowRoot!.getElementById("op-msg");
+    const msg = this.shadowRoot!.querySelector<HTMLElement>('[data-role="operation-status"]');
     const btn = this.shadowRoot!.querySelector<HTMLButtonElement>(`.op-btn[data-op="${op}"]`);
     if (!btn || !msg) return;
 
