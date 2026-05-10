@@ -181,7 +181,6 @@ const adminShell = `
 const authMenu = `
   :host(ob-auth-menu) {
     display: inline-block;
-    position: relative;
     font-family: system-ui, -apple-system, sans-serif;
   }
   :host(ob-auth-menu[placement="sidebar"]) {
@@ -208,85 +207,96 @@ const authMenu = `
     background: var(--ob-bg-alt);
   }
   :host(ob-auth-menu) .menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 20;
-    width: min(340px, calc(100vw - 32px));
+    width: 100%;
+    margin-top: 8px;
+  }
+`;
+
+const authPanel = `
+  :host(ob-auth-panel) {
+    display: block;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  :host(ob-auth-panel) .auth-panel {
+    display: grid;
+    gap: 14px;
     padding: 16px;
     border: 1px solid var(--ob-border);
     border-radius: var(--ob-radius);
     background: var(--ob-bg);
-    box-shadow: var(--ob-shadow);
-  }
-  :host(ob-auth-menu[placement="sidebar"]) .menu {
-    position: static;
-    width: 100%;
-    margin-top: 8px;
     box-shadow: var(--ob-shadow-sm);
   }
-  :host(ob-auth-menu) .menu-header {
+  :host(ob-auth-panel) .panel-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
   }
-  :host(ob-auth-menu) .menu-title {
+  :host(ob-auth-panel) .panel-title {
     font-size: 16px;
     line-height: 1.3;
     font-weight: 800;
   }
-  :host(ob-auth-menu) .menu-subtitle {
+  :host(ob-auth-panel) .panel-subtitle {
     color: var(--ob-text-muted);
     font-size: 13px;
     line-height: 1.4;
     margin-top: 2px;
   }
-  :host(ob-auth-menu) .close {
-    width: 32px;
-    min-height: 32px;
-    padding: 0;
-    border: 1px solid var(--ob-border);
-    background: var(--ob-bg-subtle);
-    color: var(--ob-text);
-    font-size: 18px;
-    line-height: 1;
-  }
-  :host(ob-auth-menu) .session {
+  :host(ob-auth-panel) .session {
     display: grid;
     gap: 12px;
   }
-  :host(ob-auth-menu) .session-box {
+  :host(ob-auth-panel) .session-box {
     padding: 12px;
     border: 1px solid var(--ob-border);
     border-radius: var(--ob-radius);
     background: var(--ob-bg-subtle);
   }
-  :host(ob-auth-menu) .session-box strong,
-  :host(ob-auth-menu) .session-box span {
+  :host(ob-auth-panel) .session-box strong,
+  :host(ob-auth-panel) .session-box span {
     display: block;
   }
-  :host(ob-auth-menu) .session-box span {
+  :host(ob-auth-panel) .session-box span {
     color: var(--ob-text-muted);
     font-size: 13px;
     margin-top: 3px;
   }
-  :host(ob-auth-menu) .actions {
+  :host(ob-auth-panel) .actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
   }
-  :host(ob-auth-menu) .actions button {
+  :host(ob-auth-panel) .actions button {
     flex: 1;
   }
-  @media (max-width: 560px) {
-    :host(ob-auth-menu) { position: static; }
-    :host(ob-auth-menu) .menu {
-      left: 16px;
-      right: 16px;
-      width: auto;
-    }
+`;
+
+const authPage = `
+  ob-auth-page {
+    display: block;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  ob-auth-page .page-header {
+    margin-bottom: 18px;
+  }
+  ob-auth-page .eyebrow {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  ob-auth-page h1 {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 800;
+  }
+  ob-auth-page p {
+    color: var(--ob-text-muted);
+    font-size: 14px;
+    line-height: 1.45;
+    margin-top: 8px;
   }
 `;
 
@@ -717,6 +727,8 @@ export function genPublicStylesheet(): string {
     form,
     button,
     authMenu,
+    authPanel,
+    authPage,
     commerce,
   ]);
 }
@@ -734,6 +746,7 @@ export function genAdminStylesheet(): string {
     card,
     detail,
     authMenu,
+    authPanel,
     nav,
     entityList,
     entityForm,

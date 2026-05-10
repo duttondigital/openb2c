@@ -186,6 +186,11 @@ export class ObApi extends HTMLElement {
     );
   }
 
+  hasIdentityAuth(): boolean {
+    if (!this.spec) return false;
+    return Boolean(this.spec.paths["/auth/context"]);
+  }
+
   getEcommerceConfig(): any | null {
     return this.spec?.["x-openb2c-ecommerce"] || null;
   }

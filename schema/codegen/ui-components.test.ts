@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { gzipSync } from "node:zlib";
+import { dirname, join, normalize } from "node:path";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
 import { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
 import type { Schema } from "./types";
@@ -62,6 +62,8 @@ describe("generated UI web components", () => {
     expect(index).toContain('export { ObApp }');
     expect(index).toContain('export { ObAdminApp }');
     expect(index).toContain('export { ObAuthMenu }');
+    expect(index).toContain('export { ObAuthPage }');
+    expect(index).toContain('export { ObAuthPanel }');
     expect(index).toContain('export { ObRouteOutlet }');
     expect(index).toContain('export { ObAdminRouteOutlet }');
   });
@@ -72,6 +74,8 @@ describe("generated UI web components", () => {
     const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
     const adminApp = await Bun.file(join(UI_DIR, "components", "ob-admin-app.ts")).text();
     const authMenu = await Bun.file(join(UI_DIR, "components", "ob-auth-menu.ts")).text();
+    const authPanel = await Bun.file(join(UI_DIR, "components", "ob-auth-panel.ts")).text();
+    const authPage = await Bun.file(join(UI_DIR, "components", "ob-auth-page.ts")).text();
     const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
@@ -90,13 +94,21 @@ describe("generated UI web components", () => {
     expect(adminApp).not.toContain("function escapeAttr");
     expect(adminNav).toContain("./ob-auth-menu");
     expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
-    expect(authMenu).toContain("setCertificateAuth");
-    expect(authMenu).toContain("clearAuthContext");
+    expect(authMenu).toContain("#/login");
+    expect(authMenu).toContain("#/account");
+    expect(authMenu).toContain("./ob-auth-panel");
+    expect(authMenu).not.toContain('inputmode="email"');
+    expect(authMenu).not.toContain("setCertificateAuth");
+    expect(authPanel).toContain('inputmode="email"');
+    expect(authPanel).toContain("setCertificateAuth");
+    expect(authPanel).toContain("clearAuthContext");
+    expect(authPage).toContain("./ob-auth-panel");
     expect(authMenu).toContain('observedAttributes');
     expect(authMenu).toContain('placement');
     expect(authMenu).toContain("../style-link");
     expect(authMenu).not.toContain("../styles");
     expect(publicRoute).toContain("./ob-commerce");
+    expect(publicRoute).toContain("./ob-auth-page");
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
@@ -169,6 +181,8 @@ describe("generated UI web components", () => {
 
       expect(publicBundle).toContain("ob-commerce");
       expect(publicBundle).toContain("ob-auth-menu");
+      expect(publicBundle).toContain("ob-auth-page");
+      expect(publicBundle).toContain("ob-auth-panel");
       expect(publicBundle).not.toContain("ob-admin-app");
       expect(publicBundle).not.toContain("ob-entity-list");
       expect(publicBundle).not.toContain("ob-entity-form");
@@ -179,11 +193,12 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-entity-form");
       expect(adminBundle).toContain("ob-entity-detail");
       expect(adminBundle).toContain("ob-auth-menu");
+      expect(adminBundle).toContain("ob-auth-panel");
       expect(adminBundle).not.toContain("ob-commerce");
       expect(publicEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);
       expect(adminEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);
-      await expect(gzipSize(publicFiles)).resolves.toBeLessThanOrEqual(14 * 1024);
-      await expect(gzipSize(adminFiles)).resolves.toBeLessThanOrEqual(14 * 1024);
+      await expect(gzipSize(await initialAssetFiles(publicOut))).resolves.toBeLessThanOrEqual(14 * 1024);
+      await expect(gzipSize(await initialAssetFiles(adminOut))).resolves.toBeLessThanOrEqual(14 * 1024);
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
@@ -204,6 +219,30 @@ async function assetFiles(dir: string): Promise<string[]> {
 async function readFiles(files: string[]): Promise<string> {
   const contents = await Promise.all(files.map((file) => Bun.file(file).text()));
   return contents.join("\n");
+}
+
+async function initialAssetFiles(dir: string): Promise<string[]> {
+  const seen = new Set<string>([join(dir, "styles.css")]);
+
+  async function visit(file: string) {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const source = await Bun.file(file).text();
+    for (const specifier of staticImports(source)) {
+      if (!specifier.startsWith(".")) continue;
+      const imported = normalize(join(dirname(file), specifier));
+      if (imported.startsWith(dir) && imported.endsWith(".js")) {
+        await visit(imported);
+      }
+    }
+  }
+
+  await visit(join(dir, "app.js"));
+  return [...seen].sort();
+}
+
+function staticImports(source: string): string[] {
+  return [...source.matchAll(/import(?:\s+[^("'`]+?\s+from)?\s*["']([^"']+)["']/g)].map((match) => match[1]);
 }
 
 async function gzipSize(files: string[]): Promise<number> {

@@ -225,13 +225,17 @@ describe("Duchy Opera commerce workflow", () => {
   test("commerce browser UI derives checkout user from auth context", async () => {
     const commerceUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-commerce.ts")).text();
     const authMenuUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-auth-menu.ts")).text();
+    const authPanelUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-auth-panel.ts")).text();
+    const routeUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-route-outlet.ts")).text();
     const appUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-app.ts")).text();
     const apiUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-api.ts")).text();
 
     expect(commerceUi).toContain("authContext.userId");
     expect(commerceUi).toContain("fetch(ObApi.instance!.url");
     expect(commerceUi).toContain("ob-auth-required");
-    expect(commerceUi).toContain("Sign in from the account menu to continue");
+    expect(commerceUi).toContain("Sign in to continue");
+    expect(commerceUi).toContain('returnTo: "/commerce"');
+    expect(commerceUi).toContain("sessionStorage");
     expect(commerceUi).not.toContain('inputmode="email"');
     expect(commerceUi).not.toContain("checkout-customer");
     expect(commerceUi).not.toContain("Select a customer");
@@ -239,10 +243,14 @@ describe("Duchy Opera commerce workflow", () => {
     expect(commerceUi).not.toContain("Response JSON");
     expect(commerceUi).not.toContain("_renderLinks");
     expect(commerceUi).not.toContain("data-form=\"signin\"");
-    expect(authMenuUi).toContain('inputmode="email"');
-    expect(authMenuUi).toContain("setCertificateAuth");
-    expect(authMenuUi).toContain("clearAuthContext");
+    expect(authMenuUi).toContain("#/login");
+    expect(authMenuUi).not.toContain('inputmode="email"');
+    expect(authPanelUi).toContain('inputmode="email"');
+    expect(authPanelUi).toContain("setCertificateAuth");
+    expect(authPanelUi).toContain("clearAuthContext");
+    expect(routeUi).toContain("./ob-auth-page");
     expect(appUi).toContain("<ob-auth-menu>");
+    expect(apiUi).toContain("hasIdentityAuth");
     expect(apiUi).toContain("setCertificateAuth");
     expect(apiUi).toContain("X-Certificate");
   });

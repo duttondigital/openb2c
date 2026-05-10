@@ -37,8 +37,8 @@ export class ObRouteOutlet extends HTMLElement {
     await api.ready();
     if (routeSeq !== this._routeSeq) return;
 
-    const hash = location.hash.slice(1) || "/";
-    const routed = await this._match(hash, api);
+    const route = parseHash(location.hash);
+    const routed = await this._match(route.path, route.params, api);
     if (routeSeq !== this._routeSeq) return;
     if (routed.redirect) {
       location.hash = routed.redirect;
@@ -49,7 +49,15 @@ export class ObRouteOutlet extends HTMLElement {
     this.focusContent();
   }
 
-  private async _match(hash: string, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
+  private async _match(hash: string, params: URLSearchParams, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
+    if ((hash === "/login" || hash === "/account") && api.hasIdentityAuth()) {
+      await import("./ob-auth-page");
+      const page = document.createElement("ob-auth-page");
+      page.setAttribute("route", hash === "/account" ? "account" : "login");
+      const returnTo = safeReturnTo(params.get("return"));
+      if (returnTo) page.setAttribute("return-to", returnTo);
+      return { node: page };
+    }
     if (hash === "/commerce" && api.hasCommerceWorkflow()) {
       await import("./ob-commerce");
       return { node: document.createElement("ob-commerce") };
@@ -61,6 +69,17 @@ export class ObRouteOutlet extends HTMLElement {
     empty.textContent = "No public web app routes are available for this composition.";
     return { node: empty };
   }
+}
+
+function parseHash(hash: string): { path: string; params: URLSearchParams } {
+  const raw = hash.slice(1) || "/";
+  const [path, query = ""] = raw.split("?");
+  return { path: path || "/", params: new URLSearchParams(query) };
+}
+
+function safeReturnTo(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
+  return value.split("#")[0];
 }
 
 customElements.define("ob-route-outlet", ObRouteOutlet);

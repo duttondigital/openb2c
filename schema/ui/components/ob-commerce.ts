@@ -58,9 +58,10 @@ export class ObCommerce extends HTMLElement {
   private _loading = false;
   private _reviewingCart = false;
   private _availableItems: Record<string, unknown>[] = [];
+  private _stateRestored = false;
   private _renderSeq = 0;
   private _onAuthChanged = () => {
-    if (ObApi.instance?.authContext.userId !== null && this._error === "Sign in from the account menu to continue.") {
+    if (ObApi.instance?.authContext.userId !== null && this._error === "Sign in to continue.") {
       this._error = "";
     }
     void this._render();
@@ -134,6 +135,10 @@ export class ObCommerce extends HTMLElement {
     if (!api.hasCommerceWorkflow()) {
       this.shadowRoot!.innerHTML = `<p>Commerce workflow is not available for this composition.</p>`;
       return;
+    }
+    if (!this._stateRestored) {
+      this._restoreState(api);
+      this._stateRestored = true;
     }
 
     const config = this._config(api);
@@ -252,8 +257,8 @@ export class ObCommerce extends HTMLElement {
       this._render();
     });
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="request-auth"]')?.addEventListener("click", () => {
-      document.dispatchEvent(new CustomEvent("ob-auth-required"));
-      this._error = "Sign in from the account menu to continue.";
+      document.dispatchEvent(new CustomEvent("ob-auth-required", { detail: { returnTo: "/commerce" } }));
+      this._error = "Sign in to continue.";
       this._render();
     });
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="payment-intent"]')?.addEventListener("click", () => this._createPaymentIntent());
@@ -268,6 +273,7 @@ export class ObCommerce extends HTMLElement {
       this._error = "";
       this._render();
     });
+    this._persistState(api);
   }
 
   private _renderCurrentTask(
@@ -353,7 +359,7 @@ export class ObCommerce extends HTMLElement {
             </div>
           </form>
         ` : `
-          <p class="notice">Sign in from the account menu before checking out.</p>
+          <p class="notice">Sign in before checking out.</p>
           <div class="actions">
             <button type="button" class="primary" data-action="request-auth">Sign in to checkout</button>
             <button type="button" data-action="add-another">Add another</button>
@@ -625,8 +631,8 @@ export class ObCommerce extends HTMLElement {
   private async _checkout() {
     if (this._cart.length === 0) return;
     if (ObApi.instance!.authContext.userId === null) {
-      document.dispatchEvent(new CustomEvent("ob-auth-required"));
-      this._error = "Sign in from the account menu to continue.";
+      document.dispatchEvent(new CustomEvent("ob-auth-required", { detail: { returnTo: "/commerce" } }));
+      this._error = "Sign in to continue.";
       await this._render();
       return;
     }
@@ -731,6 +737,65 @@ export class ObCommerce extends HTMLElement {
         .map(([name, value]) => `${fieldLabel(name)}: ${value}`),
     ];
     return parts.join(" - ");
+  }
+
+  private _restoreState(api: ObApi) {
+    try {
+      const raw = sessionStorage.getItem(this._storageKey(api));
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (typeof data.selectedGroup === "string") this._selectedGroup = data.selectedGroup;
+      if (typeof data.selectedItemId === "string") this._selectedItemId = data.selectedItemId;
+      if (typeof data.quantity === "string") this._quantity = data.quantity;
+      if (data.optionState && typeof data.optionState === "object" && !Array.isArray(data.optionState)) {
+        this._optionState = Object.fromEntries(
+          Object.entries(data.optionState).filter(([, value]) => typeof value === "string")
+        ) as Record<string, string>;
+      }
+      if (Array.isArray(data.cart)) {
+        this._cart = data.cart.filter((line: any) => {
+          return line &&
+            typeof line.id === "string" &&
+            Number.isFinite(Number(line.itemId)) &&
+            Number.isFinite(Number(line.quantity)) &&
+            line.item &&
+            typeof line.item === "object";
+        }).map((line: any) => ({
+          id: line.id,
+          itemId: Number(line.itemId),
+          quantity: Number(line.quantity),
+          options: line.options && typeof line.options === "object" && !Array.isArray(line.options) ? line.options : {},
+          item: line.item,
+        }));
+      }
+      this._reviewingCart = Boolean(data.reviewingCart);
+    } catch {
+      sessionStorage.removeItem(this._storageKey(api));
+    }
+  }
+
+  private _persistState(api: ObApi) {
+    try {
+      const empty = !this._selectedGroup && !this._selectedItemId && this._quantity === "1" && this._cart.length === 0 && !this._reviewingCart;
+      if (empty) {
+        sessionStorage.removeItem(this._storageKey(api));
+        return;
+      }
+      sessionStorage.setItem(this._storageKey(api), JSON.stringify({
+        selectedGroup: this._selectedGroup,
+        selectedItemId: this._selectedItemId,
+        quantity: this._quantity,
+        optionState: this._optionState,
+        cart: this._cart,
+        reviewingCart: this._reviewingCart,
+      }));
+    } catch {
+      // Session persistence is a UX aid; checkout still works without it.
+    }
+  }
+
+  private _storageKey(api: ObApi): string {
+    return `openb2c:${api.spec?.info.title || "app"}:commerce-state`;
   }
 
   private _cartTotal(config: CommerceConfig): number {
