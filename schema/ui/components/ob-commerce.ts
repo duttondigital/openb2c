@@ -49,7 +49,6 @@ export class ObCommerce extends HTMLElement {
   private _selectedGroup = "";
   private _selectedItemId = "";
   private _quantity = "1";
-  private _customerId = "";
   private _client = "web";
   private _optionState: Record<string, string> = {};
   private _cart: CartLine[] = [];
@@ -59,6 +58,17 @@ export class ObCommerce extends HTMLElement {
   private _error = "";
   private _loading = false;
   private _availableItems: Record<string, unknown>[] = [];
+  private _authEmail = "";
+  private _authChallengeId: number | null = null;
+  private _authCode = "";
+  private _authDevCode = "";
+  private _authPrivateKey: CryptoKey | null = null;
+  private _authError = "";
+  private _authLoading = false;
+  private _renderSeq = 0;
+  private _onAuthChanged = () => {
+    void this._render();
+  };
 
   constructor() {
     super();
@@ -66,7 +76,12 @@ export class ObCommerce extends HTMLElement {
   }
 
   async connectedCallback() {
+    document.addEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
     await this._render();
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
   }
 
   private _config(api: ObApi): CommerceConfig {
@@ -76,7 +91,7 @@ export class ObCommerce extends HTMLElement {
   private async _rows(entity: string): Promise<Record<string, unknown>[]> {
     if (!entity) return [];
     try {
-      const res = await ObApi.instance!.request(`/api/${entity}s?limit=200`);
+      const res = await fetch(ObApi.instance!.url(`/api/${entity}s?limit=200`));
       const data = await res.json();
       return data.items || [];
     } catch {
@@ -116,7 +131,9 @@ export class ObCommerce extends HTMLElement {
   private async _render() {
     const api = ObApi.instance;
     if (!api) return;
+    const renderSeq = ++this._renderSeq;
     await api.ready();
+    if (renderSeq !== this._renderSeq) return;
 
     if (!api.hasCommerceWorkflow()) {
       this.shadowRoot!.innerHTML = `<p>Commerce workflow is not available for this composition.</p>`;
@@ -125,7 +142,6 @@ export class ObCommerce extends HTMLElement {
 
     const config = this._config(api);
     const catalogEntity = config.catalog?.entity || "item";
-    const customerEntity = entityFromRef(config.order?.user) || (api.getEntities().includes("user") ? "user" : "");
     const optionDefs = config.lineItem?.options || {};
     for (const [name, option] of Object.entries(optionDefs)) {
       if (this._optionState[name] === undefined && option.default !== null && option.default !== undefined) {
@@ -133,11 +149,11 @@ export class ObCommerce extends HTMLElement {
       }
     }
 
-    const [catalogRows, customers, lookups] = await Promise.all([
+    const [catalogRows, lookups] = await Promise.all([
       this._rows(catalogEntity),
-      this._rows(customerEntity),
       this._variantLookups(api, config),
     ]);
+    if (renderSeq !== this._renderSeq) return;
     const catalog = this._availableCatalog(catalogRows, config);
     this._availableItems = catalog;
     const groups = this._groups(catalog, config);
@@ -317,6 +333,35 @@ export class ObCommerce extends HTMLElement {
           font-weight: 800;
           overflow-wrap: anywhere;
         }
+        .session-box {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 10px;
+          align-items: center;
+          padding: 12px;
+          border: 1px solid var(--ob-border);
+          border-radius: var(--ob-radius);
+          background: var(--ob-bg-subtle);
+        }
+        .session-box strong,
+        .session-box span {
+          display: block;
+        }
+        .session-box strong {
+          font-size: 14px;
+          line-height: 1.3;
+        }
+        .session-box span {
+          color: var(--ob-text-muted);
+          font-size: 13px;
+          line-height: 1.35;
+        }
+        .status-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--ob-success);
+        }
         .total-row {
           font-size: 16px;
         }
@@ -426,7 +471,7 @@ export class ObCommerce extends HTMLElement {
             <div class="panel-header">
               <h2 id="checkout-title">Checkout</h2>
             </div>
-            ${this._renderCheckoutForm(customers, customerEntity)}
+            ${this._renderCheckoutForm(api)}
           </section>
 
           <section class="panel" aria-labelledby="status-title">
@@ -481,11 +526,27 @@ export class ObCommerce extends HTMLElement {
       event.preventDefault();
       this._checkout();
     });
-    this.shadowRoot!.getElementById("checkout-customer")?.addEventListener("change", (event) => {
-      this._customerId = (event.target as HTMLSelectElement).value;
+    this.shadowRoot!.getElementById("signin-form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (this._authChallengeId === null) {
+        this._startSignIn();
+      } else {
+        this._verifySignIn();
+      }
     });
-    this.shadowRoot!.getElementById("checkout-client")?.addEventListener("input", (event) => {
-      this._client = (event.target as HTMLInputElement).value;
+    this.shadowRoot!.getElementById("auth-email")?.addEventListener("input", (event) => {
+      this._authEmail = (event.target as HTMLInputElement).value;
+    });
+    this.shadowRoot!.getElementById("auth-code")?.addEventListener("input", (event) => {
+      this._authCode = (event.target as HTMLInputElement).value;
+    });
+    this.shadowRoot!.getElementById("auth-reset")?.addEventListener("click", () => {
+      this._authChallengeId = null;
+      this._authCode = "";
+      this._authDevCode = "";
+      this._authPrivateKey = null;
+      this._authError = "";
+      this._render();
     });
     this.shadowRoot!.getElementById("payment-btn")?.addEventListener("click", () => this._createPaymentIntent());
     this.shadowRoot!.getElementById("expire-btn")?.addEventListener("click", () => this._expireStale());
@@ -609,27 +670,50 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderCheckoutForm(customers: Record<string, unknown>[], customerEntity: string): string {
+  private _renderCheckoutForm(api: ObApi): string {
+    if (api.authContext.userId === null) {
+      return this._renderSignInForm();
+    }
+
     const canCheckout = this._cart.length > 0;
+    const canExpire = api.authContext.scopes.includes("*") || api.authContext.scopes.includes("commerce.expire");
     return `
       <form id="checkout-form">
-        ${customerEntity ? `
-          <div class="form-group">
-            <label for="checkout-customer">${escapeHtml(displayName(customerEntity))} <span class="required">*</span></label>
-            <select id="checkout-customer" name="user_id" required>
-              <option value="">Select ${escapeHtml(displayName(customerEntity).toLowerCase())}</option>
-              ${customers.map((customer) => `<option value="${escapeAttr(customer.id)}" ${String(customer.id) === this._customerId ? "selected" : ""}>${escapeHtml(labelFor(customer))} (${escapeHtml(customer.id)})</option>`).join("")}
-            </select>
+        <div class="session-box" aria-label="Signed in session">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <strong>Signed in</strong>
+            <span>User #${escapeHtml(api.authContext.userId)}</span>
           </div>
-        ` : ""}
-        <div class="form-group">
-          <label for="checkout-client">${escapeHtml(fieldLabel("client"))}</label>
-          <input id="checkout-client" type="text" name="client" value="${escapeAttr(this._client)}" />
         </div>
         <div class="actions">
           <button type="submit" class="primary" ${canCheckout && !this._loading ? "" : "disabled"}>${this._loading ? "Working" : "Checkout"}</button>
           <button type="button" id="payment-btn" ${this._checkoutResult ? "" : "disabled"}>Create payment intent</button>
-          <button type="button" id="expire-btn">Expire stale orders</button>
+          ${canExpire ? `<button type="button" id="expire-btn">Expire stale orders</button>` : ""}
+        </div>
+      </form>
+    `;
+  }
+
+  private _renderSignInForm(): string {
+    return `
+      <form id="signin-form">
+        <div class="empty">Sign in to check out.</div>
+        ${this._authError ? `<div class="error-msg" role="alert">${escapeHtml(this._authError)}</div>` : ""}
+        <div class="form-group">
+          <label for="auth-email">Email <span class="required">*</span></label>
+          <input id="auth-email" type="text" inputmode="email" name="email" autocomplete="email" value="${escapeAttr(this._authEmail)}" required ${this._authChallengeId !== null ? "disabled" : ""} />
+        </div>
+        ${this._authChallengeId !== null ? `
+          <div class="form-group">
+            <label for="auth-code">Verification code <span class="required">*</span></label>
+            <input id="auth-code" type="text" inputmode="numeric" pattern="[0-9]*" name="code" autocomplete="one-time-code" value="${escapeAttr(this._authCode)}" required />
+            ${this._authDevCode ? `<div class="help-text">Development code: ${escapeHtml(this._authDevCode)}</div>` : ""}
+          </div>
+        ` : ""}
+        <div class="actions">
+          <button type="submit" class="primary" ${this._authLoading ? "disabled" : ""}>${this._authLoading ? "Working" : this._authChallengeId === null ? "Send code" : "Sign in"}</button>
+          ${this._authChallengeId !== null ? `<button type="button" id="auth-reset">Use another email</button>` : ""}
         </div>
       </form>
     `;
@@ -773,14 +857,87 @@ export class ObCommerce extends HTMLElement {
     return { ok: true, data };
   }
 
+  private async _startSignIn() {
+    const email = this._authEmail.trim();
+    if (!email) {
+      this._authError = "Email is required";
+      await this._render();
+      return;
+    }
+
+    this._authLoading = true;
+    this._authError = "";
+    try {
+      const keypair = await ObApi.createIdentityKeypair();
+      const res = await ObApi.instance!.request("/identity/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, publicKey: keypair.publicKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        this._authError = data.error || "Could not send verification code";
+        this._authLoading = false;
+        await this._render();
+        return;
+      }
+      this._authPrivateKey = keypair.privateKey;
+      this._authChallengeId = data.challengeId;
+      this._authDevCode = data.code || "";
+      this._authCode = data.code || "";
+      this._authLoading = false;
+      await this._render();
+    } catch (error: any) {
+      this._authError = error.message || "Could not start sign in";
+      this._authLoading = false;
+      await this._render();
+    }
+  }
+
+  private async _verifySignIn() {
+    if (this._authChallengeId === null || !this._authPrivateKey) return;
+    const code = this._authCode.trim();
+    if (!code) {
+      this._authError = "Verification code is required";
+      await this._render();
+      return;
+    }
+
+    this._authLoading = true;
+    this._authError = "";
+    try {
+      const signature = await ObApi.signWithIdentityKey(this._authPrivateKey, code);
+      const res = await ObApi.instance!.request("/identity/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId: this._authChallengeId, code, signature }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        this._authError = data.error || "Sign in failed";
+        this._authLoading = false;
+        await this._render();
+        return;
+      }
+      await ObApi.instance!.setCertificateAuth(data.certificate, this._authPrivateKey);
+      this._authChallengeId = null;
+      this._authCode = "";
+      this._authDevCode = "";
+      this._authPrivateKey = null;
+      this._authError = "";
+      this._authLoading = false;
+      await this._render();
+    } catch (error: any) {
+      this._authError = error.message || "Sign in failed";
+      this._authLoading = false;
+      await this._render();
+    }
+  }
+
   private async _checkout() {
     if (this._cart.length === 0) return;
-    const form = this.shadowRoot!.getElementById("checkout-form") as HTMLFormElement | null;
-    const formData = form ? new FormData(form) : new FormData();
-    const currentCustomerId = String(formData.get("user_id") || this._customerId || "");
-    const currentClient = String(formData.get("client") || this._client || "web");
-    if (this.shadowRoot!.getElementById("checkout-customer") && !currentCustomerId) {
-      this._error = "Select a customer before checkout";
+    if (ObApi.instance!.authContext.userId === null) {
+      this._error = "Sign in before checkout";
       await this._render();
       return;
     }
@@ -788,14 +945,13 @@ export class ObCommerce extends HTMLElement {
     this._loading = true;
     this._error = "";
     const body: Record<string, unknown> = {
-      client: currentClient.trim() || "web",
+      client: this._client,
       items: this._cart.map((line) => ({
         item_id: line.itemId,
         quantity: line.quantity,
         options: line.options,
       })),
     };
-    if (currentCustomerId) body.user_id = Number(currentCustomerId);
 
     try {
       const res = await ObApi.instance!.request("/commerce/checkout", {
@@ -910,13 +1066,6 @@ export class ObCommerce extends HTMLElement {
     const priceField = config.catalog?.price?.field || "price_pence";
     return this._cart.reduce((sum, line) => sum + Number(line.item[priceField] || 0) * line.quantity, 0);
   }
-}
-
-function entityFromRef(ref?: FieldRef | null): string {
-  if (!ref) return "";
-  const referenceEntity = ref.references?.match(/^([a-z_]+)\(/)?.[1];
-  if (referenceEntity) return referenceEntity;
-  return ref.field.endsWith("_id") ? ref.field.slice(0, -3) : "";
 }
 
 function cssEscape(value: string): string {

@@ -541,6 +541,14 @@ const routes: Route[] = [
     return corsResponse(await FX.retryFailedEffects(db));
   }},
 
+  // Authenticated session context
+  { method: "GET", path: "/auth/context", handler: (_, __, auth) => {
+    if (auth.userId === null && !S.hasScope(auth, "*")) {
+      return corsResponse({ error: "authenticated user required", code: "unauthorized" }, { status: 401 });
+    }
+    return corsResponse(auth);
+  }},
+
   // Identity endpoints (no auth required)
   { method: "GET", path: "/identity/public-key", handler: async () => {
     return corsResponse({ publicKey: registryPubKey });
@@ -685,7 +693,7 @@ export const server = Bun.serve({
     }
     // Auth check for protected endpoints. Missing credentials remain anonymous so
     // per-route authorization can distinguish public endpoints from protected ones.
-    else if (AUTH_ENABLED && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/commerce/") || url.pathname.startsWith("/ops/"))) {
+    else if (AUTH_ENABLED && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/commerce/") || url.pathname.startsWith("/ops/") || url.pathname.startsWith("/auth/"))) {
       const authHeader = req.headers.get("Authorization");
       const certHeader = req.headers.get("X-Certificate");
       const sigHeader = req.headers.get("X-Signature");

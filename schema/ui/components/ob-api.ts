@@ -42,6 +42,8 @@ export class ObApi extends HTMLElement {
   /** Base URL for API calls (e.g., "http://localhost:<port>"). Empty string means same origin. */
   apiBase = "";
   private _bearerToken = "";
+  private _certificate: Certificate | null = null;
+  private _privateKey: CryptoKey | null = null;
   private _ready: Promise<void>;
   private _resolve!: () => void;
 
@@ -72,19 +74,61 @@ export class ObApi extends HTMLElement {
   setAuthContext(auth: AuthContext, bearerToken = "") {
     this.authContext = auth;
     this._bearerToken = bearerToken;
+    this._certificate = null;
+    this._privateKey = null;
     this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
   }
 
+  async setCertificateAuth(certificate: Certificate, privateKey: CryptoKey): Promise<AuthContext> {
+    this._certificate = certificate;
+    this._privateKey = privateKey;
+    this._bearerToken = "";
+
+    const res = await this.request("/auth/context");
+    if (!res.ok) {
+      this._certificate = null;
+      this._privateKey = null;
+      const error = await res.json().catch(() => ({ error: "sign in failed" }));
+      throw new Error(error.error || "sign in failed");
+    }
+
+    const auth = await res.json() as AuthContext;
+    this.authContext = auth;
+    this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
+    return auth;
+  }
+
   clearAuthContext() {
+    this._certificate = null;
+    this._privateKey = null;
     this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
   }
 
-  request(path: string, init: RequestInit = {}): Promise<Response> {
+  async request(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers);
     if (this._bearerToken && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${this._bearerToken}`);
     }
+    if (this._certificate && this._privateKey && !headers.has("X-Certificate")) {
+      const method = (init.method || "GET").toUpperCase();
+      const timestamp = String(Date.now());
+      const signedPath = new URL(path, "http://openb2c.local").pathname;
+      headers.set("X-Certificate", JSON.stringify(this._certificate));
+      headers.set("X-Timestamp", timestamp);
+      headers.set("X-Signature", await ObApi.signWithIdentityKey(this._privateKey, `${method} ${signedPath} ${timestamp}`));
+    }
     return fetch(this.url(path), { ...init, headers });
+  }
+
+  static async createIdentityKeypair(): Promise<{ publicKey: string; privateKey: CryptoKey }> {
+    const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const publicKey = await crypto.subtle.exportKey("raw", keypair.publicKey);
+    return { publicKey: bytesToHex(new Uint8Array(publicKey)), privateKey: keypair.privateKey };
+  }
+
+  static async signWithIdentityKey(privateKey: CryptoKey, message: string): Promise<string> {
+    const signature = await crypto.subtle.sign("Ed25519", privateKey, new TextEncoder().encode(message));
+    return bytesToHex(new Uint8Array(signature));
   }
 
   ready(): Promise<void> {
@@ -174,6 +218,10 @@ export class ObApi extends HTMLElement {
 
 function pascalCase(s: string): string {
   return s.replace(/(^|_)(\w)/g, (_, __, c) => c.toUpperCase());
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 customElements.define("ob-api", ObApi);

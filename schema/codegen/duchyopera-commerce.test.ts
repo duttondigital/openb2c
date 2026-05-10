@@ -213,10 +213,28 @@ describe("Duchy Opera commerce workflow", () => {
     expect(services).not.toContain("ReserveBookingInput");
     expect(routes).toContain("/commerce/checkout");
     expect(routes).not.toContain("/commerce/bookings/reserve");
+    expect(routes).toContain('path: "/auth/context"');
+    expect(routes).toContain('url.pathname.startsWith("/auth/")');
     expect(mcp).toContain("checkout_cart");
     expect(mcp).not.toContain("reserve_booking");
     expect(openapi.paths["/commerce/checkout"]).toBeDefined();
     expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
+    expect(openapi.paths["/auth/context"]).toBeDefined();
+  });
+
+  test("commerce browser UI derives checkout user from auth context", async () => {
+    const commerceUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-commerce.ts")).text();
+    const apiUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-api.ts")).text();
+
+    expect(commerceUi).toContain("authContext.userId");
+    expect(commerceUi).toContain("fetch(ObApi.instance!.url");
+    expect(commerceUi).toContain('inputmode="email"');
+    expect(commerceUi).toContain("Sign in before checkout");
+    expect(commerceUi).not.toContain("checkout-customer");
+    expect(commerceUi).not.toContain("Select a customer");
+    expect(commerceUi).not.toContain("body.user_id");
+    expect(apiUi).toContain("setCertificateAuth");
+    expect(apiUi).toContain("X-Certificate");
   });
 
   test("checks out a cart, creates a payment intent, confirms paid orders, and expires stale checkouts", async () => {
@@ -234,10 +252,22 @@ describe("Duchy Opera commerce workflow", () => {
     process.env.PAYMENT_WEBHOOK_SECRET = "test-webhook-secret";
 
     const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
     const base = `http://127.0.0.1:${server.port}`;
     seedDuchyOpera(dbPath);
 
     try {
+      const directDb = new Database(dbPath);
+      try {
+        const directCheckout = services.checkoutCommerceCart(directDb, {
+          client: "web",
+          items: [{ item_id: 1, quantity: 1, options: { ticket_type: "standard" } }],
+        }, { userId: 1, scopes: ["*"] });
+        expect(directCheckout.ok).toBe(true);
+      } finally {
+        directDb.close();
+      }
+
       const checkout = await fetch(`${base}/commerce/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json", "Idempotency-Key": "checkout-opera-1" },

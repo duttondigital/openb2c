@@ -30,6 +30,25 @@ export function genOpenAPI(schema: Schema): string {
     },
   };
 
+  schemas.AuthContext = {
+    type: "object",
+    properties: {
+      userId: { oneOf: [{ type: "integer" }, { type: "null" }] },
+      scopes: { type: "array", items: { type: "string" } },
+    },
+    required: ["userId", "scopes"],
+  };
+
+  paths["/auth/context"] = {
+    get: {
+      summary: "Current authenticated context",
+      responses: {
+        "200": { description: "Authenticated context", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthContext" } } } },
+        "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  };
+
   for (const [entity, cols] of Object.entries(schema.tables)) {
     const Entity = pascalCase(entity);
     const ops = schema.operations[entity] || {};
