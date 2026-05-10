@@ -34,8 +34,7 @@ export class ObAuthPage extends HTMLElement {
 
     const signedIn = api.authContext.userId !== null;
     const returnTo = this._returnTo();
-    const route = this.getAttribute("route") === "account" || signedIn ? "account" : "login";
-    const title = route === "account" ? "Account" : "Sign in";
+    const title = signedIn ? "Account" : "Sign in";
     const subtitle = signedIn
       ? "Manage your current session."
       : returnTo
@@ -45,11 +44,10 @@ export class ObAuthPage extends HTMLElement {
     this.innerHTML = `
       <section class="auth-page" aria-labelledby="auth-page-title">
         <div class="page-header">
-          <div class="eyebrow">Account</div>
           <h1 id="auth-page-title">${escapeHtml(title)}</h1>
           <p>${escapeHtml(subtitle)}</p>
         </div>
-        <ob-auth-panel context="${returnTo ? "checkout" : "account"}" ${returnTo ? `return-to="${escapeAttr(returnTo)}"` : ""}></ob-auth-panel>
+        <ob-auth-panel hide-header context="${returnTo ? "checkout" : "account"}" ${returnTo ? `return-to="${escapeAttr(returnTo)}"` : ""}></ob-auth-panel>
       </section>
     `;
   }

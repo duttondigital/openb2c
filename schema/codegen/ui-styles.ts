@@ -281,12 +281,6 @@ const authPage = `
   ob-auth-page .page-header {
     margin-bottom: 18px;
   }
-  ob-auth-page .eyebrow {
-    color: var(--ob-text-muted);
-    font-size: 13px;
-    font-weight: 800;
-    margin-bottom: 4px;
-  }
   ob-auth-page h1 {
     font-size: 28px;
     line-height: 1.15;

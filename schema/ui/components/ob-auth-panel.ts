@@ -7,7 +7,7 @@ import { stylesheetLink } from "../style-link";
 
 export class ObAuthPanel extends HTMLElement {
   static get observedAttributes() {
-    return ["context", "return-to"];
+    return ["context", "return-to", "hide-header"];
   }
 
   private _email = "";
@@ -75,16 +75,17 @@ export class ObAuthPanel extends HTMLElement {
     await api.ready();
 
     const signedIn = api.authContext.userId !== null;
+    const showHeader = !this.hasAttribute("hide-header");
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
 
       <section class="auth-panel" aria-label="Account">
-        <div class="panel-header">
+        ${showHeader ? `<div class="panel-header">
           <div>
             <div class="panel-title">Account</div>
             <div class="panel-subtitle">${escapeHtml(this._subtitle(signedIn))}</div>
           </div>
-        </div>
+        </div>` : ""}
         ${signedIn ? this._renderSignedIn(api.authContext.userId) : this._renderSignInForm()}
       </section>
     `;

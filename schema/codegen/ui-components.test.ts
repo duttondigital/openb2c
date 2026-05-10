@@ -103,6 +103,7 @@ describe("generated UI web components", () => {
     expect(authPanel).toContain("setCertificateAuth");
     expect(authPanel).toContain("clearAuthContext");
     expect(authPage).toContain("./ob-auth-panel");
+    expect(authPage).toContain("<ob-auth-panel hide-header");
     expect(authMenu).toContain('observedAttributes');
     expect(authMenu).toContain('placement');
     expect(authMenu).toContain("../style-link");
