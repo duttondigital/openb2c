@@ -149,9 +149,15 @@ export interface EcommerceConfig {
   };
 }
 
+export interface OrganizationLogoMetadata {
+  src: string;
+  alt: string | null;
+}
+
 export interface OrganizationMetadata {
   name: string;
   description: string;
+  logo: OrganizationLogoMetadata | null;
 }
 
 export interface AppMetadata {
@@ -165,6 +171,7 @@ export interface AppMetadata {
     mcp: number;
   };
   uiTitle: string;
+  logo: OrganizationLogoMetadata | null;
 }
 
 export interface Schema {

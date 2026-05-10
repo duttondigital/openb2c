@@ -37,7 +37,16 @@ export function apiTitle(api: ObApi): string {
 }
 
 export function apiDescription(api: ObApi): string {
-  return api.spec?.info?.description || "";
+  return api.spec?.["x-openb2c-organization"]?.description || api.spec?.info?.description || "";
+}
+
+export function apiLogo(api: ObApi): { src: string; alt: string | null } | null {
+  const logo = api.spec?.["x-openb2c-organization"]?.logo;
+  if (!logo?.src) return null;
+  return {
+    src: logo.src,
+    alt: logo.alt ?? null,
+  };
 }
 
 export function shellBaseStyles(host: string): string {

@@ -48,11 +48,16 @@ describe("application metadata", () => {
     expect(duchyOpera.organization).toMatchObject({
       name: "Duchy Opera",
       description: "Cornish charity opera company",
+      logo: {
+        alt: "Duchy Opera",
+      },
     });
+    expect(duchyOpera.organization.logo?.src.endsWith("examples/duchyopera/logo/duchy-opera-icon.svg")).toBe(true);
     expect(duchyOpera).not.toHaveProperty("service");
     expect(ticketing.organization).toMatchObject({
       name: "OpenB2C",
       description: "OpenB2C framework examples",
+      logo: null,
     });
     expect(ticketing).not.toHaveProperty("service");
 
@@ -62,6 +67,13 @@ describe("application metadata", () => {
       version: "0.1.0",
       description: "Cornish charity opera company",
     });
+    expect(duchyOpenApi["x-openb2c-organization"]).toMatchObject({
+      name: "Duchy Opera",
+      description: "Cornish charity opera company",
+      logo: {
+        alt: "Duchy Opera",
+      },
+    });
     expect(duchyOpenApi.servers).toEqual([{ url: "http://localhost:3085" }]);
 
     const ticketingOpenApi = JSON.parse(genOpenAPI(ticketing));
@@ -70,6 +82,7 @@ describe("application metadata", () => {
       version: "0.1.0",
       description: "OpenB2C framework examples",
     });
+    expect(ticketingOpenApi["x-openb2c-organization"].logo).toBeNull();
     expect(ticketingOpenApi.servers).toEqual([{ url: "http://localhost:3085" }]);
 
     const duchyArtifacts = generatedMetadataArtifacts(duchyOpera);

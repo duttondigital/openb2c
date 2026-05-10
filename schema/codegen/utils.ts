@@ -24,6 +24,7 @@ export function quoteReserved(name: string): string {
 export const DEFAULT_ORGANIZATION_METADATA: OrganizationMetadata = {
   name: "OpenB2C",
   description: "Generated OpenB2C organization",
+  logo: null,
 };
 
 export const SYSTEM_DEFAULT_VERSION = "0.1.0";
@@ -53,6 +54,12 @@ export function getAppMetadata(schema: {
 }): AppMetadata {
   const organization = { ...DEFAULT_ORGANIZATION_METADATA, ...(schema.organization ?? {}) };
   const name = organization.name.trim() || DEFAULT_ORGANIZATION_METADATA.name;
+  const logo = organization.logo?.src
+    ? {
+      src: organization.logo.src,
+      alt: organization.logo.alt ?? null,
+    }
+    : null;
   const slug = safeSlug(name);
 
   return {
@@ -63,6 +70,7 @@ export function getAppMetadata(schema: {
     version: SYSTEM_DEFAULT_VERSION,
     defaultPorts: SYSTEM_DEFAULT_PORTS,
     uiTitle: name,
+    logo,
   };
 }
 

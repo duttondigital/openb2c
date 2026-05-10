@@ -2,6 +2,20 @@
 { lib, config, ... }:
 
 let
+  logoType = lib.types.submodule {
+    options = {
+      src = lib.mkOption {
+        type = lib.types.either lib.types.str lib.types.path;
+        description = "Logo URL or Nix path copied into generated UI assets.";
+      };
+      alt = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Accessible logo alternative text. Defaults to '<organization name> logo'.";
+      };
+    };
+  };
+
   # Organization metadata describes the top-level entity the generated app belongs to.
   organizationType = lib.types.submodule {
     options = {
@@ -14,6 +28,11 @@ let
         type = lib.types.str;
         default = "Generated OpenB2C organization";
         description = "Organization or product description.";
+      };
+      logo = lib.mkOption {
+        type = lib.types.nullOr logoType;
+        default = null;
+        description = "Optional logo displayed beside generated app titles.";
       };
     };
   };

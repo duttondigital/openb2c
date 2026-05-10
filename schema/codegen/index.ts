@@ -19,8 +19,8 @@ export { genOpenAPI } from "./openapi";
 export { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
 export { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
 
-import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { extname, isAbsolute, join, resolve } from "path";
 import type { Schema } from "./types";
 import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
@@ -65,12 +65,14 @@ if (import.meta.main) {
   const adminUiDir = join(uiDir, "admin");
   mkdirSync(uiDir, { recursive: true });
   mkdirSync(adminUiDir, { recursive: true });
+  const uiSchema = prepareUiSchema(schema, uiDir, adminUiDir);
+  const uiOpenApiJson = genOpenAPI(uiSchema);
   writeFileSync(join(uiDir, "index.html"), genPublicAppShell(schema));
   writeFileSync(join(uiDir, "styles.css"), genPublicStylesheet());
-  writeFileSync(join(uiDir, "openapi.json"), openApiJson);
+  writeFileSync(join(uiDir, "openapi.json"), uiOpenApiJson);
   writeFileSync(join(adminUiDir, "index.html"), genAdminAppShell(schema));
   writeFileSync(join(adminUiDir, "styles.css"), genAdminStylesheet());
-  writeFileSync(join(adminUiDir, "openapi.json"), openApiJson);
+  writeFileSync(join(adminUiDir, "openapi.json"), uiOpenApiJson);
   rmSync(join(uiDir, "chunks"), { recursive: true, force: true });
   rmSync(join(adminUiDir, "chunks"), { recursive: true, force: true });
 
@@ -116,4 +118,41 @@ if (import.meta.main) {
   console.log(`wrote ${adminUiDir}/index.html`);
   console.log(`wrote ${adminUiDir}/styles.css`);
   console.log(`wrote ${adminUiDir}/app.js`);
+}
+
+function prepareUiSchema(schema: Schema, uiDir: string, adminUiDir: string): Schema {
+  const logo = schema.organization?.logo;
+  if (!logo?.src) return schema;
+
+  const copiedLogo = copyLocalLogo(logo.src, uiDir, adminUiDir);
+  if (!copiedLogo) return schema;
+
+  return {
+    ...schema,
+    organization: {
+      ...schema.organization,
+      logo: {
+        ...logo,
+        src: copiedLogo,
+      },
+    },
+  };
+}
+
+function copyLocalLogo(src: string, uiDir: string, adminUiDir: string): string | null {
+  if (!isLocalFile(src)) return null;
+
+  const fileName = `logo${extname(src) || ""}`;
+  const relativePath = `assets/${fileName}`;
+  for (const targetDir of [uiDir, adminUiDir]) {
+    const assetsDir = join(targetDir, "assets");
+    mkdirSync(assetsDir, { recursive: true });
+    copyFileSync(src, join(assetsDir, fileName));
+  }
+  return relativePath;
+}
+
+function isLocalFile(src: string): boolean {
+  if (/^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith("data:")) return false;
+  return isAbsolute(src) && existsSync(src) && statSync(src).isFile();
 }

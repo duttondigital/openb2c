@@ -59,8 +59,21 @@ const publicShell = `
     border-bottom: 1px solid #dedbd2;
     background: #ffffff;
   }
-  ob-app .brand {
+  ob-app .brand-lockup {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+  }
+  ob-app .brand-logo {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+  ob-app .brand-copy {
     display: grid;
+    min-width: 0;
     gap: 3px;
   }
   ob-app .title {
@@ -492,6 +505,23 @@ const nav = `
   :host(ob-nav) .brand {
     padding: 0 8px 14px;
     border-bottom: 1px solid var(--ob-border);
+  }
+  :host(ob-nav) .brand-lockup {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 10px;
+  }
+  :host(ob-nav) .brand-logo {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+  :host(ob-nav) .brand-copy {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
   }
   :host(ob-nav) .title {
     font-weight: 800;

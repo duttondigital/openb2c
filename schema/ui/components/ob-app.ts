@@ -2,7 +2,7 @@
  * <ob-app> - Public generated web app shell.
  */
 import { ObApi } from "./ob-api";
-import { apiDescription, apiTitle, focusOutlet, readShellAttributes, renderApiProvider, renderSkipLink, SHELL_OBSERVED_ATTRIBUTES } from "../shell";
+import { apiDescription, apiLogo, apiTitle, focusOutlet, readShellAttributes, renderApiProvider, renderSkipLink, SHELL_OBSERVED_ATTRIBUTES } from "../shell";
 import "./ob-auth-menu";
 import "./ob-route-outlet";
 
@@ -26,9 +26,12 @@ export class ObApp extends HTMLElement {
       ${renderSkipLink()}
       ${renderApiProvider(attributes, `
         <header class="topbar">
-          <div class="brand">
-            <div class="title" data-role="title">OpenB2C</div>
-            <div class="description" data-role="description"></div>
+          <div class="brand-lockup">
+            <img class="brand-logo" data-role="logo" alt="" hidden />
+            <div class="brand-copy">
+              <div class="title" data-role="title">OpenB2C</div>
+              <div class="description" data-role="description"></div>
+            </div>
           </div>
           <div class="top-actions">
             <button class="nav-button" type="button" data-action="checkout" hidden>Book tickets</button>
@@ -51,9 +54,20 @@ export class ObApp extends HTMLElement {
     void api.ready().then(() => {
       const titleEl = this.querySelector<HTMLElement>('[data-role="title"]');
       const descriptionEl = this.querySelector<HTMLElement>('[data-role="description"]');
+      const logoEl = this.querySelector<HTMLImageElement>('[data-role="logo"]');
       const checkoutButton = this.querySelector<HTMLButtonElement>('[data-action="checkout"]');
-      if (titleEl) titleEl.textContent = apiTitle(api);
+      const title = apiTitle(api);
+      const logo = apiLogo(api);
+      if (titleEl) titleEl.textContent = title;
       if (descriptionEl) descriptionEl.textContent = apiDescription(api);
+      if (logoEl && logo) {
+        logoEl.src = logo.src;
+        logoEl.alt = logo.alt || `${title} logo`;
+        logoEl.hidden = false;
+      } else if (logoEl) {
+        logoEl.hidden = true;
+        logoEl.removeAttribute("src");
+      }
       if (checkoutButton) checkoutButton.hidden = !api.hasCommerceWorkflow();
     });
   }

@@ -10,6 +10,10 @@ let
         organization = {
           name = "Duchy Opera";
           description = "Cornish charity opera company";
+          logo = {
+            src = ./logo/duchy-opera-icon.svg;
+            alt = "Duchy Opera";
+          };
         };
         ecommerce = {
           enabled = true;

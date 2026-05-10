@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
+import { apiDescription, apiLogo } from "../shell";
 import { stylesheetLink } from "../style-link";
 import "./ob-auth-menu";
 
@@ -24,15 +25,23 @@ export class ObNav extends HTMLElement {
     const entities = api.getEntities().filter(
       (e) => !INTERNAL_PREFIXES.some((p) => e.startsWith(p))
     );
-    const appTitle = escapeHtml(api.spec?.info.title?.replace(/\s+API$/, "") || "App");
-    const appDescription = escapeHtml(api.spec?.info.description || "");
+    const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
+    const appTitle = escapeHtml(appTitleRaw);
+    const appDescription = escapeHtml(apiDescription(api));
+    const logo = apiLogo(api);
+    const logoAlt = logo?.alt || `${appTitleRaw} logo`;
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
       <nav aria-label="Primary">
         <div class="brand">
-          <div class="title">${appTitle}</div>
-          ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
+          <div class="brand-lockup">
+            ${logo ? `<img class="brand-logo" src="${escapeAttr(logo.src)}" alt="${escapeAttr(logoAlt)}" />` : ""}
+            <div class="brand-copy">
+              <div class="title">${appTitle}</div>
+              ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
+            </div>
+          </div>
         </div>
         <div class="group">
           <div class="group-title">Data</div>

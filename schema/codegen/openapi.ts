@@ -345,6 +345,11 @@ export function genOpenAPI(schema: Schema): string {
     servers: [{ url: `http://localhost:${app.defaultPorts.server}` }],
     paths,
     components: { schemas },
+    "x-openb2c-organization": {
+      name: app.name,
+      description: app.description,
+      logo: app.logo,
+    },
     ...(openApiEcommerceMetadata(schema) ? { "x-openb2c-ecommerce": openApiEcommerceMetadata(schema) } : {}),
   };
 
