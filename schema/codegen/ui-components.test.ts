@@ -121,8 +121,7 @@ describe("generated UI web components", () => {
     expect(changeDetailsIndex).toBeGreaterThan(-1);
     expect(changeDetailsButtonCount).toBe(1);
     expect(addToCartIndex).toBeGreaterThan(changeDetailsIndex);
-    expect(publicStyles).toContain(":host(ob-commerce) .split-actions");
-    expect(publicStyles).toContain("margin-left:auto");
+    expect(publicStyles).toContain(":host(ob-commerce) .split-actions{align-items:center;justify-content:flex-end}");
   });
 
   test("public and admin bundles only include their required components", async () => {

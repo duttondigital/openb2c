@@ -405,10 +405,7 @@ const commerce = `
   }
   :host(ob-commerce) .split-actions {
     align-items: center;
-    justify-content: space-between;
-  }
-  :host(ob-commerce) .split-actions .primary {
-    margin-left: auto;
+    justify-content: flex-end;
   }
   :host(ob-commerce) .cart-list {
     display: grid;
@@ -490,7 +487,6 @@ const commerce = `
     :host(ob-commerce) .panel-header { flex-direction: column; }
     :host(ob-commerce) .configure-grid { grid-template-columns: 1fr; }
     :host(ob-commerce) .split-actions { align-items: stretch; }
-    :host(ob-commerce) .split-actions .primary { margin-left: 0; }
     :host(ob-commerce) .actions button,
     :host(ob-commerce) .cart-chip { width: 100%; }
   }
