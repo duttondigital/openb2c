@@ -96,12 +96,13 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
     expect(authMenu).toContain("#/login");
     expect(authMenu).toContain("#/account");
-    expect(authMenu).toContain("./ob-auth-panel");
+    expect(authMenu).not.toContain("./ob-auth-panel");
     expect(authMenu).not.toContain('inputmode="email"');
     expect(authMenu).not.toContain("setCertificateAuth");
     expect(authPanel).toContain('inputmode="email"');
     expect(authPanel).toContain("setCertificateAuth");
     expect(authPanel).toContain("clearAuthContext");
+    expect(authPanel).toContain('location.hash = "#/account"');
     expect(authPage).toContain("./ob-auth-panel");
     expect(authPage).toContain("<ob-auth-panel hide-header");
     expect(authMenu).toContain('observedAttributes');
@@ -110,7 +111,11 @@ describe("generated UI web components", () => {
     expect(authMenu).not.toContain("../styles");
     expect(publicRoute).toContain("./ob-commerce");
     expect(publicRoute).toContain("./ob-auth-page");
+    expect(publicRoute).toContain("../route");
     expect(publicRoute).not.toContain("./ob-entity");
+    expect(adminRoute).toContain("./ob-auth-page");
+    expect(adminRoute).toContain("../route");
+    expect(adminRoute).toContain('page.setAttribute("context", "admin")');
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
     expect(adminRoute).toContain("./ob-entity-detail");
@@ -194,6 +199,7 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-entity-form");
       expect(adminBundle).toContain("ob-entity-detail");
       expect(adminBundle).toContain("ob-auth-menu");
+      expect(adminBundle).toContain("ob-auth-page");
       expect(adminBundle).toContain("ob-auth-panel");
       expect(adminBundle).not.toContain("ob-commerce");
       expect(publicEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);

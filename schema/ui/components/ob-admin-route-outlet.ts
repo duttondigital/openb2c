@@ -2,6 +2,7 @@
  * <ob-admin-route-outlet> - Admin dashboard router for generated data views.
  */
 import { ObApi } from "./ob-api";
+import { parseHash, safeReturnTo } from "../route";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
@@ -39,8 +40,8 @@ export class ObAdminRouteOutlet extends HTMLElement {
     await api.ready();
     if (routeSeq !== this._routeSeq) return;
 
-    const hash = location.hash.slice(1) || "/";
-    const routed = await this._match(hash, api);
+    const route = parseHash(location.hash);
+    const routed = await this._match(route.path, route.params, api);
     if (routeSeq !== this._routeSeq) return;
     if (routed.redirect) {
       location.hash = routed.redirect;
@@ -51,8 +52,18 @@ export class ObAdminRouteOutlet extends HTMLElement {
     this.focusContent();
   }
 
-  private async _match(hash: string, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
+  private async _match(hash: string, params: URLSearchParams, api: ObApi): Promise<{ node: Node; redirect?: never } | { node?: never; redirect: string }> {
     let match: RegExpMatchArray | null;
+
+    if ((hash === "/login" || hash === "/account") && api.hasIdentityAuth()) {
+      await import("./ob-auth-page");
+      const page = document.createElement("ob-auth-page");
+      page.setAttribute("context", "admin");
+      page.setAttribute("route", hash === "/account" ? "account" : "login");
+      const returnTo = safeReturnTo(params.get("return"));
+      if (returnTo) page.setAttribute("return-to", returnTo);
+      return { node: page };
+    }
 
     if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
       await import("./ob-entity-form");

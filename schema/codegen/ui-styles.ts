@@ -206,10 +206,6 @@ const authMenu = `
   :host(ob-auth-menu) .account-button:hover {
     background: var(--ob-bg-alt);
   }
-  :host(ob-auth-menu) .menu {
-    width: 100%;
-    margin-top: 8px;
-  }
 `;
 
 const authPanel = `

@@ -247,6 +247,8 @@ export class ObAuthPanel extends HTMLElement {
       const returnTo = this._returnTo();
       if (returnTo) {
         location.hash = `#${returnTo}`;
+      } else if (currentRoutePath() === "/login") {
+        location.hash = "#/account";
       } else {
         await this._render();
       }
@@ -271,6 +273,12 @@ export class ObAuthPanel extends HTMLElement {
     this._error = "";
     this._loading = false;
   }
+}
+
+function currentRoutePath(): string {
+  const raw = location.hash.slice(1) || "/";
+  const path = raw.split("?")[0] || "/";
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 customElements.define("ob-auth-panel", ObAuthPanel);

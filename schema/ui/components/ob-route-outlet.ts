@@ -2,6 +2,7 @@
  * <ob-route-outlet> - Public web app router.
  */
 import { ObApi } from "./ob-api";
+import { parseHash, safeReturnTo } from "../route";
 
 export class ObRouteOutlet extends HTMLElement {
   private _routeSeq = 0;
@@ -69,17 +70,6 @@ export class ObRouteOutlet extends HTMLElement {
     empty.textContent = "No public web app routes are available for this composition.";
     return { node: empty };
   }
-}
-
-function parseHash(hash: string): { path: string; params: URLSearchParams } {
-  const raw = hash.slice(1) || "/";
-  const [path, query = ""] = raw.split("?");
-  return { path: path || "/", params: new URLSearchParams(query) };
-}
-
-function safeReturnTo(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
-  return value.split("#")[0];
 }
 
 customElements.define("ob-route-outlet", ObRouteOutlet);

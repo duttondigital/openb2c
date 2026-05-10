@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { escapeHtml } from "../format";
+import { safeReturnTo } from "../route";
 import { stylesheetLink } from "../style-link";
 
 export class ObAuthMenu extends HTMLElement {
@@ -10,37 +11,21 @@ export class ObAuthMenu extends HTMLElement {
     return ["placement"];
   }
 
-  private _open = false;
   private _onAuthChanged = () => {
     void this._render();
   };
   private _onAuthRequired = (event: Event) => {
-    const placement = this._placement();
-    if (placement === "sidebar") {
-      this._open = true;
-      void this._render();
-      return;
-    }
-
     const returnTo = event instanceof CustomEvent && typeof event.detail?.returnTo === "string"
-      ? event.detail.returnTo
+      ? safeReturnTo(event.detail.returnTo)
       : currentRoutePath();
-    location.hash = `#/login?return=${encodeURIComponent(returnTo)}`;
+    location.hash = returnTo ? `#/login?return=${encodeURIComponent(returnTo)}` : "#/login";
   };
   private _onClick = (event: Event) => {
-    const action = this._actionFromEvent(event);
     const api = ObApi.instance;
     const signedIn = Boolean(api && api.authContext.userId !== null);
 
-    if (this._placement() === "topbar") {
-      location.hash = signedIn ? "#/account" : "#/login";
-      return;
-    }
-
-    if (action === "toggle" || !action) {
-      this._open = !this._open;
-      void this._render();
-    }
+    event.preventDefault();
+    location.hash = signedIn ? "#/account" : "#/login";
   };
 
   constructor() {
@@ -75,35 +60,15 @@ export class ObAuthMenu extends HTMLElement {
       return;
     }
 
-    const placement = this._placement();
     const signedIn = api.authContext.userId !== null;
-    if (placement === "sidebar" && this._open) {
-      await import("./ob-auth-panel");
-    }
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
 
-      <button type="button" class="account-button" data-action="toggle" ${placement === "sidebar" ? `aria-expanded="${this._open ? "true" : "false"}"` : ""}>
+      <button type="button" class="account-button" data-action="account">
         ${signedIn ? `User #${escapeHtml(api.authContext.userId)}` : "Sign in"}
       </button>
-      ${placement === "sidebar" && this._open ? `
-        <div class="menu">
-          <ob-auth-panel context="admin"></ob-auth-panel>
-        </div>
-      ` : ""}
     `;
-  }
-
-  private _placement(): "sidebar" | "topbar" {
-    return this.getAttribute("placement") === "sidebar" ? "sidebar" : "topbar";
-  }
-
-  private _actionFromEvent(event: Event): string | undefined {
-    const actionTarget = event.composedPath().find((node): node is HTMLElement => {
-      return node instanceof HTMLElement && Boolean(node.dataset?.action);
-    });
-    return actionTarget?.dataset.action;
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * <ob-auth-page> - Public account and sign-in route.
+ * <ob-auth-page> - Shared public/admin account and sign-in route.
  */
 import { ObApi } from "./ob-api";
 import { escapeAttr, escapeHtml } from "../format";
@@ -7,7 +7,7 @@ import "./ob-auth-panel";
 
 export class ObAuthPage extends HTMLElement {
   static get observedAttributes() {
-    return ["route", "return-to"];
+    return ["context", "route", "return-to"];
   }
 
   private _onAuthChanged = () => {
@@ -34,10 +34,13 @@ export class ObAuthPage extends HTMLElement {
 
     const signedIn = api.authContext.userId !== null;
     const returnTo = this._returnTo();
+    const context = this._context(returnTo);
     const title = signedIn ? "Account" : "Sign in";
     const subtitle = signedIn
       ? "Manage your current session."
-      : returnTo
+      : context === "admin"
+        ? "Sign in to manage admin data."
+        : returnTo
         ? "Sign in to continue checkout."
         : "Sign in to access your account.";
 
@@ -47,9 +50,16 @@ export class ObAuthPage extends HTMLElement {
           <h1 id="auth-page-title">${escapeHtml(title)}</h1>
           <p>${escapeHtml(subtitle)}</p>
         </div>
-        <ob-auth-panel hide-header context="${returnTo ? "checkout" : "account"}" ${returnTo ? `return-to="${escapeAttr(returnTo)}"` : ""}></ob-auth-panel>
+        <ob-auth-panel hide-header context="${escapeAttr(context)}" ${returnTo ? `return-to="${escapeAttr(returnTo)}"` : ""}></ob-auth-panel>
       </section>
     `;
+  }
+
+  private _context(returnTo: string): string {
+    const context = this.getAttribute("context");
+    if (context === "admin") return "admin";
+    if (returnTo) return "checkout";
+    return "account";
   }
 
   private _returnTo(): string {
