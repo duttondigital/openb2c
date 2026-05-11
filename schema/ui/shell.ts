@@ -5,19 +5,20 @@ export const SHELL_OBSERVED_ATTRIBUTES = ["src", "api-base"];
 
 export type ShellAttributes = {
   src: string;
-  apiBase: string;
+  apiBase: string | null;
 };
 
 export function readShellAttributes(element: HTMLElement): ShellAttributes {
   return {
     src: element.getAttribute("src") || "openapi.json",
-    apiBase: element.getAttribute("api-base") || "",
+    apiBase: element.hasAttribute("api-base") ? element.getAttribute("api-base") || "" : null,
   };
 }
 
 export function renderApiProvider(attributes: ShellAttributes, children: string): string {
+  const apiBaseAttr = attributes.apiBase === null ? "" : ` api-base="${escapeAttr(attributes.apiBase)}"`;
   return `
-    <ob-api src="${escapeAttr(attributes.src)}" api-base="${escapeAttr(attributes.apiBase)}">
+    <ob-api src="${escapeAttr(attributes.src)}"${apiBaseAttr}>
       ${children}
     </ob-api>
   `;

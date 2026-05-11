@@ -24,7 +24,8 @@ describe("generated UI web components", () => {
   test("app shell delegates layout and routing to web components", () => {
     const shell = genAppShell(shellSchema);
 
-    expect(shell).toContain('<ob-app src="openapi.json" api-base="http://localhost:3085"></ob-app>');
+    expect(shell).toContain('<ob-app src="openapi.json"></ob-app>');
+    expect(shell).not.toContain('api-base="http://localhost:3085"');
     expect(shell).toContain('<link rel="stylesheet" href="styles.css" />');
     expect(shell).not.toContain('id="content"');
     expect(shell).not.toContain("#content");
@@ -36,11 +37,11 @@ describe("generated UI web components", () => {
     const adminShell = genAdminAppShell(shellSchema);
 
     expect(publicShell).toContain("<title>Component Shop</title>");
-    expect(publicShell).toContain('<ob-app src="openapi.json" api-base="http://localhost:3085"></ob-app>');
+    expect(publicShell).toContain('<ob-app src="openapi.json"></ob-app>');
     expect(publicShell).not.toContain("ob-admin-app");
 
     expect(adminShell).toContain("<title>Component Shop Admin</title>");
-    expect(adminShell).toContain('<ob-admin-app src="openapi.json" api-base="http://localhost:3085"></ob-admin-app>');
+    expect(adminShell).toContain('<ob-admin-app src="openapi.json"></ob-admin-app>');
     expect(adminShell).not.toContain("<ob-app");
   });
 
@@ -112,16 +113,21 @@ describe("generated UI web components", () => {
     expect(accountSummary).toContain("/api/users/${this._userId}");
     expect(accountSummary).toContain("user_id=${encodeURIComponent");
     expect(accountSummary).toContain('data-form="profile"');
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("restoreAuthContext");
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("setSessionAuth");
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("bearerToken");
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("indexedDB.open");
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain('exportKey("jwk"');
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain('exportKey("pkcs8"');
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain('importKey("jwk"');
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain('importKey("pkcs8"');
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("localStorage.setItem");
-    expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain('request("/auth/revoke-current"');
+    const obApi = await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text();
+    expect(obApi).toContain("restoreAuthContext");
+    expect(obApi).toContain("setSessionAuth");
+    expect(obApi).toContain("bearerToken");
+    expect(obApi).toContain("indexedDB.open");
+    expect(obApi).toContain('exportKey("jwk"');
+    expect(obApi).toContain('exportKey("pkcs8"');
+    expect(obApi).toContain('importKey("jwk"');
+    expect(obApi).toContain('importKey("pkcs8"');
+    expect(obApi).toContain("localStorage.setItem");
+    expect(obApi).toContain('request("/auth/revoke-current"');
+    expect(obApi).toContain("_resolveApiBase");
+    expect(obApi).toContain("OPENB2C_API_BASE");
+    expect(obApi).toContain('meta[name="openb2c-api-base"]');
+    expect(obApi).toContain("isLocalHost(location.hostname)");
     expect(authMenu).toContain('observedAttributes');
     expect(authMenu).toContain('placement');
     expect(authMenu).toContain("../style-link");

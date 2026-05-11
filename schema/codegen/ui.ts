@@ -12,9 +12,8 @@ function escapeAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function genShell(title: string, tagName: "ob-app" | "ob-admin-app", apiBase: string): string {
+function genShell(title: string, tagName: "ob-app" | "ob-admin-app"): string {
   const escapedTitle = escapeAttr(title);
-  const escapedApiBase = escapeAttr(apiBase);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -25,7 +24,7 @@ function genShell(title: string, tagName: "ob-app" | "ob-admin-app", apiBase: st
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <${tagName} src="openapi.json" api-base="${escapedApiBase}"></${tagName}>
+  <${tagName} src="openapi.json"></${tagName}>
   <script type="module" src="app.js"></script>
 </body>
 </html>
@@ -34,16 +33,14 @@ function genShell(title: string, tagName: "ob-app" | "ob-admin-app", apiBase: st
 
 export function genPublicAppShell(schema: Schema): string {
   const app = getAppMetadata(schema);
-  const apiBase = `http://localhost:${app.defaultPorts.server}`;
 
-  return genShell(app.uiTitle, "ob-app", apiBase);
+  return genShell(app.uiTitle, "ob-app");
 }
 
 export function genAdminAppShell(schema: Schema): string {
   const app = getAppMetadata(schema);
-  const apiBase = `http://localhost:${app.defaultPorts.server}`;
 
-  return genShell(`${app.uiTitle} Admin`, "ob-admin-app", apiBase);
+  return genShell(`${app.uiTitle} Admin`, "ob-admin-app");
 }
 
 export const genAppShell = genPublicAppShell;

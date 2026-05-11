@@ -4,6 +4,7 @@
 export interface OpenAPISpec {
   openapi: string;
   info: { title: string; version: string; description?: string };
+  servers?: { url: string }[];
   paths: Record<string, Record<string, any>>;
   components: { schemas: Record<string, any>; securitySchemes?: Record<string, any> };
   "x-openb2c-organization"?: {
@@ -51,6 +52,12 @@ export const SYSTEM_AUTH_CONTEXT: AuthContext = {
   scopes: ["*"],
 };
 
+declare global {
+  interface Window {
+    OPENB2C_API_BASE?: string;
+  }
+}
+
 let _instance: ObApi | null = null;
 const AUTH_DB_NAME = "openb2c-auth";
 const AUTH_DB_VERSION = 1;
@@ -78,10 +85,10 @@ export class ObApi extends HTMLElement {
   }
 
   async connectedCallback() {
-    this.apiBase = (this.getAttribute("api-base") || "").replace(/\/$/, "");
     const src = this.getAttribute("src") || "openapi.json";
     const res = await fetch(src);
     this.spec = await res.json();
+    this.apiBase = this._resolveApiBase();
     await this.restoreAuthContext();
     this._resolve();
     this.dispatchEvent(new CustomEvent("ob-spec-ready", { bubbles: true }));
@@ -90,6 +97,27 @@ export class ObApi extends HTMLElement {
   /** Build a full API URL from a path like /api/issues */
   url(path: string): string {
     return this.apiBase + path;
+  }
+
+  private _resolveApiBase(): string {
+    const explicit = this.getAttribute("api-base");
+    if (explicit !== null) return explicit.replace(/\/$/, "");
+
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="openb2c-api-base"]')?.content;
+    if (meta) return meta.replace(/\/$/, "");
+
+    if (window.OPENB2C_API_BASE) return window.OPENB2C_API_BASE.replace(/\/$/, "");
+
+    const serverUrl = this.spec?.servers?.[0]?.url;
+    if (serverUrl && isLocalHost(location.hostname)) {
+      try {
+        const url = new URL(serverUrl, location.href);
+        if (isLocalHost(url.hostname)) return url.origin;
+      } catch {
+        return "";
+      }
+    }
+    return "";
   }
 
   setAuthContext(auth: AuthContext, bearerToken = "") {
@@ -473,6 +501,10 @@ function pascalCase(s: string): string {
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function isLocalHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
