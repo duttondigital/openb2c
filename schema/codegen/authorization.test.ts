@@ -6,6 +6,7 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 import { genEffectsInterface } from "./effects";
 import { genMcpServer } from "./mcp";
+import { genOpenAPI } from "./openapi";
 import { genRuntime } from "./runtime";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -143,6 +144,24 @@ async function seedApiKey(db: Database, id: number, userId: number, key: string,
 }
 
 describe("generated authorization enforcement", () => {
+  test("OpenAPI marks generated CRUD and operation endpoints as authenticated", () => {
+    const openapi = JSON.parse(genOpenAPI(schema));
+
+    expect(openapi.paths["/api/tickets"].get.security).toEqual([
+      { bearerAuth: [] },
+      { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+    ]);
+    expect(openapi.paths["/api/tickets"].post.security).toEqual([
+      { bearerAuth: [] },
+      { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+    ]);
+    expect(openapi.paths["/api/tickets/{id}/confirm"].post.security).toEqual([
+      { bearerAuth: [] },
+      { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+    ]);
+    expect(openapi.paths["/api/tickets/{id}/confirm"].post.responses["403"]).toBeDefined();
+  });
+
   test("services enforce operation scopes and record relationships", async () => {
     const dir = writeGenerated();
     const services = await import(pathToFileURL(join(dir, "services.ts")).href);

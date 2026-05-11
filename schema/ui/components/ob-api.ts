@@ -5,7 +5,7 @@ export interface OpenAPISpec {
   openapi: string;
   info: { title: string; version: string; description?: string };
   paths: Record<string, Record<string, any>>;
-  components: { schemas: Record<string, any> };
+  components: { schemas: Record<string, any>; securitySchemes?: Record<string, any> };
   "x-openb2c-organization"?: {
     name?: string;
     description?: string;

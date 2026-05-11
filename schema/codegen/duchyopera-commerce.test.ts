@@ -226,6 +226,33 @@ describe("Duchy Opera commerce workflow", () => {
     expect(openapi.paths["/commerce/catalog"]).toBeDefined();
     expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
     expect(openapi.paths["/auth/context"]).toBeDefined();
+    expect(openapi.components.securitySchemes.bearerAuth).toMatchObject({ type: "http", scheme: "bearer" });
+    expect(openapi.components.securitySchemes.certificateAuth).toMatchObject({ type: "apiKey", name: "X-Certificate" });
+    expect(openapi.paths["/commerce/catalog"].get.security).toBeUndefined();
+    expect(openapi.paths["/commerce/checkout"].post.security).toEqual([
+      { bearerAuth: [] },
+      { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+    ]);
+    expect(openapi.paths["/commerce/payments/webhook"].post.security).toEqual([{ paymentWebhookSignature: [] }]);
+    expect(openapi.components.schemas.CommerceCheckoutInput).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        items: { minItems: 1, maxItems: 50 },
+      },
+    });
+    expect(openapi.components.schemas.CommerceCartItemInput).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        quantity: { minimum: 1, maximum: 20 },
+        options: { $ref: "#/components/schemas/CommerceCartItemOptions" },
+      },
+    });
+    expect(openapi.components.schemas.CommerceCartItemOptions).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        colour: { type: "string", enum: ["black", "white"], nullable: true },
+      },
+    });
   });
 
   test("Duchy Opera ecommerce does not expose booking aliases unless explicitly enabled", async () => {

@@ -135,6 +135,18 @@ describe("identity hardening generation", () => {
 
     const openapi = JSON.parse(genOpenAPI(schema));
     expect(openapi.paths["/auth/revoke-current"]).toBeDefined();
+    expect(openapi.paths["/auth/revoke-current"].post.security).toEqual([
+      { bearerAuth: [] },
+      { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+    ]);
+    expect(openapi.paths["/identity/public-key"].get.security).toBeUndefined();
+    expect(openapi.paths["/identity/challenge"].post.requestBody.content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/IdentityChallengeInput",
+    });
+    expect(openapi.paths["/identity/verify"].post.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/IdentityVerifyResult",
+    });
+    expect(openapi.components.schemas.IdentityVerifyResult.required).toEqual(["certificate", "sessionToken", "sessionExpiresAt", "auth"]);
   });
 
   test("certificate request verification applies the chosen registry state model", async () => {

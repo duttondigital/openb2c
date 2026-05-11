@@ -2,6 +2,83 @@ import type { Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+const AUTH_SECURITY = [
+  { bearerAuth: [] },
+  { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
+];
+const WEBHOOK_SECURITY = [{ paymentWebhookSignature: [] }];
+
+function errorResponse(description: string): unknown {
+  return {
+    description,
+    content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+  };
+}
+
+function addResponses(operation: Record<string, unknown>, responses: Record<string, unknown>): Record<string, unknown> {
+  const current = { ...((operation.responses as Record<string, unknown> | undefined) || {}) };
+  for (const [status, response] of Object.entries(responses)) {
+    if (!(status in current)) current[status] = response;
+  }
+  return { ...operation, responses: current };
+}
+
+function withAuth(operation: Record<string, unknown>, isPublic = false): Record<string, unknown> {
+  if (isPublic) return operation;
+  return addResponses({ ...operation, security: AUTH_SECURITY }, {
+    "401": errorResponse("Authentication required"),
+    "403": errorResponse("Forbidden"),
+  });
+}
+
+function withWebhookSignature(operation: Record<string, unknown>): Record<string, unknown> {
+  return addResponses({ ...operation, security: WEBHOOK_SECURITY }, {
+    "401": errorResponse("Invalid signature"),
+  });
+}
+
+function commerceOptionValueSchema(option: {
+  type: string;
+  default: string | null;
+  choices: string[];
+  required: boolean;
+  min: number | null;
+  max: number | null;
+}): Record<string, unknown> {
+  const numeric = option.type === "integer" || option.type === "number" || option.type === "real";
+  const integer = option.type === "integer";
+  const schema: Record<string, unknown> = {
+    type: integer ? "integer" : numeric ? "number" : "string",
+  };
+  if (option.choices.length > 0) {
+    const numericChoices = option.choices.map(choice => Number(choice));
+    schema.enum = numeric && numericChoices.every(Number.isFinite) ? numericChoices : option.choices;
+  }
+  if (numeric && option.min !== null) schema.minimum = option.min;
+  if (numeric && option.max !== null) schema.maximum = option.max;
+  if (option.default !== null) {
+    const numericDefault = Number(option.default);
+    schema.default = numeric && Number.isFinite(numericDefault) ? numericDefault : option.default;
+  }
+  if (!option.required) schema.nullable = true;
+  return schema;
+}
+
+function commerceOptionsSchema(schema: Schema): Record<string, unknown> {
+  const options = schema.ecommerce?.lineItem.options || {};
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [name, option] of Object.entries(options)) {
+    properties[name] = commerceOptionValueSchema(option);
+    if (option.required) required.push(name);
+  }
+  return {
+    type: "object",
+    properties,
+    required,
+    additionalProperties: false,
+  };
+}
 
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
@@ -45,23 +122,109 @@ export function genOpenAPI(schema: Schema): string {
     },
     required: ["revoked"],
   };
+  schemas.Certificate = {
+    type: "object",
+    properties: {
+      email: { type: "string", format: "email" },
+      publicKey: { type: "string" },
+      issuedAt: { type: "string", format: "date-time" },
+      expiresAt: { type: "string", format: "date-time" },
+      signature: { type: "string" },
+    },
+    required: ["email", "publicKey", "issuedAt", "expiresAt", "signature"],
+  };
+  schemas.IdentityChallengeInput = {
+    type: "object",
+    properties: {
+      email: { type: "string", format: "email" },
+      publicKey: { type: "string" },
+    },
+    required: ["email", "publicKey"],
+    additionalProperties: false,
+  };
+  schemas.IdentityChallengeResult = {
+    type: "object",
+    properties: {
+      challengeId: { type: "integer" },
+      code: { type: "string", description: "Development-only verification code when NODE_ENV is not production." },
+      message: { type: "string" },
+    },
+    required: ["challengeId"],
+  };
+  schemas.IdentityVerifyInput = {
+    type: "object",
+    properties: {
+      challengeId: { type: "integer" },
+      code: { type: "string" },
+      signature: { type: "string" },
+    },
+    required: ["challengeId", "code", "signature"],
+    additionalProperties: false,
+  };
+  schemas.IdentityVerifyResult = {
+    type: "object",
+    properties: {
+      certificate: { $ref: "#/components/schemas/Certificate" },
+      sessionToken: { type: "string" },
+      sessionExpiresAt: { type: "string", format: "date-time" },
+      auth: { $ref: "#/components/schemas/AuthContext" },
+    },
+    required: ["certificate", "sessionToken", "sessionExpiresAt", "auth"],
+  };
 
   paths["/auth/context"] = {
-    get: {
+    get: withAuth({
       summary: "Current authenticated context",
       responses: {
         "200": { description: "Authenticated context", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthContext" } } } },
-        "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    }),
+  };
+  paths["/auth/revoke-current"] = {
+    post: withAuth({
+      summary: "Revoke the current authenticated session or certificate",
+      responses: {
+        "200": { description: "Current credentials revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthRevocationResult" } } } },
+        "404": errorResponse("Credential not found"),
+      },
+    }),
+  };
+  paths["/identity/public-key"] = {
+    get: {
+      summary: "Identity registry public key",
+      responses: {
+        "200": {
+          description: "Registry public key",
+          content: { "application/json": { schema: { type: "object", properties: { publicKey: { type: "string" } }, required: ["publicKey"] } } },
+        },
       },
     },
   };
-  paths["/auth/revoke-current"] = {
+  paths["/identity/challenge"] = {
     post: {
-      summary: "Revoke the current certificate-backed session",
+      summary: "Create an email identity challenge",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityChallengeInput" } } },
+      },
       responses: {
-        "200": { description: "Current certificate revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthRevocationResult" } } } },
-        "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        "404": { description: "Certificate not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        "200": { description: "Challenge created", content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityChallengeResult" } } } },
+        "400": errorResponse("Validation error"),
+        "429": errorResponse("Rate limited"),
+      },
+    },
+  };
+  paths["/identity/verify"] = {
+    post: {
+      summary: "Verify an identity challenge and issue a session",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityVerifyInput" } } },
+      },
+      responses: {
+        "200": { description: "Identity verified", content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityVerifyResult" } } } },
+        "400": errorResponse("Verification failed"),
+        "429": errorResponse("Rate limited"),
       },
     },
   };
@@ -99,7 +262,7 @@ export function genOpenAPI(schema: Schema): string {
 
     // List endpoint
     paths[`/api/${entity}s`] = {
-      get: {
+      get: withAuth({
         summary: `List ${entity}s`,
         parameters: [
           { name: "limit", in: "query", schema: { type: "integer", default: 100 } },
@@ -113,8 +276,8 @@ export function genOpenAPI(schema: Schema): string {
             content: { "application/json": { schema: { $ref: "#/components/schemas/PaginatedResponse" } } },
           },
         },
-      },
-      post: {
+      }, ops.read?.public),
+      post: withAuth({
         summary: `Create ${entity}`,
         requestBody: {
           required: true,
@@ -124,20 +287,20 @@ export function genOpenAPI(schema: Schema): string {
           "201": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }, ops.create?.public),
     };
 
     // Single entity endpoints
     paths[`/api/${entity}s/{id}`] = {
-      get: {
+      get: withAuth({
         summary: `Get ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Found", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}` } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
-      put: {
+      }, ops.read?.public),
+      put: withAuth({
         summary: `Update ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         requestBody: {
@@ -148,41 +311,49 @@ export function genOpenAPI(schema: Schema): string {
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
-      delete: {
+      }, ops.update?.public),
+      delete: withAuth({
         summary: `Delete ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", properties: { deleted: { type: "boolean" } } } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }, ops.delete?.public),
     };
 
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
-        post: {
+        post: withAuth({
           summary: `${opName.replace(/_/g, " ")} ${entity}`,
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
           responses: {
             "200": { description: "Success", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" }, status: { type: "string" } } } } } },
             "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
-        },
+        }, ops[opName]?.public),
       };
     }
   }
 
   if (hasCommerceWorkflow(schema)) {
+    const checkout = schema.ecommerce?.checkout;
+    schemas.CommerceCartItemOptions = commerceOptionsSchema(schema);
     schemas.CommerceCartItemInput = {
       type: "object",
       properties: {
         item_id: { type: "integer" },
-        quantity: { type: "integer", default: 1 },
-        options: { type: "object", additionalProperties: { oneOf: [{ type: "string" }, { type: "integer" }, { type: "null" }] } },
+        quantity: {
+          type: "integer",
+          default: 1,
+          minimum: 1,
+          ...(checkout?.maxQuantity ? { maximum: checkout.maxQuantity } : {}),
+        },
+        options: { $ref: "#/components/schemas/CommerceCartItemOptions" },
       },
       required: ["item_id"],
+      additionalProperties: false,
     };
     schemas.CommerceCatalogResult = {
       type: "object",
@@ -201,11 +372,20 @@ export function genOpenAPI(schema: Schema): string {
     schemas.CommerceCheckoutInput = {
       type: "object",
       properties: {
-        user_id: { type: "integer" },
+        user_id: {
+          type: "integer",
+          description: "Optional service-side override. Browser sessions derive the customer from the bearer identity session.",
+        },
         client: { type: "string", default: "web" },
-        items: { type: "array", items: { $ref: "#/components/schemas/CommerceCartItemInput" } },
+        items: {
+          type: "array",
+          minItems: 1,
+          ...(checkout?.maxLines ? { maxItems: checkout.maxLines } : {}),
+          items: { $ref: "#/components/schemas/CommerceCartItemInput" },
+        },
       },
       required: ["items"],
+      additionalProperties: false,
     };
     schemas.CommerceCheckoutResult = {
       type: "object",
@@ -231,7 +411,7 @@ export function genOpenAPI(schema: Schema): string {
       },
     };
     paths["/commerce/checkout"] = {
-      post: {
+      post: withAuth({
         summary: "Checkout a configured cart",
         requestBody: {
           required: true,
@@ -241,7 +421,7 @@ export function genOpenAPI(schema: Schema): string {
           "201": { description: "Order created", content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCheckoutResult" } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
     paths["/commerce/catalog"] = {
       get: {
@@ -252,23 +432,23 @@ export function genOpenAPI(schema: Schema): string {
       },
     };
     paths["/commerce/orders/{id}/payment-intent"] = {
-      post: {
+      post: withAuth({
         summary: "Create a payment intent for a commerce order",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/CommercePaymentIntentResult" } } } },
           "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
     paths["/commerce/orders/expire"] = {
-      post: {
+      post: withAuth({
         summary: "Expire stale commerce orders",
         responses: {
           "200": { description: "Expired count", content: { "application/json": { schema: { type: "object", properties: { expired: { type: "integer" } } } } } },
           "403": { description: "Forbidden", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
 
     schemas.PaymentWebhookInput = {
@@ -281,7 +461,7 @@ export function genOpenAPI(schema: Schema): string {
       required: ["reference", "status"],
     };
     paths["/commerce/payments/webhook"] = {
-      post: {
+      post: withWebhookSignature({
         summary: "Receive signed payment provider webhooks",
         requestBody: {
           required: true,
@@ -289,9 +469,8 @@ export function genOpenAPI(schema: Schema): string {
         },
         responses: {
           "200": { description: "Processed" },
-          "401": { description: "Invalid signature", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
 
     if (hasCommerceBookingAliases(schema)) {
@@ -340,7 +519,7 @@ export function genOpenAPI(schema: Schema): string {
       },
     };
     paths["/commerce/bookings/reserve"] = {
-      post: {
+      post: withAuth({
         summary: "Reserve tickets for checkout (compatibility alias)",
         requestBody: {
           required: true,
@@ -350,26 +529,26 @@ export function genOpenAPI(schema: Schema): string {
           "201": { description: "Reserved", content: { "application/json": { schema: { $ref: "#/components/schemas/ReserveBookingResult" } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
     paths["/commerce/bookings/{id}/payment-intent"] = {
-      post: {
+      post: withAuth({
         summary: "Create a payment intent for a booking (compatibility alias)",
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentIntentResult" } } } },
           "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
     paths["/commerce/bookings/expire"] = {
-      post: {
+      post: withAuth({
         summary: "Expire stale checkout bookings (compatibility alias)",
         responses: {
           "200": { description: "Expired count", content: { "application/json": { schema: { type: "object", properties: { expired: { type: "integer" } } } } } },
           "403": { description: "Forbidden", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      },
+      }),
     };
     }
   }
@@ -383,7 +562,40 @@ export function genOpenAPI(schema: Schema): string {
     },
     servers: [{ url: `http://localhost:${app.defaultPorts.server}` }],
     paths,
-    components: { schemas },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description: "Identity session token or service API key.",
+        },
+        certificateAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "X-Certificate",
+          description: "JSON encoded identity certificate.",
+        },
+        certificateSignature: {
+          type: "apiKey",
+          in: "header",
+          name: "X-Signature",
+          description: "Ed25519 signature over METHOD path timestamp.",
+        },
+        certificateTimestamp: {
+          type: "apiKey",
+          in: "header",
+          name: "X-Timestamp",
+          description: "Unix epoch millisecond timestamp included in the certificate signature.",
+        },
+        paymentWebhookSignature: {
+          type: "apiKey",
+          in: "header",
+          name: "X-OpenB2C-Signature",
+          description: "HMAC SHA-256 signature for payment provider webhooks.",
+        },
+      },
+      schemas,
+    },
     "x-openb2c-organization": {
       name: app.name,
       description: app.description,
