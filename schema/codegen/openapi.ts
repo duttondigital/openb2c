@@ -1,5 +1,5 @@
 import type { Schema } from "./types";
-import { getAppMetadata, hasCommerceWorkflow, legacyCommerceWorkflow, openApiEcommerceMetadata, pascalCase } from "./utils";
+import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
@@ -255,7 +255,7 @@ export function genOpenAPI(schema: Schema): string {
       },
     };
 
-    if (legacyCommerceWorkflow(schema)) {
+    if (hasCommerceBookingAliases(schema)) {
     schemas.ReserveBookingInput = {
       type: "object",
       properties: {

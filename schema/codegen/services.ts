@@ -1,5 +1,5 @@
 import type { Column, EcommerceConfig, FieldRef, Operation, Schema, Tables } from "./types";
-import { pascalCase, camelCase, getEcommerceConfig, hasCommerceWorkflow, legacyCommerceWorkflow } from "./utils";
+import { pascalCase, camelCase, getEcommerceConfig, hasCommerceWorkflow, hasCommerceBookingAliases } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -26,10 +26,7 @@ function referencedEntity(ref: FieldRef): string | null {
 
 function ecommerceRuntimeConfig(schema: Schema): Record<string, unknown> {
   const ecommerce = getEcommerceConfig(schema);
-  if (!ecommerce) {
-    if (!legacyCommerceWorkflow(schema)) throw new Error("ecommerce config is required for commerce generation");
-    return legacyEcommerceConfig();
-  }
+  if (!ecommerce) throw new Error("ecommerce config is required for commerce generation");
   return normalizeEcommerceConfig(ecommerce);
 }
 
@@ -113,101 +110,6 @@ function normalizeEcommerceConfig(ecommerce: EcommerceConfig): Record<string, un
     },
     checkout: ecommerce.checkout,
   };
-}
-
-function legacyEcommerceConfig(): Record<string, unknown> {
-  return normalizeEcommerceConfig({
-    enabled: true,
-    catalog: {
-      entity: "performance",
-      title: { table: "performance", field: "title", references: null },
-      description: { table: "performance", field: "description", references: null },
-      price: { table: "performance", field: "price_pence", references: null },
-      groupBy: [{ table: "performance", field: "title", references: null }],
-      variantFields: [
-        { table: "performance", field: "date", references: null },
-        { table: "performance", field: "time", references: null },
-        { table: "performance", field: "venue_id", references: "venue(id)" },
-      ],
-      availability: { field: { table: "performance", field: "status", references: null }, available: "scheduled" },
-    },
-    order: {
-      entity: "booking",
-      user: { table: "booking", field: "user_id", references: "user(id)" },
-      status: { table: "booking", field: "status", references: null },
-      amount: { table: "booking", field: "amount_pence", references: null },
-      currency: { table: "booking", field: "currency", references: null },
-      expiresAt: { table: "booking", field: "expires_at", references: null },
-      paymentReference: { table: "booking", field: "payment_reference", references: null },
-      client: { table: "booking", field: "client", references: null },
-      pendingStatus: "checkout_pending",
-      paidStatus: "paid",
-      expiredStatus: "expired",
-      cancelledStatus: "cancelled",
-    },
-    lineItem: {
-      entity: "ticket",
-      catalogItem: { table: "ticket", field: "performance_id", references: "performance(id)" },
-      user: { table: "ticket", field: "user_id", references: "user(id)" },
-      price: { table: "ticket", field: "price_pence", references: null },
-      status: { table: "ticket", field: "status", references: null },
-      quantity: null,
-      reservedStatus: "reserved",
-      fulfilledStatus: "confirmed",
-      cancelledStatus: "cancelled",
-      options: {
-        ticket_type: {
-          field: { table: "ticket", field: "ticket_type", references: null },
-          type: "text",
-          label: "Ticket type",
-          default: "standard",
-          choices: ["standard", "concession", "patron"],
-          required: false,
-          min: null,
-          max: null,
-        },
-        seat: {
-          field: { table: "ticket", field: "seat", references: null },
-          type: "text",
-          label: "Seat",
-          default: null,
-          choices: [],
-          required: false,
-          min: null,
-          max: null,
-        },
-      },
-    },
-    orderLine: {
-      entity: "booking_ticket",
-      order: { table: "booking_ticket", field: "booking_id", references: "booking(id)" },
-      lineItem: { table: "booking_ticket", field: "ticket_id", references: "ticket(id)" },
-    },
-    transaction: {
-      entity: "transaction",
-      user: { table: "transaction", field: "user_id", references: "user(id)" },
-      amount: { table: "transaction", field: "amount_pence", references: null },
-      type: { table: "transaction", field: "type", references: null },
-      status: { table: "transaction", field: "status", references: null },
-      reference: { table: "transaction", field: "reference", references: null },
-      client: { table: "transaction", field: "client", references: null },
-      purchaseType: "purchase",
-      pendingStatus: "pending",
-      completedStatus: "completed",
-      failedStatus: "failed",
-    },
-    transactionLine: {
-      entity: "transaction_ticket",
-      transaction: { table: "transaction_ticket", field: "transaction_id", references: "transaction(id)" },
-      lineItem: { table: "transaction_ticket", field: "ticket_id", references: "ticket(id)" },
-    },
-    checkout: {
-      currency: "GBP",
-      expiryMinutes: 15,
-      maxQuantity: 20,
-      maxLines: 50,
-    },
-  });
 }
 
 function defaultOperation(): Operation {
@@ -1074,7 +976,7 @@ ${effectsCode}
 
 function genConfiguredCommerceServices(schema: Schema): string {
   const runtimeConfig = ecommerceRuntimeConfig(schema);
-  const includeLegacyAliases = legacyCommerceWorkflow(schema);
+  const includeLegacyAliases = hasCommerceBookingAliases(schema);
   const legacyBookingField = includeLegacyAliases ? "booking_id: Number(order.id), " : "";
   return `
 // ============================================================================

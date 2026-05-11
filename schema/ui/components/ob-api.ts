@@ -177,13 +177,7 @@ export class ObApi extends HTMLElement {
 
   hasCommerceWorkflow(): boolean {
     if (!this.spec) return false;
-    return Boolean(
-      this.spec["x-openb2c-ecommerce"]?.enabled ||
-      (this.spec.paths["/commerce/checkout"] &&
-        this.spec.paths["/commerce/orders/{id}/payment-intent"]) ||
-      (this.spec.paths["/commerce/bookings/reserve"] &&
-        this.spec.paths["/commerce/bookings/{id}/payment-intent"])
-    );
+    return Boolean(this.spec["x-openb2c-ecommerce"]?.enabled);
   }
 
   hasIdentityAuth(): boolean {

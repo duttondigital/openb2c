@@ -231,6 +231,18 @@ let
         };
         default = {};
       };
+      compatibility = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            bookingAliases = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Expose deprecated booking-specific commerce aliases for old clients.";
+            };
+          };
+        };
+        default = {};
+      };
     };
   };
 

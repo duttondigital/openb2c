@@ -133,6 +133,10 @@ export interface EcommerceTransactionConfig {
   failedStatus: string;
 }
 
+export interface EcommerceCompatibilityConfig {
+  bookingAliases: boolean;
+}
+
 export interface EcommerceConfig {
   enabled: boolean;
   catalog: EcommerceCatalogConfig;
@@ -147,6 +151,7 @@ export interface EcommerceConfig {
     maxQuantity: number;
     maxLines: number;
   };
+  compatibility?: EcommerceCompatibilityConfig;
 }
 
 export interface OrganizationLogoMetadata {

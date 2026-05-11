@@ -1,11 +1,11 @@
 import type { Schema } from "./types";
 import { requiredProductionEnvVars } from "./config";
-import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, legacyCommerceWorkflow, pascalCase, camelCase } from "./utils";
+import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, hasCommerceBookingAliases, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
 function genConfiguredCommerceRoutes(schema: Schema): string[] {
-  const compatibilityRoutes = legacyCommerceWorkflow(schema) ? `
+  const compatibilityRoutes = hasCommerceBookingAliases(schema) ? `
   // Compatibility aliases for the original booking-oriented API.
   { method: "POST", path: "/commerce/bookings/reserve", handler: async (req, _, auth, signal) => {
     const input = await readJson<S.ReserveBookingInput>(req, signal);

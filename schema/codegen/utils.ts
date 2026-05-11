@@ -79,20 +79,11 @@ export function getDefaultDatabasePath(app: AppMetadata): string {
 }
 
 export function hasCommerceWorkflow(schema: { tables: Tables; ecommerce?: EcommerceConfig } | Schema): boolean {
-  if (schema.ecommerce?.enabled) return true;
-  return legacyCommerceWorkflow(schema);
+  return schema.ecommerce?.enabled === true;
 }
 
-export function legacyCommerceWorkflow(schema: { tables: Tables }): boolean {
-  return [
-    "booking",
-    "booking_ticket",
-    "ticket",
-    "transaction",
-    "transaction_ticket",
-    "performance",
-  ].every(table => schema.tables[table])
-    && !!schema.tables.performance.price_pence;
+export function hasCommerceBookingAliases(schema: { ecommerce?: EcommerceConfig } | Schema): boolean {
+  return schema.ecommerce?.enabled === true && schema.ecommerce.compatibility?.bookingAliases === true;
 }
 
 export function requiredFieldRef(name: string, ref: FieldRef | null | undefined): FieldRef {

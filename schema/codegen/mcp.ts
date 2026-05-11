@@ -1,5 +1,5 @@
 import type { Schema } from "./types";
-import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, legacyCommerceWorkflow, pascalCase, camelCase } from "./utils";
+import { getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, hasCommerceBookingAliases, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
@@ -189,7 +189,7 @@ export function genMcpServer(schema: Schema): string {
         if (!expireCommerceOrdersResult.ok) return { content: [{ type: "text", text: expireCommerceOrdersResult.error }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(expireCommerceOrdersResult.data) }] };`);
 
-    if (legacyCommerceWorkflow(schema)) {
+    if (hasCommerceBookingAliases(schema)) {
     tools.push(`    {
       name: "reserve_booking",
       description: "Reserve tickets for checkout",

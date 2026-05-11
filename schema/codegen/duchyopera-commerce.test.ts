@@ -202,7 +202,7 @@ function genericShopSchema(): Schema {
 }
 
 describe("Duchy Opera commerce workflow", () => {
-  test("generic ecommerce generation does not expose ticket-specific compatibility aliases unless the legacy shape is present", () => {
+  test("generic ecommerce generation does not expose booking-specific compatibility aliases", () => {
     const schema = genericShopSchema();
     const services = genServices(schema);
     const routes = genRoutes(schema);
@@ -220,6 +220,34 @@ describe("Duchy Opera commerce workflow", () => {
     expect(openapi.paths["/commerce/checkout"]).toBeDefined();
     expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
     expect(openapi.paths["/auth/context"]).toBeDefined();
+  });
+
+  test("Duchy Opera ecommerce does not expose booking aliases unless explicitly enabled", async () => {
+    const schema = await loadDuchyOperaSchema();
+    const services = genServices(schema);
+    const routes = genRoutes(schema);
+    const mcp = genMcpServer(schema);
+    const effects = genEffectsInterface(schema);
+    const openapi = JSON.parse(genOpenAPI(schema));
+
+    expect(services).not.toContain("ReserveBookingInput");
+    expect(routes).not.toContain("/commerce/bookings/reserve");
+    expect(mcp).not.toContain("reserve_booking");
+    expect(effects).not.toContain('"booking.reserved"');
+    expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
+
+    const compatSchema: Schema = {
+      ...schema,
+      ecommerce: {
+        ...schema.ecommerce!,
+        compatibility: { bookingAliases: true },
+      },
+    };
+    expect(genServices(compatSchema)).toContain("ReserveBookingInput");
+    expect(genRoutes(compatSchema)).toContain("/commerce/bookings/reserve");
+    expect(genMcpServer(compatSchema)).toContain("reserve_booking");
+    expect(genEffectsInterface(compatSchema)).toContain('"booking.reserved"');
+    expect(JSON.parse(genOpenAPI(compatSchema)).paths["/commerce/bookings/reserve"]).toBeDefined();
   });
 
   test("commerce browser UI derives checkout user from auth context", async () => {

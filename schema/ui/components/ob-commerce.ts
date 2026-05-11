@@ -82,7 +82,7 @@ export class ObCommerce extends HTMLElement {
   }
 
   private _config(api: ObApi): CommerceConfig {
-    return api.getEcommerceConfig() || legacyCommerceConfig();
+    return api.getEcommerceConfig() || {};
   }
 
   private async _rows(entity: string): Promise<Record<string, unknown>[]> {
@@ -806,31 +806,6 @@ export class ObCommerce extends HTMLElement {
 
 function cssEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-function legacyCommerceConfig(): CommerceConfig {
-  return {
-    enabled: true,
-    catalog: {
-      entity: "performance",
-      title: { field: "title" },
-      description: { field: "description" },
-      price: { field: "price_pence" },
-      groupBy: [{ field: "title" }],
-      variantFields: [{ field: "date" }, { field: "time" }, { field: "venue_id" }],
-      availability: { field: { field: "status" }, available: "scheduled" },
-    },
-    order: { entity: "booking", user: { field: "user_id", references: "user(id)" } },
-    lineItem: {
-      entity: "ticket",
-      options: {
-        ticket_type: { field: { field: "ticket_type" }, label: "Ticket type", default: "standard", choices: ["standard", "concession", "patron"] },
-        seat: { field: { field: "seat" }, label: "Seat" },
-      },
-    },
-    transaction: { entity: "transaction" },
-    checkout: { currency: "GBP", expiryMinutes: 15, maxQuantity: 20, maxLines: 50 },
-  };
 }
 
 customElements.define("ob-commerce", ObCommerce);
