@@ -27,9 +27,8 @@ export class ObAuthPanel extends HTMLElement {
 
   private _handleAction(action: string | undefined, event: Event) {
     if (action === "logout") {
-      this._resetSignIn();
-      ObApi.instance?.clearAuthContext();
-      void this._render();
+      event.preventDefault();
+      void this._logout();
       return;
     }
     if (action === "continue") {
@@ -240,7 +239,11 @@ export class ObAuthPanel extends HTMLElement {
         await this._render();
         return;
       }
-      await ObApi.instance!.setCertificateAuth(data.certificate, this._privateKey);
+      if (data.sessionToken && data.auth) {
+        await ObApi.instance!.setSessionAuth(data.auth, data.sessionToken, data.sessionExpiresAt);
+      } else {
+        await ObApi.instance!.setCertificateAuth(data.certificate, this._privateKey);
+      }
       this._resetSignIn();
       this._loading = false;
       this.dispatchEvent(new CustomEvent("ob-auth-complete", { bubbles: true, composed: true, detail: { returnTo: this._returnTo() } }));
@@ -257,6 +260,14 @@ export class ObAuthPanel extends HTMLElement {
       this._loading = false;
       await this._render();
     }
+  }
+
+  private async _logout() {
+    this._loading = true;
+    await this._render();
+    await ObApi.instance?.clearAuthContext({ revoke: true });
+    this._resetSignIn();
+    await this._render();
   }
 
   private _returnTo(): string {

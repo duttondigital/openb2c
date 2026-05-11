@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
+import { genOpenAPI } from "./openapi";
 import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import type { Schema } from "./types";
@@ -14,6 +15,11 @@ import { pathToFileURL } from "node:url";
 const schema: Schema = {
   organization: DEFAULT_ORGANIZATION_METADATA,
   tables: {
+    user: {
+      id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      email: { type: "text", pk: false, auto: false, required: true, unique: true, default: null, references: null },
+      name: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+    },
     identity_challenge: {
       id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
       email: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
@@ -41,6 +47,16 @@ const schema: Schema = {
       id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
       signature: { type: "text", pk: false, auto: false, required: true, unique: true, default: null, references: null },
       created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
+    },
+    identity_session: {
+      id: { type: "integer", pk: true, auto: true, required: false, unique: false, default: null, references: null },
+      user_id: { type: "integer", pk: false, auto: false, required: true, unique: false, default: null, references: "user(id)" },
+      token_hash: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      token_prefix: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      created_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: "CURRENT_TIMESTAMP", references: null },
+      last_used_at: { type: "text", pk: false, auto: false, required: false, unique: false, default: null, references: null },
+      expires_at: { type: "text", pk: false, auto: false, required: true, unique: false, default: null, references: null },
+      revoked: { type: "integer", pk: false, auto: false, required: false, unique: false, default: "0", references: null },
     },
   },
   operations: {},
@@ -107,7 +123,15 @@ describe("identity hardening generation", () => {
     expect(server).toContain("const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;");
     expect(server).toContain("S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY");
     expect(server).toContain("S.createChallenge(db, email, publicKey, clientIp(req))");
+    expect(server).toContain("S.issueIdentitySession(db, userId)");
+    expect(server).toContain("await S.verifyIdentitySession(db, key)");
+    expect(server).toContain('path: "/auth/revoke-current"');
+    expect(server).toContain("S.revokeCertificate(db, cert)");
+    expect(server).toContain("S.revokeIdentitySessionToken(db, authHeader.slice(7))");
     expect(server).not.toContain("(async () => {");
+
+    const openapi = JSON.parse(genOpenAPI(schema));
+    expect(openapi.paths["/auth/revoke-current"]).toBeDefined();
   });
 
   test("certificate request verification applies the chosen registry state model", async () => {
@@ -421,6 +445,74 @@ describe("identity hardening generation", () => {
       timestamp,
       signature
     )).resolves.toBeNull();
+  });
+
+  test("current certificate revocation invalidates the active identity session", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+    const registryPublicKey = await services.initRegistryKeys();
+
+    const userKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+    const identity = await issueThroughChallenge(services, db, "session@example.com", userKeys, "10.0.6.1");
+
+    let timestamp = String(Date.now());
+    let signature = await signRequest(userKeys.privateKey, "GET", "/auth/context", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      identity.cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/auth/context",
+      timestamp,
+      signature
+    )).resolves.toMatchObject({ email: "session@example.com" });
+
+    expect(services.revokeCertificate(db, identity.cert)).toEqual({ ok: true, data: { revoked: true } });
+    expect(services.getCertificateRegistryState(db, identity.cert)).toBe("revoked");
+
+    timestamp = String(Date.now() + 1);
+    signature = await signRequest(userKeys.privateKey, "GET", "/auth/context", timestamp);
+    await expect(services.verifyRequest(
+      db,
+      identity.cert,
+      registryPublicKey,
+      true,
+      "GET",
+      "/auth/context",
+      timestamp,
+      signature
+    )).resolves.toBeNull();
+  });
+
+  test("identity session tokens are hashed, reusable across reloads, and revocable", async () => {
+    const dir = writeGenerated();
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const db = createDb();
+
+    const session = await services.issueIdentitySession(db, 42);
+    expect(session.ok).toBe(true);
+    expect(session.data.token).toStartWith("sess_");
+
+    const row = db.query("SELECT user_id, token_hash, token_prefix, revoked FROM identity_session").get() as {
+      user_id: number;
+      token_hash: string;
+      token_prefix: string;
+      revoked: number;
+    };
+    expect(row.user_id).toBe(42);
+    expect(row.token_hash).not.toBe(session.data.token);
+    expect(row.token_prefix).toBe(session.data.token.slice(0, 16));
+    expect(row.revoked).toBe(0);
+
+    await expect(services.verifyIdentitySession(db, session.data.token)).resolves.toEqual({
+      userId: 42,
+      scopes: services.SELF_SERVICE_SCOPES,
+    });
+
+    await expect(services.revokeIdentitySessionToken(db, session.data.token)).resolves.toEqual({ ok: true, data: { revoked: true } });
+    await expect(services.verifyIdentitySession(db, session.data.token)).resolves.toBeNull();
   });
 
   test("identity verification attempts are rate limited by challenge and email", async () => {

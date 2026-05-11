@@ -38,6 +38,13 @@ export function genOpenAPI(schema: Schema): string {
     },
     required: ["userId", "scopes"],
   };
+  schemas.AuthRevocationResult = {
+    type: "object",
+    properties: {
+      revoked: { type: "boolean" },
+    },
+    required: ["revoked"],
+  };
 
   paths["/auth/context"] = {
     get: {
@@ -45,6 +52,16 @@ export function genOpenAPI(schema: Schema): string {
       responses: {
         "200": { description: "Authenticated context", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthContext" } } } },
         "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+  };
+  paths["/auth/revoke-current"] = {
+    post: {
+      summary: "Revoke the current certificate-backed session",
+      responses: {
+        "200": { description: "Current certificate revoked", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthRevocationResult" } } } },
+        "401": { description: "Authentication required", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        "404": { description: "Certificate not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },
   };

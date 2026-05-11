@@ -552,6 +552,27 @@ const routes: Route[] = [
     }
     return corsResponse(auth);
   }},
+  { method: "POST", path: "/auth/revoke-current", handler: async (req, __, auth) => {
+    if (auth.userId === null && !S.hasScope(auth, "*")) {
+      return corsResponse({ error: "authenticated user required", code: "unauthorized" }, { status: 401 });
+    }
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const result = await S.revokeIdentitySessionToken(db, authHeader.slice(7));
+      return result.ok ? corsResponse(result.data) : corsResponse(result, { status: S.statusForResult(result) });
+    }
+    const certHeader = req.headers.get("X-Certificate");
+    if (!certHeader) {
+      return corsResponse({ error: "certificate required", code: "unauthorized" }, { status: 401 });
+    }
+    try {
+      const cert = JSON.parse(certHeader) as T.Certificate;
+      const result = S.revokeCertificate(db, cert);
+      return result.ok ? corsResponse(result.data) : corsResponse(result, { status: S.statusForResult(result) });
+    } catch {
+      return corsResponse({ error: "invalid certificate format", code: "invalid" }, { status: 400 });
+    }
+  }},
 
   // Identity endpoints (no auth required)
   { method: "GET", path: "/identity/public-key", handler: async () => {
@@ -583,7 +604,17 @@ const routes: Route[] = [
     if (!result.ok) {
       return corsResponse(result, { status: S.statusForResult(result) });
     }
-    return corsResponse({ certificate: result.data });
+    const userId = S.ensureUser(db, result.data.email);
+    const session = await S.issueIdentitySession(db, userId);
+    if (!session.ok) {
+      return corsResponse(session, { status: S.statusForResult(session) });
+    }
+    return corsResponse({
+      certificate: result.data,
+      sessionToken: session.data.token,
+      sessionExpiresAt: session.data.expiresAt,
+      auth: { userId, scopes: [...S.SELF_SERVICE_SCOPES] },
+    });
   }},
 
 ${routes.join("\n")}];
@@ -722,11 +753,11 @@ export const server = Bun.serve({
           return response(req, { error: "invalid certificate format", code: "invalid" }, { status: 401 });
         }
       } else if (authHeader?.startsWith("Bearer ")) {
-        // API key auth (for services/integrations)
+        // Bearer auth supports browser identity sessions and service API keys.
         const key = authHeader.slice(7);
-        const auth = await S.verifyApiKey(db, key);
+        const auth = (await S.verifyIdentitySession(db, key)) || (await S.verifyApiKey(db, key));
         if (!auth) {
-          return response(req, { error: "invalid api key", code: "invalid" }, { status: 401 });
+          return response(req, { error: "invalid bearer token", code: "invalid" }, { status: 401 });
         }
         authContext = auth;
       }

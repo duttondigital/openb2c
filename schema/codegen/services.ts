@@ -248,9 +248,7 @@ function validate(input: Record<string, unknown>): string | null {
 // ============================================================================
 
 export function generateApiKey(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return "do_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+  return generateSecretToken("do_");
 }
 
 export async function hashApiKey(key: string): Promise<string> {
@@ -258,6 +256,12 @@ export async function hashApiKey(key: string): Promise<string> {
 }
 
 export const SELF_SERVICE_SCOPES = ${selfScopes} as const;
+
+function generateSecretToken(prefix: string): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return prefix + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
 export async function verifyApiKey(db: Database, key: string): Promise<T.AuthContext | null> {
   // Use key prefix to narrow candidates, then bcrypt verify
@@ -280,6 +284,72 @@ export async function verifyApiKey(db: Database, key: string): Promise<T.AuthCon
     }
   }
   return null;
+}
+
+export function generateIdentitySessionToken(): string {
+  return generateSecretToken("sess_");
+}
+
+export async function issueIdentitySession(
+  db: Database,
+  userId: number,
+  validForMs = 30 * 24 * 60 * 60 * 1000
+): Promise<Result<{ token: string; expiresAt: string }>> {
+  const token = generateIdentitySessionToken();
+  const tokenHash = await Bun.password.hash(token, { algorithm: "bcrypt", cost: 10 });
+  const tokenPrefix = token.slice(0, 16);
+  const expiresAt = new Date(Date.now() + validForMs).toISOString();
+
+  db.query(\`
+    INSERT INTO identity_session (user_id, token_hash, token_prefix, expires_at)
+    VALUES (?, ?, ?, ?)
+  \`).run(userId, tokenHash, tokenPrefix, expiresAt);
+
+  return { ok: true, data: { token, expiresAt } };
+}
+
+export async function verifyIdentitySession(db: Database, token: string): Promise<T.AuthContext | null> {
+  if (!token.startsWith("sess_")) return null;
+  const tokenPrefix = token.slice(0, 16);
+  const rows = db.query(\`
+    SELECT id, user_id, token_hash, expires_at
+    FROM identity_session
+    WHERE revoked = 0 AND token_prefix = ?
+  \`).all(tokenPrefix) as { id: number; user_id: number; token_hash: string; expires_at: string }[];
+
+  for (const row of rows) {
+    if (new Date(row.expires_at) < new Date()) continue;
+    const valid = await Bun.password.verify(token, row.token_hash);
+    if (valid) {
+      db.query("UPDATE identity_session SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").run(row.id);
+      return {
+        userId: row.user_id,
+        scopes: [...SELF_SERVICE_SCOPES],
+      };
+    }
+  }
+  return null;
+}
+
+export async function revokeIdentitySessionToken(db: Database, token: string): Promise<Result<{ revoked: boolean }>> {
+  if (!token.startsWith("sess_")) {
+    return { ok: false, error: "identity session not found", code: "not_found" };
+  }
+  const tokenPrefix = token.slice(0, 16);
+  const rows = db.query(\`
+    SELECT id, token_hash
+    FROM identity_session
+    WHERE revoked = 0 AND token_prefix = ?
+  \`).all(tokenPrefix) as { id: number; token_hash: string }[];
+
+  for (const row of rows) {
+    if (await Bun.password.verify(token, row.token_hash)) {
+      db.query("UPDATE identity_session SET revoked = 1 WHERE id = ?").run(row.id);
+      return { ok: true, data: { revoked: true } };
+    }
+  }
+
+  return { ok: false, error: "identity session not found", code: "not_found" };
 }
 
 export function hasScope(ctx: T.AuthContext, required: string): boolean {
@@ -673,6 +743,20 @@ export function getCertificateRegistryState(db: Database, cert: T.Certificate): 
 
 export function isCertificateRevoked(db: Database, cert: T.Certificate): boolean {
   return getCertificateRegistryState(db, cert) === "revoked";
+}
+
+export function revokeCertificate(db: Database, cert: T.Certificate): Result<{ revoked: boolean }> {
+  const result = db.query(\`
+    UPDATE identity_registry
+    SET revoked = 1
+    WHERE email = ? AND public_key = ?
+  \`).run(cert.email, cert.publicKey) as { changes: number };
+
+  if (result.changes === 0) {
+    return { ok: false, error: "certificate not found", code: "not_found" };
+  }
+
+  return { ok: true, data: { revoked: true } };
 }
 
 function consumeRequestSignature(db: Database, signature: string): boolean {

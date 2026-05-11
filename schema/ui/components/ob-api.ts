@@ -29,6 +29,18 @@ export interface AuthContext {
   scopes: PermissionScope[];
 }
 
+type StoredIdentitySession = {
+  id: string;
+  auth?: AuthContext;
+  bearerToken?: string;
+  certificate?: Certificate;
+  expiresAt?: string;
+  privateKeyJwk?: JsonWebKey;
+  privateKeyPkcs8?: string;
+  privateKey?: CryptoKey;
+  savedAt: string;
+};
+
 export const ANONYMOUS_AUTH_CONTEXT: AuthContext = {
   userId: null,
   scopes: [],
@@ -40,6 +52,9 @@ export const SYSTEM_AUTH_CONTEXT: AuthContext = {
 };
 
 let _instance: ObApi | null = null;
+const AUTH_DB_NAME = "openb2c-auth";
+const AUTH_DB_VERSION = 1;
+const AUTH_STORE_NAME = "identity_sessions";
 
 export class ObApi extends HTMLElement {
   spec: OpenAPISpec | null = null;
@@ -67,6 +82,7 @@ export class ObApi extends HTMLElement {
     const src = this.getAttribute("src") || "openapi.json";
     const res = await fetch(src);
     this.spec = await res.json();
+    await this.restoreAuthContext();
     this._resolve();
     this.dispatchEvent(new CustomEvent("ob-spec-ready", { bubbles: true }));
   }
@@ -84,7 +100,15 @@ export class ObApi extends HTMLElement {
     this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
   }
 
-  async setCertificateAuth(certificate: Certificate, privateKey: CryptoKey): Promise<AuthContext> {
+  async setSessionAuth(auth: AuthContext, bearerToken: string, expiresAt?: string, options: { persist?: boolean } = {}): Promise<AuthContext> {
+    this.setAuthContext(auth, bearerToken);
+    if (options.persist !== false) {
+      await this._saveStoredBearerSession(auth, bearerToken, expiresAt);
+    }
+    return auth;
+  }
+
+  async setCertificateAuth(certificate: Certificate, privateKey: CryptoKey, options: { persist?: boolean } = {}): Promise<AuthContext> {
     this._certificate = certificate;
     this._privateKey = privateKey;
     this._bearerToken = "";
@@ -99,14 +123,65 @@ export class ObApi extends HTMLElement {
 
     const auth = await res.json() as AuthContext;
     this.authContext = auth;
+    if (options.persist !== false) {
+      await this._saveStoredIdentitySession(certificate, privateKey);
+    }
     this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
     return auth;
   }
 
-  clearAuthContext() {
+  async clearAuthContext(options: { revoke?: boolean } = {}) {
+    if (options.revoke && (this._bearerToken || (this._certificate && this._privateKey))) {
+      await this.request("/auth/revoke-current", { method: "POST" }).catch(() => null);
+    }
     this._certificate = null;
     this._privateKey = null;
+    await this._deleteStoredIdentitySession();
     this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
+  }
+
+  async restoreAuthContext(): Promise<AuthContext> {
+    if (!this.hasIdentityAuth()) return this.authContext;
+    const stored = await this._loadStoredIdentitySession();
+    if (!stored) return this.authContext;
+    if (stored.bearerToken && stored.auth) {
+      if (stored.expiresAt && Date.parse(stored.expiresAt) <= Date.now()) {
+        await this._deleteStoredIdentitySession();
+        return this.authContext;
+      }
+      this._bearerToken = stored.bearerToken;
+      try {
+        const res = await this.request("/auth/context");
+        if (!res.ok) throw new Error("stored session expired");
+        const auth = await res.json() as AuthContext;
+        this.setAuthContext(auth, stored.bearerToken);
+        return auth;
+      } catch {
+        await this._deleteStoredIdentitySession();
+        this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
+        return this.authContext;
+      }
+    }
+    if (!stored.certificate) {
+      await this._deleteStoredIdentitySession();
+      return this.authContext;
+    }
+    if (Date.parse(stored.certificate.expiresAt) <= Date.now()) {
+      await this._deleteStoredIdentitySession();
+      return this.authContext;
+    }
+    const privateKey = await this._importStoredPrivateKey(stored);
+    if (!privateKey) {
+      await this._deleteStoredIdentitySession();
+      return this.authContext;
+    }
+    try {
+      return await this.setCertificateAuth(stored.certificate, privateKey, { persist: false });
+    } catch {
+      await this._deleteStoredIdentitySession();
+      this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
+      return this.authContext;
+    }
   }
 
   async request(path: string, init: RequestInit = {}): Promise<Response> {
@@ -134,6 +209,178 @@ export class ObApi extends HTMLElement {
   static async signWithIdentityKey(privateKey: CryptoKey, message: string): Promise<string> {
     const signature = await crypto.subtle.sign("Ed25519", privateKey, new TextEncoder().encode(message));
     return bytesToHex(new Uint8Array(signature));
+  }
+
+  private _identityStorageKey(): string {
+    return `${location.origin}|${this.apiBase || "same-origin"}`;
+  }
+
+  private async _openIdentityDb(): Promise<IDBDatabase | null> {
+    if (!("indexedDB" in globalThis)) return null;
+    return new Promise((resolve) => {
+      const req = indexedDB.open(AUTH_DB_NAME, AUTH_DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(AUTH_STORE_NAME)) {
+          db.createObjectStore(AUTH_STORE_NAME, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    });
+  }
+
+  private async _loadStoredIdentitySession(): Promise<StoredIdentitySession | null> {
+    const db = await this._openIdentityDb();
+    if (!db) return this._loadLocalIdentitySession();
+    const stored = await new Promise<StoredIdentitySession | null>((resolve) => {
+      const tx = db.transaction(AUTH_STORE_NAME, "readonly");
+      const req = tx.objectStore(AUTH_STORE_NAME).get(this._identityStorageKey());
+      req.onsuccess = () => resolve((req.result as StoredIdentitySession | undefined) || null);
+      req.onerror = () => resolve(null);
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+    });
+    return stored || this._loadLocalIdentitySession();
+  }
+
+  private async _saveStoredIdentitySession(certificate: Certificate, privateKey: CryptoKey): Promise<void> {
+    try {
+      const exportedKey = await this._exportStoredPrivateKey(privateKey);
+      if (!exportedKey) return;
+      const record: StoredIdentitySession = {
+        id: this._identityStorageKey(),
+        certificate,
+        ...exportedKey,
+        savedAt: new Date().toISOString(),
+      };
+      const db = await this._openIdentityDb();
+      if (!db) {
+        this._saveLocalIdentitySession(record);
+        return;
+      }
+      const saved = await new Promise<boolean>((resolve) => {
+        const tx = db.transaction(AUTH_STORE_NAME, "readwrite");
+        tx.objectStore(AUTH_STORE_NAME).put(record);
+        tx.oncomplete = () => {
+          db.close();
+          resolve(true);
+        };
+        tx.onerror = () => {
+          db.close();
+          resolve(false);
+        };
+      });
+      if (!saved) this._saveLocalIdentitySession(record);
+    } catch {
+      // Persistence is opportunistic; the in-memory session remains valid.
+    }
+  }
+
+  private async _saveStoredBearerSession(auth: AuthContext, bearerToken: string, expiresAt?: string): Promise<void> {
+    const record: StoredIdentitySession = {
+      id: this._identityStorageKey(),
+      auth,
+      bearerToken,
+      expiresAt,
+      savedAt: new Date().toISOString(),
+    };
+    const db = await this._openIdentityDb();
+    if (!db) {
+      this._saveLocalIdentitySession(record);
+      return;
+    }
+    const saved = await new Promise<boolean>((resolve) => {
+      const tx = db.transaction(AUTH_STORE_NAME, "readwrite");
+      tx.objectStore(AUTH_STORE_NAME).put(record);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(false);
+      };
+    });
+    if (!saved) this._saveLocalIdentitySession(record);
+  }
+
+  private async _importStoredPrivateKey(stored: StoredIdentitySession): Promise<CryptoKey | null> {
+    if (stored.privateKey) return stored.privateKey;
+    if (stored.privateKeyJwk) {
+      try {
+        return await crypto.subtle.importKey("jwk", stored.privateKeyJwk, { name: "Ed25519" }, true, ["sign"]);
+      } catch {
+        // Fall through to PKCS#8 if the browser can import that form.
+      }
+    }
+    if (stored.privateKeyPkcs8) {
+      try {
+        return await crypto.subtle.importKey("pkcs8", base64ToBytes(stored.privateKeyPkcs8), { name: "Ed25519" }, true, ["sign"]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private async _deleteStoredIdentitySession(): Promise<void> {
+    localStorage.removeItem(this._localStorageIdentityKey());
+    const db = await this._openIdentityDb();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(AUTH_STORE_NAME, "readwrite");
+      tx.objectStore(AUTH_STORE_NAME).delete(this._identityStorageKey());
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve();
+      };
+    });
+  }
+
+  private async _exportStoredPrivateKey(privateKey: CryptoKey): Promise<Pick<StoredIdentitySession, "privateKeyJwk" | "privateKeyPkcs8"> | null> {
+    const exported: Pick<StoredIdentitySession, "privateKeyJwk" | "privateKeyPkcs8"> = {};
+    try {
+      exported.privateKeyJwk = await crypto.subtle.exportKey("jwk", privateKey);
+    } catch {
+      // Fall back to PKCS#8 below.
+    }
+    try {
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", privateKey);
+      exported.privateKeyPkcs8 = bytesToBase64(new Uint8Array(pkcs8));
+    } catch {
+      // Some browsers only support JWK for this key type.
+    }
+    return exported.privateKeyJwk || exported.privateKeyPkcs8 ? exported : null;
+  }
+
+  private _localStorageIdentityKey(): string {
+    return `openb2c.identity.${this._identityStorageKey()}`;
+  }
+
+  private _loadLocalIdentitySession(): StoredIdentitySession | null {
+    try {
+      const raw = localStorage.getItem(this._localStorageIdentityKey());
+      return raw ? JSON.parse(raw) as StoredIdentitySession : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private _saveLocalIdentitySession(record: StoredIdentitySession): void {
+    try {
+      localStorage.setItem(this._localStorageIdentityKey(), JSON.stringify(record));
+    } catch {
+      // Persistence is opportunistic.
+    }
   }
 
   ready(): Promise<void> {
@@ -226,6 +473,19 @@ function pascalCase(s: string): string {
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 customElements.define("ob-api", ObApi);
