@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { genMcpServer } from "./mcp";
 import { genOpenAPI } from "./openapi";
+import { genRuntime } from "./runtime";
 import { genRoutes } from "./server";
 import { genAppShell } from "./ui";
 import type { Schema } from "./types";
@@ -33,6 +34,7 @@ async function loadExampleSchema(example: string): Promise<Schema> {
 
 function generatedMetadataArtifacts(schema: Schema): string {
   return [
+    genRuntime(schema),
     genRoutes(schema),
     genMcpServer(schema),
     genOpenAPI(schema),

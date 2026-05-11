@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { genEffectsInterface } from "./effects";
 import { genMcpServer } from "./mcp";
+import { genRuntime } from "./runtime";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genSQL } from "./sql";
@@ -62,6 +63,7 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
   writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "runtime.ts"), genRuntime(schema));
   writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   writeFileSync(join(dir, "mcp.ts"), genMcpServer(schema));

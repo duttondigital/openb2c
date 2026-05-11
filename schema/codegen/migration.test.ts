@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { genEffectsInterface } from "./effects";
 import { generateMigrationStub, planMigration } from "./migration";
+import { genMcpServer } from "./mcp";
+import { genRuntime } from "./runtime";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genSQL } from "./sql";
@@ -53,8 +55,10 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(newTables, newIndexes));
   writeFileSync(join(dir, "types.ts"), genTypes(newTables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "runtime.ts"), genRuntime(schema));
   writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
   writeFileSync(join(dir, "server.ts"), genRoutes(schema));
+  writeFileSync(join(dir, "mcp.ts"), genMcpServer(schema));
   return dir;
 }
 
@@ -104,6 +108,38 @@ describe("generated migrations", () => {
       delete process.env.DB_PATH;
       delete process.env.PORT;
       delete process.env.AUTH_ENABLED;
+    }
+  });
+
+  test("MCP boot uses the same migration runtime as REST", async () => {
+    const dir = writeGenerated();
+    const dbPath = join(dir, "mcp.sqlite");
+    const migration = generateMigrationStub(planMigration(oldTables, newTables, {}, newIndexes));
+    writeFileSync(join(dir, "migrations", "001_add_customer_display_name.sql"), migration);
+
+    const db = new Database(dbPath);
+    applySql(db, genSQL(oldTables));
+    db.query("INSERT INTO customer (email) VALUES (?)").run("grace@example.com");
+    db.close();
+
+    process.env.DB_PATH = dbPath;
+    await import(pathToFileURL(join(dir, "mcp.ts")).href);
+
+    try {
+      const migrated = new Database(dbPath);
+      const row = migrated.query<{ email: string; display_name: string }, []>(
+        "SELECT email, display_name FROM customer"
+      ).get();
+      const history = migrated.query<{ id: string; description: string }, []>(
+        "SELECT id, description FROM openb2c_migration ORDER BY id"
+      ).all();
+      migrated.close();
+
+      expect(row).toEqual({ email: "grace@example.com", display_name: "Anonymous" });
+      expect(history.some(entry => entry.id === "001_add_customer_display_name")).toBe(true);
+      expect(history.some(entry => entry.id.startsWith("schema:"))).toBe(true);
+    } finally {
+      delete process.env.DB_PATH;
     }
   });
 });

@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genOpenAPI } from "./openapi";
+import { genRuntime } from "./runtime";
 import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import type { Schema } from "./types";
@@ -113,14 +114,16 @@ async function issueThroughChallenge(
 describe("identity hardening generation", () => {
   test("registry keys are initialized before the server starts", () => {
     const server = genRoutes(schema);
+    const runtime = genRuntime(schema);
 
-    expect(server).toContain("async function initRegistryPublicKey(): Promise<string>");
+    expect(runtime).toContain("export async function initRegistryPublicKey(): Promise<string>");
     expect(server).toContain("const registryPubKey = await initRegistryPublicKey();");
     expect(server.indexOf("const registryPubKey = await initRegistryPublicKey();")).toBeLessThan(
       server.indexOf("const server = Bun.serve({")
     );
-    expect(server).toContain("const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;");
-    expect(server).toContain("const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;");
+    expect(runtime).toContain("export const USE_EXTERNAL_REGISTRY = !REGISTRY_PRIVATE_KEY && !!REGISTRY_PUBLIC_KEY;");
+    expect(runtime).toContain("export const REQUIRE_LOCAL_CERTIFICATE_REGISTRY = !USE_EXTERNAL_REGISTRY;");
+    expect(server).toContain("bootstrapRuntime()");
     expect(server).toContain("S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY");
     expect(server).toContain("S.createChallenge(db, email, publicKey, clientIp(req))");
     expect(server).toContain("S.issueIdentitySession(db, userId)");
