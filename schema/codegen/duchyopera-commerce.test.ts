@@ -55,6 +55,7 @@ function seedDuchyOpera(dbPath: string) {
     db.query("INSERT INTO user (id, email, name) VALUES (1, 'ada@example.test', 'Ada Lovelace')").run();
     db.query("INSERT INTO venue (id, name, address, city, postcode, capacity) VALUES (1, 'Hall for Cornwall', 'Back Quay', 'Truro', 'TR1 2LL', 900)").run();
     db.query("INSERT INTO performance (id, title, venue_id, date, time, duration_mins, price_pence, status) VALUES (1, 'The Magic Flute', 1, '2026-06-12', '19:30', 150, 2500, 'scheduled')").run();
+    db.query("INSERT INTO performance (id, title, venue_id, date, time, duration_mins, price_pence, status) VALUES (2, 'Cancelled Gala', 1, '2026-06-13', '19:30', 120, 3000, 'cancelled')").run();
   } finally {
     db.close();
   }
@@ -212,12 +213,15 @@ describe("Duchy Opera commerce workflow", () => {
     expect(services).toContain("checkoutCommerceCart");
     expect(services).not.toContain("ReserveBookingInput");
     expect(routes).toContain("/commerce/checkout");
+    expect(routes).toContain('path: "/commerce/catalog"');
     expect(routes).not.toContain("/commerce/bookings/reserve");
     expect(routes).toContain('path: "/auth/context"');
     expect(routes).toContain('url.pathname.startsWith("/auth/")');
     expect(mcp).toContain("checkout_cart");
+    expect(mcp).toContain("list_commerce_catalog");
     expect(mcp).not.toContain("reserve_booking");
     expect(openapi.paths["/commerce/checkout"]).toBeDefined();
+    expect(openapi.paths["/commerce/catalog"]).toBeDefined();
     expect(openapi.paths["/commerce/bookings/reserve"]).toBeUndefined();
     expect(openapi.paths["/auth/context"]).toBeDefined();
   });
@@ -259,7 +263,8 @@ describe("Duchy Opera commerce workflow", () => {
     const apiUi = await Bun.file(join(PROJECT_ROOT, "schema", "ui", "components", "ob-api.ts")).text();
 
     expect(commerceUi).toContain("authContext.userId");
-    expect(commerceUi).toContain("fetch(ObApi.instance!.url");
+    expect(commerceUi).toContain('request("/commerce/catalog")');
+    expect(commerceUi).not.toContain("/api/${entity}s?limit=200");
     expect(commerceUi).toContain("ob-auth-required");
     expect(commerceUi).toContain("Sign in to continue");
     expect(commerceUi).toContain('returnTo: "/commerce"');
@@ -303,6 +308,15 @@ describe("Duchy Opera commerce workflow", () => {
     seedDuchyOpera(dbPath);
 
     try {
+      const catalog = await fetch(`${base}/commerce/catalog`);
+      expect(catalog.status).toBe(200);
+      const catalogBody = await catalog.json() as {
+        items: { id: number; title: string }[];
+        lookups: Record<string, Record<string, string>>;
+      };
+      expect(catalogBody.items.map(item => item.title)).toEqual(["The Magic Flute"]);
+      expect(catalogBody.lookups.venue_id["1"]).toBe("Hall for Cornwall");
+
       const directDb = new Database(dbPath);
       try {
         const directCheckout = services.checkoutCommerceCart(directDb, {

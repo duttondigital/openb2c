@@ -1008,6 +1008,11 @@ export interface CommerceCheckoutResult {
   status: string;
 }
 
+export interface CommerceCatalogResult {
+  items: Record<string, unknown>[];
+  lookups: Record<string, Record<string, string>>;
+}
+
 export interface CommercePaymentIntentResult {
   order_id: number;
   transaction_id: number;
@@ -1070,6 +1075,19 @@ function column(ref: { field: string }): string {
   return "[" + ref.field.replace(/]/g, "]]") + "]";
 }
 
+function table(name: string): string {
+  return "[" + name.replace(/]/g, "]]") + "]";
+}
+
+function referencedEntityName(ref: { references?: string | null }): string | null {
+  const match = ref.references?.match(/^([a-z_]+)\\(/);
+  return match?.[1] ?? null;
+}
+
+function labelRecord(row: Record<string, unknown>): string {
+  return String(row.title || row.name || row.email || row.reference || ("#" + row.id));
+}
+
 function resolveCommerceUser(inputUserId: number | undefined, auth: T.AuthContext): Result<number> {
   if (auth.userId !== null) return { ok: true, data: auth.userId };
   if (inputUserId !== undefined && hasScope(auth, "*")) return { ok: true, data: inputUserId };
@@ -1121,6 +1139,35 @@ function commerceLineItemIdsForOrder(db: Database, orderId: number): number[] {
     "SELECT " + column(ECOMMERCE.orderLine.lineItem) + " AS line_item_id FROM " + ECOMMERCE.orderLine.table +
     " WHERE " + column(ECOMMERCE.orderLine.order) + " = ? ORDER BY id"
   ).all(orderId) as { line_item_id: number }[]).map(row => row.line_item_id);
+}
+
+export function listCommerceCatalog(db: Database): Result<CommerceCatalogResult> {
+  const params: unknown[] = [];
+  const where = ECOMMERCE.catalog.availability.field
+    ? " WHERE " + column(ECOMMERCE.catalog.availability.field) + " = ?"
+    : "";
+  if (ECOMMERCE.catalog.availability.field) params.push(ECOMMERCE.catalog.availability.available);
+
+  const items = db.query(
+    "SELECT * FROM " + ECOMMERCE.catalog.table + where + " ORDER BY [id]"
+  ).all(...params) as Record<string, unknown>[];
+
+  const lookups: Record<string, Record<string, string>> = {};
+  for (const ref of ECOMMERCE.catalog.variantFields) {
+    const entity = referencedEntityName(ref);
+    if (!entity) continue;
+    const ids = [...new Set(items.map(item => item[ref.field]).filter(value => value !== null && value !== undefined).map(String))];
+    if (ids.length === 0) {
+      lookups[ref.field] = {};
+      continue;
+    }
+    const rows = db.query(
+      "SELECT * FROM " + table(entity) + " WHERE [id] IN (" + ids.map(() => "?").join(", ") + ")"
+    ).all(...ids) as Record<string, unknown>[];
+    lookups[ref.field] = Object.fromEntries(rows.map(row => [String(row.id), labelRecord(row)]));
+  }
+
+  return { ok: true, data: { items, lookups } };
 }
 
 function expireCommerceOrderIds(db: Database, orderIds: number[]): number {

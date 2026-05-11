@@ -44,6 +44,10 @@ type CartLine = {
 };
 
 type LookupMap = Record<string, Map<string, string>>;
+type CommerceCatalogPayload = {
+  items?: Record<string, unknown>[];
+  lookups?: Record<string, Record<string, string>>;
+};
 
 export class ObCommerce extends HTMLElement {
   private _selectedGroup = "";
@@ -85,29 +89,19 @@ export class ObCommerce extends HTMLElement {
     return api.getEcommerceConfig() || {};
   }
 
-  private async _rows(entity: string): Promise<Record<string, unknown>[]> {
-    if (!entity) return [];
+  private async _catalogPayload(): Promise<{ items: Record<string, unknown>[]; lookups: LookupMap }> {
     try {
-      const res = await fetch(ObApi.instance!.url(`/api/${entity}s?limit=200`));
-      const data = await res.json();
-      return data.items || [];
+      const res = await ObApi.instance!.request("/commerce/catalog");
+      if (!res.ok) return { items: [], lookups: {} };
+      const data = await res.json() as CommerceCatalogPayload;
+      const lookups: LookupMap = {};
+      for (const [field, values] of Object.entries(data.lookups || {})) {
+        lookups[field] = new Map(Object.entries(values));
+      }
+      return { items: data.items || [], lookups };
     } catch {
-      return [];
+      return { items: [], lookups: {} };
     }
-  }
-
-  private async _variantLookups(api: ObApi, config: CommerceConfig): Promise<LookupMap> {
-    const catalogEntity = config.catalog?.entity || "";
-    const fks = catalogEntity ? api.getForeignKeys(catalogEntity) : {};
-    const fields = config.catalog?.variantFields || [];
-    const lookups: LookupMap = {};
-    await Promise.all(fields.map(async (ref) => {
-      const entity = fks[ref.field];
-      if (!entity) return;
-      const rows = await this._rows(entity);
-      lookups[ref.field] = new Map(rows.map((row) => [String(row.id), labelFor(row)]));
-    }));
-    return lookups;
   }
 
   private _availableCatalog(items: Record<string, unknown>[], config: CommerceConfig): Record<string, unknown>[] {
@@ -150,10 +144,7 @@ export class ObCommerce extends HTMLElement {
       }
     }
 
-    const [catalogRows, lookups] = await Promise.all([
-      this._rows(catalogEntity),
-      this._variantLookups(api, config),
-    ]);
+    const { items: catalogRows, lookups } = await this._catalogPayload();
     if (renderSeq !== this._renderSeq) return;
     const catalog = this._availableCatalog(catalogRows, config);
     this._availableItems = catalog;

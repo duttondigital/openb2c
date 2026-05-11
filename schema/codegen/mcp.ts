@@ -121,6 +121,16 @@ export function genMcpServer(schema: Schema): string {
 
   if (hasCommerceWorkflow(schema)) {
     tools.push(`    {
+      name: "list_commerce_catalog",
+      description: "List configured ecommerce catalog items",
+      inputSchema: { type: "object", properties: {} },
+    }`);
+    handlers.push(`      case "list_commerce_catalog":
+        const commerceCatalogResult = S.listCommerceCatalog(db);
+        if (!commerceCatalogResult.ok) return { content: [{ type: "text", text: commerceCatalogResult.error }], isError: true };
+        return { content: [{ type: "text", text: JSON.stringify(commerceCatalogResult.data, null, 2) }] };`);
+
+    tools.push(`    {
       name: "checkout_cart",
       description: "Checkout a configured ecommerce cart",
       inputSchema: {

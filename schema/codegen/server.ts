@@ -46,6 +46,10 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
   }},` : "";
   return [
 `  // Generic ecommerce
+  { method: "GET", path: "/commerce/catalog", handler: () => {
+    const r = S.listCommerceCatalog(db);
+    return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
+  }},
   { method: "POST", path: "/commerce/checkout", handler: async (req, _, auth, signal) => {
     const input = await readJson<S.CommerceCheckoutInput>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });

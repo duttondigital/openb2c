@@ -167,6 +167,20 @@ export function genOpenAPI(schema: Schema): string {
       },
       required: ["item_id"],
     };
+    schemas.CommerceCatalogResult = {
+      type: "object",
+      properties: {
+        items: { type: "array", items: { type: "object", additionalProperties: true } },
+        lookups: {
+          type: "object",
+          additionalProperties: {
+            type: "object",
+            additionalProperties: { type: "string" },
+          },
+        },
+      },
+      required: ["items", "lookups"],
+    };
     schemas.CommerceCheckoutInput = {
       type: "object",
       properties: {
@@ -209,6 +223,14 @@ export function genOpenAPI(schema: Schema): string {
         responses: {
           "201": { description: "Order created", content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCheckoutResult" } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    };
+    paths["/commerce/catalog"] = {
+      get: {
+        summary: "List configured commerce catalog items",
+        responses: {
+          "200": { description: "Commerce catalog", content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCatalogResult" } } } },
         },
       },
     };
