@@ -3,6 +3,7 @@
  */
 import { ObApi } from "./ob-api";
 import { escapeAttr, escapeHtml } from "../format";
+import "./ob-account-summary";
 import "./ob-auth-panel";
 
 export class ObAuthPage extends HTMLElement {
@@ -33,11 +34,12 @@ export class ObAuthPage extends HTMLElement {
     await api.ready();
 
     const signedIn = api.authContext.userId !== null;
+    this.toggleAttribute("signed-in", signedIn);
     const returnTo = this._returnTo();
     const context = this._context(returnTo);
     const title = signedIn ? "Account" : "Sign in";
     const subtitle = signedIn
-      ? "Manage your current session."
+      ? "Manage your profile, activity, and session."
       : context === "admin"
         ? "Sign in to manage admin data."
         : returnTo
@@ -50,6 +52,7 @@ export class ObAuthPage extends HTMLElement {
           <h1 id="auth-page-title">${escapeHtml(title)}</h1>
           <p>${escapeHtml(subtitle)}</p>
         </div>
+        ${signedIn ? "<ob-account-summary></ob-account-summary>" : ""}
         <ob-auth-panel hide-header context="${escapeAttr(context)}" ${returnTo ? `return-to="${escapeAttr(returnTo)}"` : ""}></ob-auth-panel>
       </section>
     `;

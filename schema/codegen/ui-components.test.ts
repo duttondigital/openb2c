@@ -64,6 +64,7 @@ describe("generated UI web components", () => {
     expect(index).toContain('export { ObAuthMenu }');
     expect(index).toContain('export { ObAuthPage }');
     expect(index).toContain('export { ObAuthPanel }');
+    expect(index).toContain('export { ObAccountSummary }');
     expect(index).toContain('export { ObRouteOutlet }');
     expect(index).toContain('export { ObAdminRouteOutlet }');
   });
@@ -76,6 +77,7 @@ describe("generated UI web components", () => {
     const authMenu = await Bun.file(join(UI_DIR, "components", "ob-auth-menu.ts")).text();
     const authPanel = await Bun.file(join(UI_DIR, "components", "ob-auth-panel.ts")).text();
     const authPage = await Bun.file(join(UI_DIR, "components", "ob-auth-page.ts")).text();
+    const accountSummary = await Bun.file(join(UI_DIR, "components", "ob-account-summary.ts")).text();
     const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
@@ -105,7 +107,11 @@ describe("generated UI web components", () => {
     expect(authPanel).toContain("clearAuthContext({ revoke: true })");
     expect(authPanel).toContain('location.hash = "#/account"');
     expect(authPage).toContain("./ob-auth-panel");
+    expect(authPage).toContain("./ob-account-summary");
     expect(authPage).toContain("<ob-auth-panel hide-header");
+    expect(accountSummary).toContain("/api/users/${this._userId}");
+    expect(accountSummary).toContain("user_id=${encodeURIComponent");
+    expect(accountSummary).toContain('data-form="profile"');
     expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("restoreAuthContext");
     expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("setSessionAuth");
     expect(await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text()).toContain("bearerToken");
@@ -200,6 +206,7 @@ describe("generated UI web components", () => {
       expect(publicBundle).toContain("ob-auth-menu");
       expect(publicBundle).toContain("ob-auth-page");
       expect(publicBundle).toContain("ob-auth-panel");
+      expect(publicBundle).toContain("ob-account-summary");
       expect(publicBundle).not.toContain("ob-admin-app");
       expect(publicBundle).not.toContain("ob-entity-list");
       expect(publicBundle).not.toContain("ob-entity-form");
@@ -212,6 +219,7 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-auth-menu");
       expect(adminBundle).toContain("ob-auth-page");
       expect(adminBundle).toContain("ob-auth-panel");
+      expect(adminBundle).toContain("ob-account-summary");
       expect(adminBundle).not.toContain("ob-commerce");
       expect(publicEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);
       expect(adminEntryBytes.byteLength).toBeLessThanOrEqual(14 * 1024);

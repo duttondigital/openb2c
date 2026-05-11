@@ -274,6 +274,9 @@ const authPage = `
     max-width: 520px;
     margin: 0 auto;
   }
+  ob-auth-page[signed-in] {
+    max-width: 860px;
+  }
   ob-auth-page .page-header {
     margin-bottom: 18px;
   }
@@ -287,6 +290,107 @@ const authPage = `
     font-size: 14px;
     line-height: 1.45;
     margin-top: 8px;
+  }
+`;
+
+const accountSummary = `
+  :host(ob-account-summary) {
+    display: block;
+    margin-bottom: 16px;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  :host(ob-account-summary) .account-grid {
+    display: grid;
+    gap: 16px;
+  }
+  :host(ob-account-summary) .account-section {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-account-summary) .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :host(ob-account-summary) h2 {
+    font-size: 17px;
+    line-height: 1.25;
+    font-weight: 800;
+  }
+  :host(ob-account-summary) h3 {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  :host(ob-account-summary) .section-header span,
+  :host(ob-account-summary) .empty,
+  :host(ob-account-summary) li span {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+  }
+  :host(ob-account-summary) .activity-group + .activity-group {
+    border-top: 1px solid var(--ob-border);
+    padding-top: 12px;
+  }
+  :host(ob-account-summary) ul {
+    display: grid;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  :host(ob-account-summary) li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 0;
+    border-top: 1px solid var(--ob-border-subtle, #ece7df);
+  }
+  :host(ob-account-summary) li:first-child {
+    border-top: 0;
+  }
+  :host(ob-account-summary) li strong,
+  :host(ob-account-summary) li span {
+    display: block;
+  }
+  :host(ob-account-summary) .badge {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border-radius: var(--ob-radius);
+    border: 1px solid var(--ob-border);
+    color: var(--ob-text);
+    font-size: 12px;
+    font-weight: 800;
+    background: var(--ob-bg-subtle);
+  }
+  :host(ob-account-summary) .badge.success {
+    border-color: color-mix(in srgb, var(--ob-success, #16a34a) 35%, var(--ob-border));
+    color: var(--ob-success, #16a34a);
+  }
+  :host(ob-account-summary) .badge.warning {
+    border-color: color-mix(in srgb, var(--ob-warning, #ca8a04) 35%, var(--ob-border));
+    color: var(--ob-warning, #ca8a04);
+  }
+  :host(ob-account-summary) .badge.danger {
+    border-color: color-mix(in srgb, var(--ob-danger, #dc2626) 35%, var(--ob-border));
+    color: var(--ob-danger, #dc2626);
+  }
+  @media (max-width: 640px) {
+    :host(ob-account-summary) .section-header,
+    :host(ob-account-summary) li {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 `;
 
@@ -719,6 +823,7 @@ export function genPublicStylesheet(): string {
     authMenu,
     authPanel,
     authPage,
+    accountSummary,
     commerce,
   ]);
 }
@@ -737,6 +842,8 @@ export function genAdminStylesheet(): string {
     detail,
     authMenu,
     authPanel,
+    authPage,
+    accountSummary,
     nav,
     entityList,
     entityForm,
