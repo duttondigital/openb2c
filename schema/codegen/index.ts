@@ -19,6 +19,7 @@ export { genEffectsInterface } from "./effects";
 export { genOpenAPI } from "./openapi";
 export { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
 export { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
+export { assertValidSchema, formatSchemaDiagnostics, validateSchema, SchemaValidationError } from "./validation";
 
 import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { extname, isAbsolute, join, resolve } from "path";
@@ -34,10 +35,20 @@ import { genOpenAPI } from "./openapi";
 import { genAdminAppShell, genPublicAppShell } from "./ui";
 import { genEnvExample } from "./config";
 import { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
+import { assertValidSchema, formatSchemaDiagnostics, SchemaValidationError } from "./validation";
 
 if (import.meta.main) {
   const input = await Bun.stdin.text();
   const schema: Schema = JSON.parse(input);
+  try {
+    assertValidSchema(schema);
+  } catch (err) {
+    if (err instanceof SchemaValidationError) {
+      console.error(formatSchemaDiagnostics(err.diagnostics));
+      process.exit(1);
+    }
+    throw err;
+  }
 
   // Accept output directory as first argument, default to src/generated for backward compatibility
   const outDir = Bun.argv[2] || join(import.meta.dir, "..", "..", "src", "generated");
