@@ -153,6 +153,32 @@ function operationPolicies(schema: Schema): Record<string, Record<string, unknow
   return policies;
 }
 
+function operationAuditRequirement(schema: Schema, entity: string, action: string, op: Operation): Record<string, unknown> | null {
+  const entityAudit = schema.audit?.entities?.[entity];
+  const explicit = op.audit || {};
+  const required = Boolean(explicit.required || entityAudit?.operations?.includes(action));
+  if (!required) return null;
+  return {
+    required: true,
+    category: explicit.category || entityAudit?.category || "data",
+    ...(explicit.reason || entityAudit?.reason ? { reason: explicit.reason || entityAudit?.reason } : {}),
+  };
+}
+
+function auditRequirements(schema: Schema): Record<string, Record<string, unknown>> {
+  const requirements: Record<string, Record<string, unknown>> = {};
+  for (const entity of Object.keys(schema.tables)) {
+    for (const [action, op] of Object.entries(operationsForEntity(schema, entity))) {
+      if (action === "read") continue;
+      const audit = operationAuditRequirement(schema, entity, action, op);
+      if (!audit) continue;
+      requirements[entity] ||= {};
+      requirements[entity][action] = audit;
+    }
+  }
+  return requirements;
+}
+
 function selfServiceScopes(schema: Schema): string[] {
   const scopes = new Set<string>();
   for (const entity of Object.keys(schema.tables)) {
@@ -236,6 +262,7 @@ function genServiceImports(schema: Schema): string {
   const policy = JSON.stringify(operationPolicies(schema), null, 2);
   const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
   const concurrency = JSON.stringify(concurrencyFields(schema), null, 2);
+  const audit = JSON.stringify(auditRequirements(schema), null, 2);
   const validationRules = JSON.stringify(fieldValidationRules(schema), null, 2);
   const crossFieldCases = crossFieldValidationCases(schema);
   const crossFieldSwitchCases = `${crossFieldCases}${crossFieldCases ? "\n" : ""}    default:\n      return null;`;
@@ -289,6 +316,75 @@ export interface ListOptions {
   sort?: string;      // column name
   order?: "asc" | "desc";
   filter?: Record<string, unknown>;  // column: value filters
+}
+
+export interface AuditContext {
+  source?: "rest" | "mcp" | "service";
+}
+
+export interface AuditRequirement {
+  required: true;
+  category: "data" | "workflow" | "security" | "payment" | "system";
+  reason?: string;
+}
+
+const AUDIT_REQUIREMENTS: Record<string, Record<string, AuditRequirement>> = ${audit};
+let auditLogReady = false;
+
+function json(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
+
+export function ensureAuditLogTable(db: Database) {
+  if (auditLogReady) return;
+  db.run(\`
+    CREATE TABLE IF NOT EXISTS openb2c_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity TEXT NOT NULL,
+      action TEXT NOT NULL,
+      record_id INTEGER,
+      category TEXT NOT NULL,
+      reason TEXT,
+      actor_user_id INTEGER,
+      source TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  \`);
+  db.run("CREATE INDEX IF NOT EXISTS openb2c_audit_log_entity_record ON openb2c_audit_log (entity, record_id, created_at)");
+  db.run("CREATE INDEX IF NOT EXISTS openb2c_audit_log_actor ON openb2c_audit_log (actor_user_id, created_at)");
+  auditLogReady = true;
+}
+
+export function writeAuditLog(
+  db: Database,
+  entity: string,
+  action: string,
+  recordId: number | null,
+  auth: T.AuthContext,
+  result: unknown,
+  context: AuditContext = {},
+): { logged: boolean; id?: number } {
+  const requirement = AUDIT_REQUIREMENTS[entity]?.[action];
+  if (!requirement?.required) return { logged: false };
+  ensureAuditLogTable(db);
+  const row = db.query<{ id: number }, [string, string, number | null, string, string | null, number | null, string, string]>(\`
+    INSERT INTO openb2c_audit_log
+      (entity, action, record_id, category, reason, actor_user_id, source, result_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  \`).get(
+    entity,
+    action,
+    recordId,
+    requirement.category,
+    requirement.reason ?? null,
+    auth.userId,
+    context.source || "service",
+    json(result),
+  );
+  if (!row) throw new Error("failed to write audit log");
+  return { logged: true, id: row.id };
 }
 
 // ============================================================================
@@ -1102,7 +1198,7 @@ export function count${Entity}s(db: Database, filter?: Record<string, unknown>, 
   return (db.query(\`SELECT COUNT(*) as n FROM ${tableName} \${where}\`).get(...params) as { n: number }).n;
 }
 
-export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ id: number }> {
+export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, auditContext: AuditContext = {}): Result<{ id: number }> {
   const inputRecord = input as Record<string, unknown>;
   for (const field of operationRelationshipFields("${entity}", "create")) {
     if (${entity}Cols.has(field) && inputRecord[field] === undefined && auth.userId !== null) {
@@ -1125,16 +1221,21 @@ export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.A
   const vals: unknown[] = [];
   ${inputCols.map(c => `if (input.${c} !== undefined) { cols.push("${c}"); vals.push(input.${c}); }`).join("\n  ")}
 
-  const result = db.query(\`
-    INSERT INTO ${tableName} (\${cols.join(", ")})
-    VALUES (\${cols.map(() => "?").join(", ")})
-    RETURNING id
-  \`).get(...vals) as { id: number };
+  const create = db.transaction(() => {
+    const result = db.query(\`
+      INSERT INTO ${tableName} (\${cols.join(", ")})
+      VALUES (\${cols.map(() => "?").join(", ")})
+      RETURNING id
+    \`).get(...vals) as { id: number };
+    writeAuditLog(db, "${entity}", "create", result.id, auth, { id: result.id }, auditContext);
+    return result;
+  });
+  const result = create();
 
   return { ok: true, data: { id: result.id } };
 }
 
-export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): Result<{ id: number }> {
+export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null, auditContext: AuditContext = {}): Result<{ id: number }> {
   const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
   if (!matchesIfMatch("${entity}", existing as Record<string, unknown>, ifMatch)) {
@@ -1161,13 +1262,18 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
 
   if (sets.length > 0) {
     vals.push(id);
-    db.query(\`UPDATE ${tableName} SET \${sets.join(", ")} WHERE id = ?\`).run(...vals);
+    const result = { id };
+    const update = db.transaction(() => {
+      db.query(\`UPDATE ${tableName} SET \${sets.join(", ")} WHERE id = ?\`).run(...vals);
+      writeAuditLog(db, "${entity}", "update", id, auth, result, auditContext);
+    });
+    update();
   }
 
   return { ok: true, data: { id } };
 }
 
-export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): Result<{ deleted: true }> {
+export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null, auditContext: AuditContext = {}): Result<{ deleted: true }> {
   const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
   if (!matchesIfMatch("${entity}", existing as Record<string, unknown>, ifMatch)) {
@@ -1177,8 +1283,13 @@ export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = 
     return authorizationError("${entity}", "delete", auth);
   }
 
-  db.query("DELETE FROM ${tableName} WHERE id = ?").run(id);
-  return { ok: true, data: { deleted: true } };
+  const result = { deleted: true as const };
+  const remove = db.transaction(() => {
+    db.query("DELETE FROM ${tableName} WHERE id = ?").run(id);
+    writeAuditLog(db, "${entity}", "delete", id, auth, result, auditContext);
+  });
+  remove();
+  return { ok: true, data: result };
 }
 `;
 }
@@ -1238,8 +1349,10 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
     return "";
   }).filter(Boolean).join(",\n");
 
+  const resultStatus = setEntries.find(([k]) => k === "status") ? JSON.stringify(setEntries.find(([k]) => k === "status")![1]) : '"updated"';
+
   return `
-export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): OpResult<{ id: number; status: string }> {
+export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null, auditContext: AuditContext = {}): OpResult<{ id: number; status: string }> {
   const ${entity} = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!${entity}) return { ok: false, error: "not found", code: "not_found" };
   if (!matchesIfMatch("${entity}", ${entity} as Record<string, unknown>, ifMatch)) {
@@ -1260,12 +1373,13 @@ ${relLoads}
   const run = db.transaction(() => {
     ${setCode}
 ${cascadeCode}
+    writeAuditLog(db, "${entity}", "${opName}", id, auth, { id, status: ${resultStatus} }, auditContext);
   });
   run();
 
   return {
     ok: true,
-    data: { id, status: ${setEntries.find(([k]) => k === "status") ? JSON.stringify(setEntries.find(([k]) => k === "status")![1]) : '"updated"'} },
+    data: { id, status: ${resultStatus} },
     effects: [
 ${effectsCode}
     ],

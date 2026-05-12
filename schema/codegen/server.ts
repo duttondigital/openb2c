@@ -257,7 +257,7 @@ export function genRoutes(schema: Schema): string {
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const rawKey = S.generateApiKey();
     const keyHash = await S.hashApiKey(rawKey);
-    const r = S.createApiKey(db, { ...input.data, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) }, auth);
+    const r = S.createApiKey(db, { ...input.data, key_hash: keyHash, key_prefix: rawKey.slice(0, 11) }, auth, { source: "rest" });
     if (!r.ok) return corsResponse(r, { status: S.statusForResult(r) });
     // Return raw key ONCE - it cannot be retrieved again
     return corsResponse({ id: r.data.id, key: rawKey, key_prefix: rawKey.slice(0, 11) }, { status: 201 });
@@ -266,7 +266,7 @@ export function genRoutes(schema: Schema): string {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth, signal) => {
     const input = await readTypedJson<T.${Entity}Input>(req, signal, REQUEST_SCHEMAS["${entity}"].create);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
-    const r = S.create${Entity}(db, input.data, auth);
+    const r = S.create${Entity}(db, input.data, auth, { source: "rest" });
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     }
@@ -274,11 +274,11 @@ export function genRoutes(schema: Schema): string {
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth, signal) => {
     const input = await readTypedJson<Partial<T.${Entity}Input>>(req, signal, REQUEST_SCHEMAS["${entity}"].update, { partial: true });
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
-    const r = S.update${Entity}(db, +p.id, input.data, auth, req.headers.get("If-Match"));
+    const r = S.update${Entity}(db, +p.id, input.data, auth, req.headers.get("If-Match"), { source: "rest" });
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
     routes.push(`  { method: "DELETE", path: "/api/${entity}s/:id", handler: (req, p, auth) => {
-    const r = S.delete${Entity}(db, +p.id, auth, req.headers.get("If-Match"));
+    const r = S.delete${Entity}(db, +p.id, auth, req.headers.get("If-Match"), { source: "rest" });
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
 
@@ -286,7 +286,7 @@ export function genRoutes(schema: Schema): string {
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
       routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: async (req, p, auth) => {
-    const r = S.${OpName}${Entity}(db, +p.id, auth, req.headers.get("If-Match"));
+    const r = S.${OpName}${Entity}(db, +p.id, auth, req.headers.get("If-Match"), { source: "rest" });
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",

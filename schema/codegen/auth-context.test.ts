@@ -62,8 +62,8 @@ describe("auth context generation", () => {
     expect(services).toContain("return hasScope(auth, policy.scope) && matchesRelationship(auth, policy, record);");
     expect(services).toContain("findNoteById(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("findAllNotes(db: Database, opts: ListOptions = {}, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
-    expect(services).toContain("createNote(db: Database, input: T.NoteInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
-    expect(services).toContain("publishNote(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null)");
+    expect(services).toContain("createNote(db: Database, input: T.NoteInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, auditContext: AuditContext = {})");
+    expect(services).toContain("publishNote(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null, auditContext: AuditContext = {})");
     expect(services).not.toContain("principals");
     expect(services).not.toContain("roles");
     expect(services).not.toContain("claims");
@@ -83,12 +83,12 @@ describe("auth context generation", () => {
     expect(server).not.toContain("principals:");
     expect(server).not.toContain("roles:");
     expect(server).toContain("S.findAllNotes(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined }, auth)");
-    expect(server).toContain("S.publishNote(db, +p.id, auth, req.headers.get(\"If-Match\"))");
+    expect(server).toContain("S.publishNote(db, +p.id, auth, req.headers.get(\"If-Match\"), { source: \"rest\" })");
     expect(server).toContain("result.route.handler(req, result.params, authContext, signal)");
 
     expect(mcp).toContain("const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;");
     expect(mcp).toContain("S.findAllNotes(db, {}, auth)");
-    expect(mcp).toContain("S.createNote(db, args as T.NoteInput, auth)");
-    expect(mcp).toContain("S.publishNote(db, args.id as number, auth)");
+    expect(mcp).toContain("S.createNote(db, args as T.NoteInput, auth, { source: \"mcp\" })");
+    expect(mcp).toContain("S.publishNote(db, args.id as number, auth, null, { source: \"mcp\" })");
   });
 });

@@ -1,6 +1,6 @@
 # Audit Metadata
 
-Audit metadata declares which entity and operation actions must be logged. It does not create the audit log table or write audit entries by itself; generated persistence for audit events is tracked separately in the REST API checklist.
+Audit metadata declares which entity and operation actions must be logged. Generated REST and MCP write paths use this metadata to persist audit entries for successful create, update, delete, and custom operation calls.
 
 Entity-level requirements declare the default audited operations:
 
@@ -30,3 +30,5 @@ Generated OpenAPI exposes audit metadata in two places:
 - `x-openb2c-audit` on individual REST operations marks endpoints that require audit logging.
 
 When both entity-level and operation-level metadata apply, the operation-level category and reason win.
+
+At runtime, generated services create `openb2c_audit_log` on first use. Each row records the entity, action, record ID, category, reason, actor user ID when available, source (`rest`, `mcp`, or `service`), result JSON, and creation time.

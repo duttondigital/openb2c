@@ -70,7 +70,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
     handlers.push(`      case "create_${entity}":
-        const create${Entity}Result = S.create${Entity}(db, args as T.${Entity}Input, auth);
+        const create${Entity}Result = S.create${Entity}(db, args as T.${Entity}Input, auth, { source: "mcp" });
         if (!create${Entity}Result.ok) return { content: [{ type: "text", text: create${Entity}Result.error }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(create${Entity}Result.data) }] };`);
 
@@ -85,7 +85,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
     handlers.push(`      case "delete_${entity}":
-        const delete${Entity}Result = S.delete${Entity}(db, args.id as number, auth);
+        const delete${Entity}Result = S.delete${Entity}(db, args.id as number, auth, null, { source: "mcp" });
         if (!delete${Entity}Result.ok) return { content: [{ type: "text", text: delete${Entity}Result.error }], isError: true };
         return { content: [{ type: "text", text: "Deleted" }] };`);
 
@@ -102,7 +102,7 @@ export function genMcpServer(schema: Schema): string {
       },
     }`);
       handlers.push(`      case "${opName}_${entity}":
-        const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number, auth);
+        const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number, auth, null, { source: "mcp" });
         if (!${OpName}${Entity}Result.ok) return { content: [{ type: "text", text: ${OpName}${Entity}Result.error }], isError: true };
         await FX.dispatchEffects(db, ${OpName}${Entity}Result.effects || [], {
           source: "mcp",

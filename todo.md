@@ -148,7 +148,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Generate proper response schemas for create, update, delete, and custom operations.
 - [x] Add consistent `404`, `409`, `422`, and `500` response handling.
 - [x] Add optimistic concurrency or updated-at checks where needed.
-- [ ] Add audit logging for writes and custom operations.
+- [x] Add audit logging for writes and custom operations.
 - [ ] Add API versioning strategy.
 
 ### Generated MCP Server
