@@ -25,3 +25,7 @@ These counters reset on process restart. For longer retention, collect the struc
 On boot, generated REST servers emit one `startup diagnostics` JSON log after config validation, database bootstrap, migrations, seed data, and registry initialization complete.
 
 The diagnostics report app version, redacted runtime config, migration statuses, integration providers, and whether each configured environment variable is present. Secret values are never logged.
+
+## Shutdown
+
+Generated REST servers handle `SIGINT` and `SIGTERM` by logging `shutdown requested`, stopping the Bun server, closing the SQLite database handle, logging `shutdown complete`, and exiting with status `0`. Shutdown failures are logged and exit with status `1`.

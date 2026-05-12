@@ -474,6 +474,40 @@ describe("generated request safety", () => {
     }
   });
 
+  test("generated server shuts down cleanly on SIGTERM", async () => {
+    const dir = writeGenerated();
+    const proc = Bun.spawn([process.execPath, join(dir, "server.ts")], {
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        DB_PATH: join(dir, "shutdown.sqlite"),
+        PORT: "0",
+        AUTH_ENABLED: "false",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = new Response(proc.stdout).text();
+    const stderr = new Response(proc.stderr).text();
+
+    await delay(150);
+    proc.kill("SIGTERM");
+    const exitCode = await Promise.race([
+      proc.exited,
+      delay(2_000).then(() => {
+        proc.kill("SIGKILL");
+        return -1;
+      }),
+    ]);
+
+    expect(exitCode).toBe(0);
+    const out = await stdout;
+    expect(out).toContain('"msg":"shutdown requested"');
+    expect(out).toContain('"signal":"SIGTERM"');
+    expect(out).toContain('"msg":"shutdown complete"');
+    expect(await stderr).toBe("");
+  });
+
   test("MCP HTTP transport uses the same configurable CORS policy", () => {
     const mcp = genMcpServer(schema);
 

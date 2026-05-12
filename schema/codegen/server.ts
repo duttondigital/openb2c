@@ -1303,6 +1303,26 @@ export const server = Bun.serve({
   },
 });
 
+let shutdownRequested = false;
+
+function gracefulShutdown(signal: string) {
+  if (shutdownRequested) return;
+  shutdownRequested = true;
+  log("info", "shutdown requested", { signal });
+  try {
+    server.stop(true);
+    db.close();
+    log("info", "shutdown complete", { signal });
+    process.exit(0);
+  } catch (err) {
+    log("error", "shutdown failed", { signal, error: String(err) });
+    process.exit(1);
+  }
+}
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
 log("info", "server started", { app: APP_CONFIG.slug, port: server.port, db: DB_PATH, auth: AUTH_ENABLED });
 `;
 }
