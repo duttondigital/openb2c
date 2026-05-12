@@ -44,6 +44,8 @@ Local stdio MCP execution is treated as trusted local system execution. It recei
 
 HTTP MCP execution is a remote transport and requires `Authorization: Bearer <token>` by default after session initialization. The bearer token can be an identity session token or an API key; the generated HTTP transport verifies it and passes the resulting `{ userId, scopes }` context into `handleRequest`. Set `MCP_HTTP_AUTH_ENABLED=false` only for local development.
 
+Generated MCP `tools/list` responses are permission-aware. Tools are only advertised when the current auth context has the relevant operation scope and, for relationship-scoped operations, an authenticated `userId` that can be checked against records at call time. Tool calls repeat the same collection-level preflight before invoking generated services, while the service layer remains the final record-level authorization authority.
+
 ## Certificate Registry State
 
 Certificate authentication always verifies two cryptographic signatures:

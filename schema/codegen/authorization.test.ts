@@ -278,6 +278,37 @@ describe("generated authorization enforcement", () => {
     expect(JSON.parse(allowed.content[0].text)).toEqual({ id: 2, status: "confirmed" });
   });
 
+  test("MCP tool discovery and calls respect scopes and relationship-scoped resources", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "mcp-discovery.sqlite");
+    const { handleRequest, callTool } = await import(pathToFileURL(join(dir, "mcp.ts")).href);
+    const namesFor = async (auth: { userId: number | null; scopes: string[] }) => {
+      const res = await handleRequest({ jsonrpc: "2.0", id: 1, method: "tools/list" }, auth);
+      return ((res.result as { tools: { name: string }[] }).tools).map(tool => tool.name);
+    };
+
+    const readTools = await namesFor({ userId: 1, scopes: ["ticket.read"] });
+    expect(readTools).toContain("list_tickets");
+    expect(readTools).toContain("get_ticket");
+    expect(readTools).not.toContain("create_ticket");
+    expect(readTools).not.toContain("delete_ticket");
+    expect(readTools).not.toContain("confirm_ticket");
+
+    const relationshipWithoutUser = await namesFor({ userId: null, scopes: ["ticket.confirm"] });
+    expect(relationshipWithoutUser).not.toContain("confirm_ticket");
+
+    const confirmTools = await namesFor({ userId: 1, scopes: ["ticket.confirm"] });
+    expect(confirmTools).toContain("confirm_ticket");
+    expect(confirmTools).not.toContain("list_tickets");
+
+    const systemTools = await namesFor({ userId: null, scopes: ["*"] });
+    expect(systemTools).toEqual(expect.arrayContaining(["list_tickets", "create_ticket", "delete_ticket", "confirm_ticket"]));
+
+    const denied = await callTool("confirm_ticket", { id: 1 }, { userId: 1, scopes: ["ticket.read"] });
+    expect(denied.isError).toBe(true);
+    expect(denied.content[0].text).toContain("not authorized");
+  });
+
   test("MCP transport auth keeps local stdio trusted and protects HTTP with bearer credentials", async () => {
     const mcpSource = genMcpServer(schema);
     expect(mcpSource).toContain("Stdio transport uses trusted local system auth");

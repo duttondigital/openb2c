@@ -79,6 +79,7 @@ export function genMcpServer(schema: Schema): string {
   const app = getAppMetadata(schema);
   const entities = Object.keys(schema.tables);
   const tools: string[] = [];
+  const toolAuthz: string[] = [];
   const handlers: string[] = [];
 
   for (const entity of entities) {
@@ -110,9 +111,8 @@ export function genMcpServer(schema: Schema): string {
       description: ${JSON.stringify(listDescription)},
       inputSchema: { type: "object", properties: {} },
     }`);
+    toolAuthz.push(`  "list_${entity}s": { entity: "${entity}", action: "read" }`);
     handlers.push(`      case "list_${entity}s":
-        const list${Entity}Authz = S.authorizeCollection("${entity}", "read", auth);
-        if (!list${Entity}Authz.ok) return { content: [{ type: "text", text: list${Entity}Authz.error }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(S.findAll${Entity}s(db, {}, auth), null, 2) }] };`);
 
     // Get tool
@@ -126,9 +126,8 @@ export function genMcpServer(schema: Schema): string {
         required: ["id"],
       },
     }`);
+    toolAuthz.push(`  "get_${entity}": { entity: "${entity}", action: "read" }`);
     handlers.push(`      case "get_${entity}":
-        const get${Entity}Authz = S.authorizeCollection("${entity}", "read", auth);
-        if (!get${Entity}Authz.ok) return { content: [{ type: "text", text: get${Entity}Authz.error }], isError: true };
         const ${entity} = S.find${Entity}ById(db, args.id as number, auth);
         if (!${entity}) return { content: [{ type: "text", text: "Not found" }], isError: true };
         return { content: [{ type: "text", text: JSON.stringify(${entity}, null, 2) }] };`);
@@ -144,6 +143,7 @@ export function genMcpServer(schema: Schema): string {
         required: ${JSON.stringify(requiredProps)},
       },
     }`);
+    toolAuthz.push(`  "create_${entity}": { entity: "${entity}", action: "create" }`);
     handlers.push(`      case "create_${entity}":
         const create${Entity}Result = S.create${Entity}(db, args as T.${Entity}Input, auth, { source: "mcp" });
         if (!create${Entity}Result.ok) return { content: [{ type: "text", text: create${Entity}Result.error }], isError: true };
@@ -160,6 +160,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["id"],
       },
     }`);
+    toolAuthz.push(`  "delete_${entity}": { entity: "${entity}", action: "delete" }`);
     handlers.push(`      case "delete_${entity}":
         const delete${Entity}Result = S.delete${Entity}(db, args.id as number, auth, null, { source: "mcp" });
         if (!delete${Entity}Result.ok) return { content: [{ type: "text", text: delete${Entity}Result.error }], isError: true };
@@ -178,6 +179,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["id"],
       },
     }`);
+      toolAuthz.push(`  "${opName}_${entity}": { entity: "${entity}", action: "${opName}" }`);
       handlers.push(`      case "${opName}_${entity}":
         const ${OpName}${Entity}Result = S.${OpName}${Entity}(db, args.id as number, auth, null, { source: "mcp" });
         if (!${OpName}${Entity}Result.ok) return { content: [{ type: "text", text: ${OpName}${Entity}Result.error }], isError: true };
@@ -228,6 +230,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["items"],
       },
     }`);
+    toolAuthz.push(`  "checkout_cart": { entity: "${schema.ecommerce?.order.entity}", action: "create" }`);
     handlers.push(`      case "checkout_cart":
         const checkoutCartResult = S.checkoutCommerceCart(db, args as S.CommerceCheckoutInput, auth);
         if (!checkoutCartResult.ok) return { content: [{ type: "text", text: checkoutCartResult.error }], isError: true };
@@ -249,6 +252,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["order_id"],
       },
     }`);
+    toolAuthz.push(`  "create_order_payment_intent": { entity: "${schema.ecommerce?.order.entity}", action: "update" }`);
     handlers.push(`      case "create_order_payment_intent":
         const orderPaymentIntentResult = S.createCommercePaymentIntent(db, args.order_id as number, auth);
         if (!orderPaymentIntentResult.ok) return { content: [{ type: "text", text: orderPaymentIntentResult.error }], isError: true };
@@ -266,6 +270,7 @@ export function genMcpServer(schema: Schema): string {
       description: "Expire stale commerce orders",
       inputSchema: { type: "object", properties: {} },
     }`);
+    toolAuthz.push(`  "expire_commerce_orders": { scope: "commerce.expire" }`);
     handlers.push(`      case "expire_commerce_orders":
         if (!S.hasScope(auth, "commerce.expire") && !S.hasScope(auth, "*")) return { content: [{ type: "text", text: "forbidden" }], isError: true };
         const expireCommerceOrdersResult = S.expireCommerceOrders(db);
@@ -288,6 +293,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["performance_id"],
       },
     }`);
+    toolAuthz.push(`  "reserve_booking": { entity: "${schema.ecommerce?.order.entity}", action: "create" }`);
     handlers.push(`      case "reserve_booking":
         const reserveBookingResult = S.reserveBooking(db, args as S.ReserveBookingInput, auth);
         if (!reserveBookingResult.ok) return { content: [{ type: "text", text: reserveBookingResult.error }], isError: true };
@@ -309,6 +315,7 @@ export function genMcpServer(schema: Schema): string {
         required: ["booking_id"],
       },
     }`);
+    toolAuthz.push(`  "create_booking_payment_intent": { entity: "${schema.ecommerce?.order.entity}", action: "update" }`);
     handlers.push(`      case "create_booking_payment_intent":
         const paymentIntentResult = S.createPaymentIntentForBooking(db, args.booking_id as number, auth);
         if (!paymentIntentResult.ok) return { content: [{ type: "text", text: paymentIntentResult.error }], isError: true };
@@ -326,6 +333,7 @@ export function genMcpServer(schema: Schema): string {
       description: "Expire stale checkout bookings",
       inputSchema: { type: "object", properties: {} },
     }`);
+    toolAuthz.push(`  "expire_checkout_bookings": { scope: "booking.expire" }`);
     handlers.push(`      case "expire_checkout_bookings":
         if (!S.hasScope(auth, "booking.expire") && !S.hasScope(auth, "*")) return { content: [{ type: "text", text: "forbidden" }], isError: true };
         const expireCheckoutBookingsResult = S.expireCheckoutBookings(db);
@@ -356,6 +364,10 @@ const TOOLS = [
 ${tools.join(",\n")}
 ];
 
+const TOOL_AUTHZ = {
+${toolAuthz.join(",\n")}
+} as Record<string, { entity?: string; action?: string; scope?: string }>;
+
 interface McpRequest {
   jsonrpc: "2.0";
   id: number | string;
@@ -368,6 +380,23 @@ interface McpResponse {
   id: number | string;
   result?: unknown;
   error?: { code: number; message: string };
+}
+
+function authorizeTool(name: string, auth: T.AuthContext): { ok: true } | { ok: false; error: string } {
+  const rule = TOOL_AUTHZ[name];
+  if (!rule) return { ok: true };
+  if (rule.scope && !S.hasScope(auth, rule.scope) && !S.hasScope(auth, "*")) {
+    return { ok: false, error: \`not authorized to use \${name}\` };
+  }
+  if (rule.entity && rule.action) {
+    const authz = S.authorizeCollection(rule.entity, rule.action, auth);
+    if (!authz.ok) return { ok: false, error: authz.error };
+  }
+  return { ok: true };
+}
+
+function visibleTools(auth: T.AuthContext): typeof TOOLS {
+  return TOOLS.filter(tool => authorizeTool(tool.name, auth).ok) as typeof TOOLS;
 }
 
 export async function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CONTEXT): Promise<McpResponse> {
@@ -387,7 +416,7 @@ export async function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_A
       return {
         jsonrpc: "2.0",
         id: req.id,
-        result: { tools: TOOLS },
+        result: { tools: visibleTools(auth) },
       };
 
     case "tools/call": {
@@ -410,6 +439,9 @@ export async function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_A
 }
 
 export async function callTool(name: string, args: Record<string, unknown>, auth: T.AuthContext = MCP_AUTH_CONTEXT): Promise<{ content: { type: string; text: string }[]; isError?: boolean }> {
+  const toolAuthz = authorizeTool(name, auth);
+  if (!toolAuthz.ok) return { content: [{ type: "text", text: toolAuthz.error }], isError: true };
+
   switch (name) {
 ${handlers.join("\n")}
     default:
