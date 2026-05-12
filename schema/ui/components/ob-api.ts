@@ -128,6 +128,33 @@ export class ObApi extends HTMLElement {
     this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
   }
 
+  async setBearerAuth(bearerToken: string, options: { persist?: boolean } = {}): Promise<AuthContext> {
+    const token = bearerToken.trim();
+    if (!token) throw new Error("Bearer token is required");
+
+    this._bearerToken = token;
+    this._certificate = null;
+    this._privateKey = null;
+
+    const res = await this.request("/auth/context");
+    if (!res.ok) {
+      this._bearerToken = "";
+      const error = await res.json().catch(() => ({ error: "sign in failed" }));
+      throw new Error(error.error || "sign in failed");
+    }
+
+    const auth = await res.json() as AuthContext;
+    this.setAuthContext(auth, token);
+    if (options.persist === true) {
+      await this._saveStoredBearerSession(auth, token);
+    }
+    return auth;
+  }
+
+  async setApiKeyAuth(apiKey: string, options: { persist?: boolean } = {}): Promise<AuthContext> {
+    return this.setBearerAuth(apiKey, { persist: options.persist === true });
+  }
+
   async setSessionAuth(auth: AuthContext, bearerToken: string, expiresAt?: string, options: { persist?: boolean } = {}): Promise<AuthContext> {
     this.setAuthContext(auth, bearerToken);
     if (options.persist !== false) {

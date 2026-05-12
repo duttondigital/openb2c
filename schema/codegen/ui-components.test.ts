@@ -121,6 +121,8 @@ describe("generated UI web components", () => {
     expect(obApi).toContain("getOperationWorkflow");
     expect(obApi).toContain("getOperationPolicy");
     expect(obApi).toContain("restoreAuthContext");
+    expect(obApi).toContain("setBearerAuth");
+    expect(obApi).toContain("setApiKeyAuth");
     expect(obApi).toContain("setSessionAuth");
     expect(obApi).toContain("bearerToken");
     expect(obApi).toContain("indexedDB.open");
@@ -168,6 +170,8 @@ describe("generated UI web components", () => {
     expect(authPanel).toContain('data-action="logout"');
 
     expect(obApi).toContain('headers.set("Authorization", `Bearer ${this._bearerToken}`)');
+    expect(obApi).toContain('const res = await this.request("/auth/context");');
+    expect(obApi).toContain("return this.setBearerAuth(apiKey");
     expect(obApi).toContain('headers.set("X-Certificate", JSON.stringify(this._certificate))');
     expect(obApi).toContain('headers.set("X-Signature"');
     expect(obApi).toContain("restoreAuthContext");
