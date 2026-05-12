@@ -164,6 +164,10 @@ function webhookSignatureToleranceSeconds(): number {
   return Math.max(parseInt(process.env.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS || String(DEFAULT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS), 10) || DEFAULT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS, 1);
 }
 
+function fakeProvidersEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_FAKE_PROVIDERS === "true";
+}
+
 export async function webhookSigningHeaders(body: string): Promise<Record<string, string>> {
   if (!WEBHOOK_SIGNATURE_ENABLED) return {};
   const secret = process.env.WEBHOOK_SIGNING_SECRET;
@@ -237,7 +241,10 @@ export const defaultEffectHandlers: RuntimeEffectHandlers = {
     return { service, action };
   },
   async webhook(url, payload) {
-    if (!url) return { skipped: true, reason: "WEBHOOK_URL not configured" };
+    if (!url) {
+      if (fakeProvidersEnabled()) return { provider: "fake", kind: "webhook", id: "fake_webhook_" + crypto.randomUUID(), payload };
+      return { skipped: true, reason: "WEBHOOK_URL not configured" };
+    }
     const body = JSON.stringify(payload);
     const res = await fetch(url, {
       method: "POST",
@@ -249,7 +256,10 @@ export const defaultEffectHandlers: RuntimeEffectHandlers = {
   },
   async email(message) {
     const url = process.env.EMAIL_WEBHOOK_URL;
-    if (!url) return { skipped: true, reason: "EMAIL_WEBHOOK_URL not configured", message };
+    if (!url) {
+      if (fakeProvidersEnabled()) return { provider: "fake", kind: "email", id: "fake_email_" + crypto.randomUUID(), message };
+      return { skipped: true, reason: "EMAIL_WEBHOOK_URL not configured", message };
+    }
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -260,6 +270,14 @@ export const defaultEffectHandlers: RuntimeEffectHandlers = {
   },
   async payment(action, payload) {
     const provider = process.env.PAYMENT_PROVIDER || "local";
+    if (provider === "fake") {
+      return {
+        provider,
+        action,
+        id: \`fake_payment_\${crypto.randomUUID()}\`,
+        payload,
+      };
+    }
     if (provider !== "local" && !process.env.PAYMENT_API_KEY) {
       throw new Error("PAYMENT_API_KEY is required for configured payment provider");
     }

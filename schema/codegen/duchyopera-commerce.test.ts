@@ -550,4 +550,44 @@ describe("Duchy Opera commerce workflow", () => {
       clearEnv();
     }
   });
+
+  test("commerce payment intents support the fake provider for local development", async () => {
+    const schema = await loadDuchyOperaSchema();
+    const dir = writeGenerated(schema);
+    const services = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const dbPath = join(dir, "duchy-fake-provider.sqlite");
+    let db: Database | null = new Database(dbPath);
+    const auth = { userId: null, scopes: ["*"] };
+    process.env.PAYMENT_PROVIDER = "fake";
+
+    try {
+      for (const stmt of genSQL(schema.tables, schema.indexes).split(/;\s*\n/).filter(s => s.trim())) db.run(stmt);
+      db.close();
+      db = null;
+      seedDuchyOpera(dbPath);
+      db = new Database(dbPath);
+
+      const checkout = services.checkoutCommerceCart(db, {
+        user_id: 1,
+        items: [{ item_id: 1, quantity: 1 }],
+      }, auth);
+      expect(checkout.ok).toBe(true);
+
+      const intent = await services.createCommercePaymentIntent(db, checkout.data.order_id, auth);
+      expect(intent.ok).toBe(true);
+      expect(intent.data.provider).toBe("fake");
+      expect(intent.data.reference).toStartWith("fake_pi_");
+
+      const repeated = await services.createCommercePaymentIntent(db, checkout.data.order_id, auth);
+      expect(repeated.ok).toBe(true);
+      expect(repeated.data).toMatchObject({
+        provider: "fake",
+        reference: intent.data.reference,
+        client_secret: intent.data.client_secret,
+      });
+    } finally {
+      db?.close();
+      delete process.env.PAYMENT_PROVIDER;
+    }
+  });
 });

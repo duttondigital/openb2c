@@ -338,6 +338,7 @@ const PRODUCTION = process.env.NODE_ENV === "production";
 const ALLOW_INSECURE_AUTH_DISABLED = process.env.ALLOW_INSECURE_AUTH_DISABLED === "true";
 const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
 const ALLOW_EPHEMERAL_REGISTRY_KEYS = process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS === "true";
+const ALLOW_FAKE_PROVIDERS = process.env.ALLOW_FAKE_PROVIDERS === "true";
 const REQUIRED_PRODUCTION_ENV = ${JSON.stringify(requiredProductionEnv, null, 2)} as const;
 
 // Fields to exclude from API responses (sensitive data)
@@ -676,6 +677,53 @@ function identityOtpHtml(code: string): string {
   ].join("");
 }
 
+interface FakeEmail {
+  id: string;
+  provider: "fake";
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  challengeId?: number;
+  createdAt: string;
+}
+
+const FAKE_EMAILS: FakeEmail[] = [];
+
+function fakeProvidersEnabled(): boolean {
+  return !PRODUCTION || ALLOW_FAKE_PROVIDERS;
+}
+
+function fakeProviderBlocked(provider: string): boolean {
+  return PRODUCTION && !ALLOW_FAKE_PROVIDERS && (provider === "fake" || provider === "local");
+}
+
+function fakeProviderRequiredEnvBypass(name: string): boolean {
+  if (!ALLOW_FAKE_PROVIDERS) return false;
+  if (identityEmailProvider() === "fake" && (name === "RESEND_API_KEY" || name === "EMAIL_FROM")) return true;
+  const paymentProvider = (process.env.PAYMENT_PROVIDER || "").trim().toLowerCase();
+  if ((paymentProvider === "fake" || paymentProvider === "local") && name === "PAYMENT_API_KEY") return true;
+  return false;
+}
+
+async function sendFakeIdentityOtp(email: string, code: string, challengeId: number): Promise<S.Result<{ provider: string; id?: string }>> {
+  if (!fakeProvidersEnabled()) {
+    return { ok: false, error: "fake email provider is disabled", code: "internal_error" };
+  }
+  const id = "fake_email_" + crypto.randomUUID();
+  FAKE_EMAILS.push({
+    id,
+    provider: "fake",
+    to: email,
+    subject: identityOtpSubject(),
+    text: identityOtpText(code),
+    html: identityOtpHtml(code),
+    challengeId,
+    createdAt: new Date().toISOString(),
+  });
+  return { ok: true, data: { provider: "fake", id } };
+}
+
 async function sendResendIdentityOtp(email: string, code: string, challengeId: number): Promise<S.Result<{ provider: string; id?: string }>> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -724,6 +772,7 @@ async function sendResendIdentityOtp(email: string, code: string, challengeId: n
 
 async function sendIdentityChallengeEmail(email: string, code: string, challengeId: number): Promise<S.Result<{ provider: string; id?: string }>> {
   const provider = identityEmailProvider();
+  if (provider === "fake") return sendFakeIdentityOtp(email, code, challengeId);
   if (provider === "resend") return sendResendIdentityOtp(email, code, challengeId);
   return { ok: false, error: \`unsupported EMAIL_PROVIDER "\${provider}" for identity OTP delivery\`, code: "internal_error" };
 }
@@ -754,7 +803,15 @@ function validateProductionConfig() {
   if (!REGISTRY_PRIVATE_KEY && !REGISTRY_PUBLIC_KEY && !ALLOW_EPHEMERAL_REGISTRY_KEYS) {
     errors.push("REGISTRY_PRIVATE_KEY or REGISTRY_PUBLIC_KEY is required in production unless ALLOW_EPHEMERAL_REGISTRY_KEYS=true");
   }
+  if (fakeProviderBlocked(identityEmailProvider())) {
+    errors.push("EMAIL_PROVIDER=fake requires ALLOW_FAKE_PROVIDERS=true in production");
+  }
+  const configuredPaymentProvider = (process.env.PAYMENT_PROVIDER || "").trim().toLowerCase();
+  if (fakeProviderBlocked(configuredPaymentProvider)) {
+    errors.push("PAYMENT_PROVIDER local/fake requires ALLOW_FAKE_PROVIDERS=true in production");
+  }
   for (const name of REQUIRED_PRODUCTION_ENV) {
+    if (fakeProviderRequiredEnvBypass(name)) continue;
     if (!process.env[name]) errors.push(\`\${name} is required in production\`);
   }
   if (errors.length) {
@@ -785,6 +842,11 @@ const routes: Route[] = [
   { method: "POST", path: "/ops/effects/retry", handler: async (_, __, auth) => {
     if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
     return corsResponse(await FX.retryFailedEffects(db));
+  }},
+  { method: "GET", path: "/ops/fake-emails", handler: (_, __, auth) => {
+    if (!fakeProvidersEnabled()) return corsResponse({ error: "fake providers disabled", code: "not_found" }, { status: 404 });
+    if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    return corsResponse({ items: FAKE_EMAILS });
   }},
 
   // Authenticated session context
@@ -840,6 +902,9 @@ const routes: Route[] = [
         return corsResponse(delivery, { status: 502 });
       }
       return corsResponse({ challengeId: result.data.challengeId, message: "verification code sent to email" });
+    }
+    if (identityEmailProvider() === "fake") {
+      await sendIdentityChallengeEmail(email, result.data.code, result.data.challengeId);
     }
     return corsResponse({ challengeId: result.data.challengeId, code: result.data.code });
   }},

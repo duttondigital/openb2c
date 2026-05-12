@@ -43,7 +43,7 @@ const FALLBACK_INTEGRATIONS: IntegrationsConfig = {
     provider: "resend",
     description: "Production identity OTP email delivery.",
     env: {
-      EMAIL_PROVIDER: { description: "Email provider used for production identity OTP delivery. The first supported provider is Resend.", requiredInProduction: false, secret: false, example: "resend" },
+      EMAIL_PROVIDER: { description: "Email provider used for identity OTP delivery. Use resend for production or fake for local provider tests.", requiredInProduction: false, secret: false, example: "resend" },
       RESEND_API_KEY: { description: "Resend API key used to send production identity OTP emails.", requiredInProduction: true, secret: true },
       EMAIL_FROM: { description: "Verified sender address for production identity OTP emails.", requiredInProduction: true, secret: false, example: "OpenB2C <login@example.com>" },
       IDENTITY_OTP_SUBJECT: { description: "Optional subject line override for identity OTP emails.", requiredInProduction: false, secret: false },
@@ -61,7 +61,7 @@ const FALLBACK_INTEGRATIONS: IntegrationsConfig = {
     provider: "stripe",
     description: "Generated payment-intent provider.",
     env: {
-      PAYMENT_PROVIDER: { description: "Payment provider identifier.", requiredInProduction: true, secret: false, example: "stripe" },
+      PAYMENT_PROVIDER: { description: "Payment provider identifier. Use stripe for production or local/fake for development.", requiredInProduction: true, secret: false, example: "stripe" },
       PAYMENT_API_KEY: { description: "Payment provider API key. For Stripe, use a Stripe secret key.", requiredInProduction: true, secret: true },
       STRIPE_API_BASE: { description: "Optional Stripe API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.stripe.com" },
     },
@@ -117,6 +117,7 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
     { name: "REGISTRY_PRIVATE_KEY", description: "Hex-encoded Ed25519 private key for local certificate issuance.", requiredInProduction: false, secret: true },
     { name: "REGISTRY_PUBLIC_KEY", description: "Hex-encoded Ed25519 public key for external certificate registry verification.", requiredInProduction: false, secret: false },
     { name: "ALLOW_EPHEMERAL_REGISTRY_KEYS", description: "Explicitly allow ephemeral registry keys in production.", requiredInProduction: false, secret: false, example: "false" },
+    { name: "ALLOW_FAKE_PROVIDERS", description: "Explicitly allow local fake providers in production-like tests.", requiredInProduction: false, secret: false, example: "false" },
     { name: "MAX_REQUEST_BODY_BYTES", description: "Maximum JSON request body size.", requiredInProduction: false, secret: false },
     { name: "MAX_PAGE_LIMIT", description: "Maximum generated list endpoint page size.", requiredInProduction: false, secret: false },
     { name: "ROUTE_TIMEOUT_MS", description: "Per-route timeout in milliseconds.", requiredInProduction: false, secret: false },

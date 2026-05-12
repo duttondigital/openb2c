@@ -104,9 +104,11 @@ function clearServerEnv() {
   delete process.env.DB_PATH;
   delete process.env.PORT;
   delete process.env.AUTH_ENABLED;
+  delete process.env.ALLOW_INSECURE_AUTH_DISABLED;
   delete process.env.CORS_ORIGINS;
   delete process.env.REGISTRY_PUBLIC_KEY;
   delete process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS;
+  delete process.env.ALLOW_FAKE_PROVIDERS;
   delete process.env.EMAIL_PROVIDER;
   delete process.env.RESEND_API_KEY;
   delete process.env.RESEND_EMAILS_URL;
@@ -397,6 +399,66 @@ describe("identity hardening generation", () => {
     } finally {
       server?.stop(true);
       resend.stop(true);
+      clearServerEnv();
+      if (previousNodeEnv !== undefined) process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("fake identity email provider captures OTPs for production-like local tests", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const dir = writeGenerated();
+    let server: Bun.Server | null = null;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.DB_PATH = join(dir, "identity-fake-email.sqlite");
+      process.env.PORT = "0";
+      process.env.AUTH_ENABLED = "false";
+      process.env.ALLOW_INSECURE_AUTH_DISABLED = "true";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS = "true";
+      process.env.EMAIL_PROVIDER = "fake";
+      process.env.ALLOW_FAKE_PROVIDERS = "true";
+
+      ({ server } = await import(`${pathToFileURL(join(dir, "server.ts")).href}?fake-email=${Date.now()}`));
+      const base = `http://127.0.0.1:${server.port}`;
+      const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]) as CryptoKeyPair;
+      const publicKey = bytesToHex(await crypto.subtle.exportKey("raw", keypair.publicKey));
+
+      const challenge = await fetch(`${base}/identity/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "fake-login@example.test", publicKey }),
+      });
+      expect(challenge.status).toBe(200);
+      const challengeBody = await challenge.json() as { challengeId: number; message: string; code?: string };
+      expect(challengeBody.message).toBe("verification code sent to email");
+      expect(challengeBody.code).toBeUndefined();
+
+      const outbox = await fetch(`${base}/ops/fake-emails`);
+      expect(outbox.status).toBe(200);
+      const outboxBody = await outbox.json() as { items: Array<{ provider: string; to: string; text: string; challengeId: number }> };
+      expect(outboxBody.items).toHaveLength(1);
+      expect(outboxBody.items[0]).toMatchObject({
+        provider: "fake",
+        to: "fake-login@example.test",
+        challengeId: challengeBody.challengeId,
+      });
+      const code = outboxBody.items[0].text.match(/\b\d{6}\b/)?.[0];
+      expect(code).toBeDefined();
+
+      const signature = await signText(keypair.privateKey, code!);
+      const verified = await fetch(`${base}/identity/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ challengeId: challengeBody.challengeId, code, signature }),
+      });
+      expect(verified.status).toBe(200);
+      const verifiedBody = await verified.json() as { certificate: { email: string; publicKey: string }; sessionToken: string };
+      expect(verifiedBody.certificate).toMatchObject({ email: "fake-login@example.test", publicKey });
+      expect(verifiedBody.sessionToken).toStartWith("sess_");
+    } finally {
+      server?.stop(true);
       clearServerEnv();
       if (previousNodeEnv !== undefined) process.env.NODE_ENV = previousNodeEnv;
     }

@@ -181,7 +181,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Choose first payment provider and implement checkout or payment intent flow.
 - [x] Add webhook signing and verification.
 - [x] Add integration configuration metadata to Nix.
-- [ ] Add local fake providers for tests and development.
+- [x] Add local fake providers for tests and development.
 - [ ] Add integration contract tests.
 
 ### Observability And Operations

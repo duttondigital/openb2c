@@ -1522,9 +1522,9 @@ function parseStripeJson(body: string): Record<string, unknown> {
   }
 }
 
-function localPaymentIntent(reference?: string): Result<ProviderPaymentIntent> {
+function localPaymentIntent(reference?: string, provider = "local"): Result<ProviderPaymentIntent> {
   const id = reference || ("fake_pi_" + crypto.randomUUID());
-  return { ok: true, data: { provider: "local", reference: id, client_secret: id + "_secret" } };
+  return { ok: true, data: { provider, reference: id, client_secret: id + "_secret" } };
 }
 
 async function createStripePaymentIntent(orderId: number, amount: number, currency: string): Promise<Result<ProviderPaymentIntent>> {
@@ -1576,6 +1576,7 @@ async function retrieveStripePaymentIntent(reference: string): Promise<Result<Pr
 async function createProviderPaymentIntent(orderId: number, amount: number, currency: string): Promise<Result<ProviderPaymentIntent>> {
   const provider = paymentProvider();
   if (provider === "local") return localPaymentIntent();
+  if (provider === "fake") return localPaymentIntent(undefined, "fake");
   if (provider === "stripe") return createStripePaymentIntent(orderId, amount, currency);
   return { ok: false, error: "unsupported PAYMENT_PROVIDER " + provider, code: "internal_error" };
 }
@@ -1583,6 +1584,7 @@ async function createProviderPaymentIntent(orderId: number, amount: number, curr
 async function retrieveProviderPaymentIntent(reference: string): Promise<Result<ProviderPaymentIntent>> {
   const provider = paymentProvider();
   if (provider === "local") return localPaymentIntent(reference);
+  if (provider === "fake") return localPaymentIntent(reference, "fake");
   if (provider === "stripe") return retrieveStripePaymentIntent(reference);
   return { ok: false, error: "unsupported PAYMENT_PROVIDER " + provider, code: "internal_error" };
 }

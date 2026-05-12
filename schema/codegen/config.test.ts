@@ -75,6 +75,7 @@ function clearEnv() {
   delete process.env.PORT;
   delete process.env.CORS_ORIGINS;
   delete process.env.REGISTRY_PUBLIC_KEY;
+  delete process.env.ALLOW_FAKE_PROVIDERS;
   delete process.env.EMAIL_WEBHOOK_URL;
   delete process.env.PAYMENT_PROVIDER;
   delete process.env.PAYMENT_API_KEY;
@@ -121,6 +122,18 @@ describe("generated configuration", () => {
       process.env.CORS_ORIGINS = "https://app.example";
       process.env.REGISTRY_PUBLIC_KEY = TEST_REGISTRY_PUBLIC_KEY;
       await expect(import(pathToFileURL(join(dir, "server.ts")).href)).rejects.toThrow("EMAIL_WEBHOOK_URL is required in production");
+
+      clearEnv();
+      const fakeBlockedDir = writeGenerated();
+      process.env.DB_PATH = join(fakeBlockedDir, "config-fake-blocked.sqlite");
+      process.env.PORT = "0";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.REGISTRY_PUBLIC_KEY = TEST_REGISTRY_PUBLIC_KEY;
+      process.env.EMAIL_WEBHOOK_URL = "https://email.example/send";
+      process.env.PAYMENT_PROVIDER = "fake";
+      process.env.WEBHOOK_URL = "https://hooks.example/openb2c";
+      process.env.WEBHOOK_SIGNING_SECRET = "test-webhook-secret";
+      await expect(import(`${pathToFileURL(join(fakeBlockedDir, "server.ts")).href}?fake-blocked=${Date.now()}`)).rejects.toThrow("PAYMENT_PROVIDER local/fake requires ALLOW_FAKE_PROVIDERS=true in production");
 
       clearEnv();
       const validDir = writeGenerated();

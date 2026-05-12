@@ -263,4 +263,34 @@ describe("generated effect execution", () => {
       delete process.env.WEBHOOK_SIGNING_SECRET;
     }
   });
+
+  test("default handlers provide local fake providers without external endpoints", async () => {
+    const dir = writeGenerated();
+    const effects = await import(pathToFileURL(join(dir, "effects.ts")).href);
+    const db = new Database(join(dir, "fake-providers.sqlite"));
+    delete process.env.EMAIL_WEBHOOK_URL;
+    delete process.env.WEBHOOK_URL;
+    process.env.PAYMENT_PROVIDER = "fake";
+
+    try {
+      const summary = await effects.dispatchEffects(db, [
+        { type: "notify", payload: { channel: "email", template: "ticket_confirmation", to: "customer" } },
+        { type: "call", payload: { service: "webhook", action: "sync_ticket" } },
+        { type: "call", payload: { service: "payment", action: "create_intent" } },
+      ], {
+        source: "rest",
+        operation: "ticket.confirm",
+        entity: "ticket",
+        recordId: 1,
+      });
+
+      expect(summary).toMatchObject({ attempted: 3, succeeded: 3, failed: 0 });
+      const rows = effects.listEffectAttempts(db);
+      expect(rows).toHaveLength(3);
+      expect(rows.map((row: { result_json: string }) => JSON.parse(row.result_json).provider)).toEqual(["fake", "fake", "fake"]);
+    } finally {
+      db.close();
+      delete process.env.PAYMENT_PROVIDER;
+    }
+  });
 });

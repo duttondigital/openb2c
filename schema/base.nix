@@ -303,7 +303,7 @@ let
           description = "Production identity OTP email delivery.";
           env = {
             EMAIL_PROVIDER = {
-              description = "Email provider used for production identity OTP delivery. The first supported provider is Resend.";
+              description = "Email provider used for identity OTP delivery. Use resend for production or fake for local provider tests.";
               requiredInProduction = false;
               example = "resend";
             };
@@ -347,7 +347,7 @@ let
           description = "Generated payment-intent provider.";
           env = {
             PAYMENT_PROVIDER = {
-              description = "Payment provider identifier.";
+              description = "Payment provider identifier. Use stripe for production or local/fake for development.";
               example = "stripe";
             };
             PAYMENT_API_KEY = {
