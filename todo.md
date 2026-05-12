@@ -189,7 +189,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add request IDs and correlation IDs to logs.
 - [x] Add structured audit log table for sensitive operations.
 - [x] Add metrics endpoint or documented log-based metrics.
-- [ ] Add startup diagnostics that report config, migrations, and integration status.
+- [x] Add startup diagnostics that report config, migrations, and integration status.
 - [ ] Add graceful shutdown handling.
 - [ ] Add database vacuum/checkpoint/backup maintenance guidance.
 - [ ] Add deployment examples for a single-server Bun + SQLite setup.

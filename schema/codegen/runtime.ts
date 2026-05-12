@@ -39,6 +39,19 @@ export interface Runtime {
 
 let runtime: Runtime | null = null;
 
+export interface MigrationDiagnostic {
+  id: string;
+  description: string;
+  status: "applied" | "verified" | "baseline_included";
+  checksum: string;
+}
+
+const MIGRATION_DIAGNOSTICS: MigrationDiagnostic[] = [];
+
+export function migrationDiagnostics(): MigrationDiagnostic[] {
+  return MIGRATION_DIAGNOSTICS.map(item => ({ ...item }));
+}
+
 // Structured logging
 export function log(level: string, msg: string, data?: Record<string, unknown>) {
   if (level === "debug" && LOG_LEVEL !== "debug") return;
@@ -111,6 +124,7 @@ function applyMigration(db: Database, id: string, source: string, description: s
     if (existing.checksum !== checksum) {
       throw new Error(\`Migration \${id} checksum changed after it was applied\`);
     }
+    MIGRATION_DIAGNOSTICS.push({ id, description, status: "verified", checksum });
     return;
   }
   const apply = db.transaction(() => {
@@ -118,6 +132,7 @@ function applyMigration(db: Database, id: string, source: string, description: s
     recordMigration(db, id, checksum, description);
   });
   apply();
+  MIGRATION_DIAGNOSTICS.push({ id, description, status: "applied", checksum });
   log("info", "migration applied", { id, description });
 }
 
@@ -158,13 +173,16 @@ function migrationFiles(): { id: string; path: string; source: string; checksum:
 }
 
 export function runSchemaMigrations(db: Database, schemaSql: string) {
+  MIGRATION_DIAGNOSTICS.length = 0;
   ensureMigrationHistory(db);
   const files = migrationFiles();
   if (!hasUserSchema(db)) {
     applyMigration(db, \`schema:\${hashString(schemaSql)}\`, schemaSql, "generated schema baseline");
     for (const file of files) {
       if (!migrationRow(db, file.id)) {
-        recordMigration(db, file.id, file.checksum, \`included in fresh schema baseline: \${file.path}\`);
+        const description = \`included in fresh schema baseline: \${file.path}\`;
+        recordMigration(db, file.id, file.checksum, description);
+        MIGRATION_DIAGNOSTICS.push({ id: file.id, description, status: "baseline_included", checksum: file.checksum });
       }
     }
     return;

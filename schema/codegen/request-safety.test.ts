@@ -28,14 +28,14 @@ const schema: Schema = {
 
 const TEST_REGISTRY_PUBLIC_KEY = "a".repeat(64);
 
-function writeGenerated(): string {
+function writeGenerated(appSchema: Schema = schema): string {
   const dir = mkdtempSync(join(tmpdir(), "openb2c-request-safety-"));
-  writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
-  writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
-  writeFileSync(join(dir, "services.ts"), genServices(schema));
-  writeFileSync(join(dir, "runtime.ts"), genRuntime(schema));
-  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
-  writeFileSync(join(dir, "server.ts"), genRoutes(schema));
+  writeFileSync(join(dir, "schema.sql"), genSQL(appSchema.tables));
+  writeFileSync(join(dir, "types.ts"), genTypes(appSchema.tables, appSchema.operations));
+  writeFileSync(join(dir, "services.ts"), genServices(appSchema));
+  writeFileSync(join(dir, "runtime.ts"), genRuntime(appSchema));
+  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(appSchema));
+  writeFileSync(join(dir, "server.ts"), genRoutes(appSchema));
   return dir;
 }
 
@@ -371,6 +371,103 @@ describe("generated request safety", () => {
       expect(body.requests.durationMs.max).toBeGreaterThanOrEqual(0);
     } finally {
       server.stop(true);
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+    }
+  });
+
+  test("startup diagnostics report config, migrations, and integration status", async () => {
+    const appSchema: Schema = {
+      ...schema,
+      integrations: {
+        identityEmail: { provider: "resend", env: {} },
+        emailEffects: {
+          provider: "webhook",
+          env: {
+            EMAIL_WEBHOOK_URL: {
+              description: "Email dispatch endpoint",
+              requiredInProduction: true,
+              secret: true,
+            },
+          },
+        },
+        payment: { provider: "stripe", env: {} },
+        paymentWebhook: { provider: "openb2c", env: {} },
+        webhookEffects: {
+          provider: "openb2c",
+          env: {},
+          signing: {
+            enabled: true,
+            algorithm: "sha256",
+            payload: "timestamp.body",
+            signatureHeader: "X-OpenB2C-Signature",
+            timestampHeader: "X-OpenB2C-Timestamp",
+            toleranceSeconds: 300,
+          },
+        },
+      },
+    };
+    const dir = writeGenerated(appSchema);
+    process.env.DB_PATH = join(dir, "startup.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (message?: unknown) => {
+      logs.push(String(message));
+    };
+
+    let server: { stop: (closeActiveConnections?: boolean) => void } | undefined;
+
+    try {
+      ({ server } = await import(pathToFileURL(join(dir, "server.ts")).href));
+      const diagnostics = logs
+        .map((line) => {
+          try {
+            return JSON.parse(line) as Record<string, any>;
+          } catch {
+            return null;
+          }
+        })
+        .find(entry => entry?.msg === "startup diagnostics");
+
+      expect(diagnostics).toMatchObject({
+        msg: "startup diagnostics",
+        app: {
+          slug: "openb2c",
+        },
+        config: {
+          dbPath: process.env.DB_PATH,
+          authEnabled: false,
+          production: false,
+          registryMode: "ephemeral",
+        },
+      });
+      expect(diagnostics?.migrations).toContainEqual(expect.objectContaining({
+        description: "generated schema baseline",
+        status: "applied",
+      }));
+      expect(diagnostics?.integrations).toContainEqual(expect.objectContaining({
+        name: "emailEffects",
+        provider: "webhook",
+        env: [expect.objectContaining({
+          name: "EMAIL_WEBHOOK_URL",
+          requiredInProduction: true,
+          secret: true,
+          configured: false,
+        })],
+      }));
+      expect(diagnostics?.env).toContainEqual(expect.objectContaining({
+        name: "DB_PATH",
+        requiredInProduction: true,
+        secret: false,
+        configured: true,
+      }));
+    } finally {
+      server?.stop(true);
+      console.log = originalLog;
       delete process.env.DB_PATH;
       delete process.env.PORT;
       delete process.env.AUTH_ENABLED;

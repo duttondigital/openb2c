@@ -19,3 +19,9 @@ Responses include `X-Request-ID` and `X-Correlation-ID`, and CORS exposes both h
 The response includes process start time, uptime, total completed requests, counts by status, counts by `METHOD path`, and request duration aggregates.
 
 These counters reset on process restart. For longer retention, collect the structured request logs into the deployment logging system and derive service-level metrics from the same `status`, `path`, and `ms` fields.
+
+## Startup Diagnostics
+
+On boot, generated REST servers emit one `startup diagnostics` JSON log after config validation, database bootstrap, migrations, seed data, and registry initialization complete.
+
+The diagnostics report app version, redacted runtime config, migration statuses, integration providers, and whether each configured environment variable is present. Secret values are never logged.
