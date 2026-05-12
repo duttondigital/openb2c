@@ -214,6 +214,7 @@ export function genRoutes(schema: Schema): string {
   const requiredProductionEnv = requiredProductionEnvVars(schema);
   const redactedFields = redactedFieldsForSchema(schema);
   const requestSchemas = requestSchemasForSchema(schema);
+  const supportsApiKeys = Boolean(schema.tables.api_key);
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -317,6 +318,7 @@ const ROUTE_TIMEOUT_MS = Math.max(parseInt(process.env.ROUTE_TIMEOUT_MS || "3000
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.trim()).filter(Boolean);
 const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
+const SUPPORTS_API_KEYS = ${JSON.stringify(supportsApiKeys)};
 const API_VERSION = APP_CONFIG.version;
 const API_VERSION_HEADER = "X-OpenB2C-API-Version";
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -934,7 +936,8 @@ export const server = Bun.serve({
       } else if (authHeader?.startsWith("Bearer ")) {
         // Bearer auth supports browser identity sessions and service API keys.
         const key = authHeader.slice(7);
-        const auth = (await S.verifyIdentitySession(db, key)) || (await S.verifyApiKey(db, key));
+        const sessionAuth = await S.verifyIdentitySession(db, key);
+        const auth = sessionAuth || (SUPPORTS_API_KEYS ? await S.verifyApiKey(db, key) : null);
         if (!auth) {
           return response(req, { error: "invalid bearer token", code: "invalid" }, { status: 401 });
         }

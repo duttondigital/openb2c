@@ -408,7 +408,8 @@ describe("generated authorization enforcement", () => {
     expect(mcpSource).toContain("Stdio transport uses trusted local system auth");
     expect(mcpSource).toContain("const res = await handleRequest(req, MCP_AUTH_CONTEXT);");
     expect(mcpSource).toContain("Content-Type, Mcp-Session-Id, Authorization");
-    expect(mcpSource).toContain("return (await S.verifyIdentitySession(db, token)) || (await S.verifyApiKey(db, token));");
+    expect(mcpSource).toContain("const sessionAuth = await S.verifyIdentitySession(db, token);");
+    expect(mcpSource).toContain("return sessionAuth || (SUPPORTS_API_KEYS ? await S.verifyApiKey(db, token) : null);");
 
     const dir = writeGenerated();
 

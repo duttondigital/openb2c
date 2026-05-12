@@ -163,7 +163,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 
 ### Generated Web Client
 
-- [ ] Add login and identity challenge flow.
+- [x] Add login and identity challenge flow.
 - [ ] Add API key or certificate-aware fetch client.
 - [ ] Generate navigation from ontology metadata, not only entity names.
 - [ ] Generate list views with configured columns, filters, sorting, empty states, and pagination.

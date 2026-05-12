@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { genEffectsInterface } from "./effects";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
 import { genOpenAPI } from "./openapi";
@@ -72,6 +73,9 @@ function writeGenerated(): string {
   writeFileSync(join(dir, "schema.sql"), genSQL(schema.tables));
   writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
   writeFileSync(join(dir, "services.ts"), genServices(schema));
+  writeFileSync(join(dir, "runtime.ts"), genRuntime(schema));
+  writeFileSync(join(dir, "effects.ts"), genEffectsInterface(schema));
+  writeFileSync(join(dir, "server.ts"), genRoutes(schema));
   return dir;
 }
 
@@ -93,6 +97,13 @@ async function signText(privateKey: CryptoKey, text: string): Promise<string> {
 
 async function signRequest(privateKey: CryptoKey, method: string, path: string, timestamp: string): Promise<string> {
   return signText(privateKey, `${method} ${path} ${timestamp}`);
+}
+
+function clearServerEnv() {
+  delete process.env.DB_PATH;
+  delete process.env.PORT;
+  delete process.env.AUTH_ENABLED;
+  delete process.env.NODE_ENV;
 }
 
 async function issueThroughChallenge(
@@ -128,6 +139,8 @@ describe("identity hardening generation", () => {
     expect(server).toContain("S.createChallenge(db, email, publicKey, clientIp(req))");
     expect(server).toContain("S.issueIdentitySession(db, userId)");
     expect(server).toContain("await S.verifyIdentitySession(db, key)");
+    expect(server).toContain("const SUPPORTS_API_KEYS = false;");
+    expect(server).toContain("SUPPORTS_API_KEYS ? await S.verifyApiKey(db, key) : null");
     expect(server).toContain('path: "/auth/revoke-current"');
     expect(server).toContain("S.revokeCertificate(db, cert)");
     expect(server).toContain("S.revokeIdentitySessionToken(db, authHeader.slice(7))");
@@ -219,6 +232,73 @@ describe("identity hardening generation", () => {
       email: "revoked@example.com",
       publicKey: userPublicKey,
     });
+  });
+
+  test("generated REST identity challenge flow issues a browser-usable session", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "identity-rest.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "true";
+    process.env.NODE_ENV = "test";
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+      const publicKey = bytesToHex(await crypto.subtle.exportKey("raw", keypair.publicKey));
+
+      const challenge = await fetch(`${base}/identity/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "login@example.test", publicKey }),
+      });
+      expect(challenge.status).toBe(200);
+      const challengeBody = await challenge.json() as { challengeId: number; code: string };
+      expect(challengeBody.challengeId).toBeGreaterThan(0);
+      expect(challengeBody.code).toMatch(/^\d{6}$/);
+
+      const signature = await signText(keypair.privateKey, challengeBody.code);
+      const verified = await fetch(`${base}/identity/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challengeId: challengeBody.challengeId,
+          code: challengeBody.code,
+          signature,
+        }),
+      });
+      expect(verified.status).toBe(200);
+      const verifiedBody = await verified.json() as {
+        certificate: { email: string; publicKey: string };
+        sessionToken: string;
+        sessionExpiresAt: string;
+        auth: { userId: number; scopes: string[] };
+      };
+      expect(verifiedBody.certificate).toMatchObject({ email: "login@example.test", publicKey });
+      expect(verifiedBody.sessionToken).toStartWith("sess_");
+      expect(Array.isArray(verifiedBody.auth.scopes)).toBe(true);
+
+      const context = await fetch(`${base}/auth/context`, {
+        headers: { Authorization: `Bearer ${verifiedBody.sessionToken}` },
+      });
+      expect(context.status).toBe(200);
+      expect(await context.json()).toEqual(verifiedBody.auth);
+
+      const revoked = await fetch(`${base}/auth/revoke-current`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${verifiedBody.sessionToken}` },
+      });
+      expect(revoked.status).toBe(200);
+      expect(await revoked.json()).toEqual({ revoked: true });
+
+      const afterRevoke = await fetch(`${base}/auth/context`, {
+        headers: { Authorization: `Bearer ${verifiedBody.sessionToken}` },
+      });
+      expect(afterRevoke.status).toBe(401);
+    } finally {
+      server.stop(true);
+      clearServerEnv();
+    }
   });
 
   test("identity challenge creation is rate limited by email, public key, and IP", async () => {

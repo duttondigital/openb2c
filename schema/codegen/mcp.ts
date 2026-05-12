@@ -256,6 +256,7 @@ function toolExtraFields(
 
 export function genMcpServer(schema: Schema): string {
   const app = getAppMetadata(schema);
+  const supportsApiKeys = Boolean(schema.tables.api_key);
   const entities = Object.keys(schema.tables);
   const tools: string[] = [];
   const toolAuthz: string[] = [];
@@ -642,6 +643,7 @@ const SERVER_INFO = {
 
 const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;
 const MCP_HTTP_AUTH_ENABLED = process.env.MCP_HTTP_AUTH_ENABLED !== "false";
+const SUPPORTS_API_KEYS = ${JSON.stringify(supportsApiKeys)};
 
 const TOOLS = [
 ${tools.join(",\n")}
@@ -812,7 +814,8 @@ if (process.argv.includes("--http")) {
     if (!authHeader?.startsWith("Bearer ")) return null;
 
     const token = authHeader.slice(7);
-    return (await S.verifyIdentitySession(db, token)) || (await S.verifyApiKey(db, token));
+    const sessionAuth = await S.verifyIdentitySession(db, token);
+    return sessionAuth || (SUPPORTS_API_KEYS ? await S.verifyApiKey(db, token) : null);
   }
 
   function authenticationRequiredResponse(body: McpRequest, headers: Headers): Response {

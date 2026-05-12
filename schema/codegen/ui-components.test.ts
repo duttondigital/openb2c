@@ -151,6 +151,28 @@ describe("generated UI web components", () => {
     expect(adminRoute).not.toContain("./ob-commerce");
   });
 
+  test("auth panel implements the generated identity challenge login flow", async () => {
+    const authPanel = await Bun.file(join(UI_DIR, "components", "ob-auth-panel.ts")).text();
+    const obApi = await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text();
+
+    expect(authPanel).toContain("ObApi.createIdentityKeypair()");
+    expect(authPanel).toContain('request("/identity/challenge"');
+    expect(authPanel).toContain("publicKey: keypair.publicKey");
+    expect(authPanel).toContain("this._challengeId = data.challengeId");
+    expect(authPanel).toContain("Development code:");
+    expect(authPanel).toContain('autocomplete="one-time-code"');
+    expect(authPanel).toContain("ObApi.signWithIdentityKey(this._privateKey, code)");
+    expect(authPanel).toContain('request("/identity/verify"');
+    expect(authPanel).toContain("setSessionAuth(data.auth, data.sessionToken, data.sessionExpiresAt)");
+    expect(authPanel).toContain("setCertificateAuth(data.certificate, this._privateKey)");
+    expect(authPanel).toContain('data-action="logout"');
+
+    expect(obApi).toContain('headers.set("Authorization", `Bearer ${this._bearerToken}`)');
+    expect(obApi).toContain('headers.set("X-Certificate", JSON.stringify(this._certificate))');
+    expect(obApi).toContain('headers.set("X-Signature"');
+    expect(obApi).toContain("restoreAuthContext");
+  });
+
   test("public commerce actions keep the primary path visually last", async () => {
     const publicApp = await Bun.file(join(UI_DIR, "components", "ob-app.ts")).text();
     const commerceComponent = await Bun.file(join(UI_DIR, "components", "ob-commerce.ts")).text();
