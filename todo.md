@@ -149,7 +149,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add consistent `404`, `409`, `422`, and `500` response handling.
 - [x] Add optimistic concurrency or updated-at checks where needed.
 - [x] Add audit logging for writes and custom operations.
-- [ ] Add API versioning strategy.
+- [x] Add API versioning strategy.
 
 ### Generated MCP Server
 

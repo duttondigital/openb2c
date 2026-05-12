@@ -278,6 +278,7 @@ export type ErrorCode =
   | "bad_state"
   | "conflict"
   | "internal_error"
+  | "unsupported_version"
   | "unauthorized"
   | "forbidden"
   | "rate_limited"
@@ -681,6 +682,7 @@ export function statusForResult(result: Result<unknown>): number {
     case "conflict": return 409;
     case "bad_state": return 409;
     case "malformed": return 400;
+    case "unsupported_version": return 400;
     case "internal_error": return 500;
     case "invalid":
       return 422;

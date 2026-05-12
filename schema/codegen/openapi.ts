@@ -528,7 +528,7 @@ export function genOpenAPI(schema: Schema): string {
     type: "object",
     properties: {
       error: { type: "string" },
-      code: { type: "string", enum: ["not_found", "malformed", "invalid", "bad_state", "conflict", "internal_error", "unauthorized", "forbidden", "rate_limited", "payload_too_large", "unsupported_media_type", "timeout"] },
+      code: { type: "string", enum: ["not_found", "malformed", "invalid", "bad_state", "conflict", "internal_error", "unsupported_version", "unauthorized", "forbidden", "rate_limited", "payload_too_large", "unsupported_media_type", "timeout"] },
       details: { type: "object", additionalProperties: { type: "string" } },
     },
     required: ["error", "code"],
@@ -1067,6 +1067,12 @@ export function genOpenAPI(schema: Schema): string {
     ...(workflowMetadata ? { "x-openb2c-workflows": workflowMetadata } : {}),
     ...(validationMetadata ? { "x-openb2c-validation": validationMetadata } : {}),
     ...(ecommerceMetadata ? { "x-openb2c-ecommerce": ecommerceMetadata } : {}),
+    "x-openb2c-api-versioning": {
+      current: app.version,
+      requestHeader: "X-OpenB2C-API-Version",
+      responseHeader: "X-OpenB2C-API-Version",
+      compatibility: "Omitting the request header targets the current generated API version.",
+    },
   };
 
   return JSON.stringify(spec, null, 2);

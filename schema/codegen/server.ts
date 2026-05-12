@@ -317,6 +317,8 @@ const ROUTE_TIMEOUT_MS = Math.max(parseInt(process.env.ROUTE_TIMEOUT_MS || "3000
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*").split(",").map(o => o.trim()).filter(Boolean);
 const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by default
+const API_VERSION = APP_CONFIG.version;
+const API_VERSION_HEADER = "X-OpenB2C-API-Version";
 const PRODUCTION = process.env.NODE_ENV === "production";
 const ALLOW_INSECURE_AUTH_DISABLED = process.env.ALLOW_INSECURE_AUTH_DISABLED === "true";
 const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
@@ -784,10 +786,12 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 }
 
 const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match, X-OpenB2C-API-Version";
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
-  return Response.json(body, init);
+  const headers = new Headers(init?.headers);
+  headers.set(API_VERSION_HEADER, API_VERSION);
+  return Response.json(body, { ...init, headers });
 }
 
 function recordResponseInit(entity: string, record: Record<string, unknown>): ResponseInit {
@@ -814,7 +818,7 @@ function corsHeaders(req: Request): Headers {
   }
   headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
   headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
-  headers.set("Access-Control-Expose-Headers", "ETag");
+  headers.set("Access-Control-Expose-Headers", "ETag, " + API_VERSION_HEADER);
   headers.set("Vary", "Origin");
   return headers;
 }
@@ -855,6 +859,26 @@ async function runRouteWithTimeout(handler: (signal: AbortSignal) => Response | 
   }
 }
 
+function hasApiVersionSurface(path: string): boolean {
+  return path.startsWith("/api/")
+    || path.startsWith("/commerce/")
+    || path.startsWith("/auth/")
+    || path.startsWith("/identity/")
+    || path.startsWith("/ops/");
+}
+
+function apiVersionError(requested: string): S.Result<never> {
+  return {
+    ok: false,
+    error: "unsupported API version",
+    code: "unsupported_version",
+    details: {
+      requested,
+      supported: API_VERSION,
+    },
+  };
+}
+
 export const server = Bun.serve({
   port: PORT,
   async fetch(req) {
@@ -869,7 +893,12 @@ export const server = Bun.serve({
 
     // Health check (no auth)
     if (url.pathname === "/health") {
-      return response(req, { status: "ok", app: APP_CONFIG.slug, db: DB_PATH, auth: AUTH_ENABLED });
+      return response(req, { status: "ok", app: APP_CONFIG.slug, version: API_VERSION, db: DB_PATH, auth: AUTH_ENABLED });
+    }
+
+    const requestedApiVersion = req.headers.get(API_VERSION_HEADER);
+    if (requestedApiVersion && requestedApiVersion !== API_VERSION && hasApiVersionSurface(url.pathname)) {
+      return response(req, apiVersionError(requestedApiVersion), { status: 400 });
     }
 
     // Skip auth for identity endpoints
