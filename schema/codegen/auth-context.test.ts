@@ -74,7 +74,7 @@ describe("auth context generation", () => {
     const mcp = genMcpServer(schema);
 
     expect(server).toContain("import * as T from \"./types\";");
-    expect(server).toContain("type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext, signal: AbortSignal)");
+    expect(server).toContain("type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext, signal: AbortSignal, context: RequestContext)");
     expect(server).toContain("let authContext: T.AuthContext = AUTH_ENABLED ? T.ANONYMOUS_AUTH_CONTEXT : T.SYSTEM_AUTH_CONTEXT;");
     expect(server).toContain("authContext = auth;");
     expect(server).toContain("scopes: [...S.SELF_SERVICE_SCOPES]");
@@ -84,7 +84,7 @@ describe("auth context generation", () => {
     expect(server).not.toContain("roles:");
     expect(server).toContain("S.findAllNotes(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined }, auth)");
     expect(server).toContain("S.publishNote(db, +p.id, auth, req.headers.get(\"If-Match\"), { source: \"rest\" })");
-    expect(server).toContain("result.route.handler(req, result.params, authContext, signal)");
+    expect(server).toContain("result.route.handler(req, result.params, authContext, signal, context)");
 
     expect(mcp).toContain("const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;");
     expect(mcp).toContain("S.findAllNotes(db, listNoteOpts, auth)");

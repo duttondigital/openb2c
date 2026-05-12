@@ -257,6 +257,84 @@ describe("generated request safety", () => {
     }
   });
 
+  test("responses and request logs include request and correlation IDs", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "request-ids.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (message?: unknown, ...rest: unknown[]) => {
+      logs.push(String(message));
+      if (rest.length) logs.push(rest.map(String).join(" "));
+    };
+
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      const generated = await fetch(`${base}/health`);
+      expect(generated.status).toBe(200);
+      const generatedRequestId = generated.headers.get("x-request-id");
+      expect(generatedRequestId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(generated.headers.get("x-correlation-id")).toBe(generatedRequestId);
+
+      const provided = await fetch(`${base}/api/notes`, {
+        headers: {
+          "x-request-id": "req-contract-123",
+          "x-correlation-id": "corr-contract-456",
+        },
+      });
+      expect(provided.status).toBe(200);
+      expect(provided.headers.get("x-request-id")).toBe("req-contract-123");
+      expect(provided.headers.get("x-correlation-id")).toBe("corr-contract-456");
+      expect(provided.headers.get("access-control-expose-headers")).toContain("X-Request-ID");
+      expect(provided.headers.get("access-control-expose-headers")).toContain("X-Correlation-ID");
+
+      const preflight = await fetch(`${base}/api/notes`, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://app.example",
+          "access-control-request-method": "GET",
+          "x-correlation-id": "corr-preflight",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("x-correlation-id")).toBe("corr-preflight");
+
+      const parsedLogs = logs
+        .map((line) => {
+          try {
+            return JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry): entry is Record<string, unknown> => !!entry);
+
+      expect(parsedLogs).toContainEqual(expect.objectContaining({
+        msg: "request",
+        path: "/api/notes",
+        requestId: "req-contract-123",
+        correlationId: "corr-contract-456",
+        status: 200,
+      }));
+      expect(parsedLogs).toContainEqual(expect.objectContaining({
+        msg: "request",
+        path: "/api/notes",
+        correlationId: "corr-preflight",
+        status: 204,
+      }));
+    } finally {
+      server.stop(true);
+      console.log = originalLog;
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+    }
+  });
+
   test("MCP HTTP transport uses the same configurable CORS policy", () => {
     const mcp = genMcpServer(schema);
 

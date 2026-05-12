@@ -227,6 +227,8 @@ export function genRoutes(schema: Schema): string {
     "Idempotency-Key",
     "If-Match",
     "X-OpenB2C-API-Version",
+    "X-Request-ID",
+    "X-Correlation-ID",
   ])].join(", ");
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
@@ -334,6 +336,8 @@ const AUTH_ENABLED = process.env.AUTH_ENABLED !== "false";  // enabled by defaul
 const SUPPORTS_API_KEYS = ${JSON.stringify(supportsApiKeys)};
 const API_VERSION = APP_CONFIG.version;
 const API_VERSION_HEADER = "X-OpenB2C-API-Version";
+const REQUEST_ID_HEADER = "X-Request-ID";
+const CORRELATION_ID_HEADER = "X-Correlation-ID";
 const PRODUCTION = process.env.NODE_ENV === "production";
 const ALLOW_INSECURE_AUTH_DISABLED = process.env.ALLOW_INSECURE_AUTH_DISABLED === "true";
 const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
@@ -362,6 +366,43 @@ type RequestSchema = {
 };
 
 const REQUEST_SCHEMAS: Record<string, { create: RequestSchema; update: RequestSchema }> = ${JSON.stringify(requestSchemas, null, 2)};
+
+interface RequestContext {
+  requestId: string;
+  correlationId: string;
+  startedAt: number;
+}
+
+function requestHeaderValue(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 128);
+}
+
+function createRequestContext(req: Request): RequestContext {
+  const requestId = requestHeaderValue(req.headers.get(REQUEST_ID_HEADER)) || crypto.randomUUID();
+  const correlationId = requestHeaderValue(req.headers.get(CORRELATION_ID_HEADER)) || requestId;
+  return { requestId, correlationId, startedAt: performance.now() };
+}
+
+function requestLogFields(context: RequestContext, req: Request, url: URL, data: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    requestId: context.requestId,
+    correlationId: context.correlationId,
+    method: req.method,
+    path: url.pathname,
+    ms: (performance.now() - context.startedAt).toFixed(1),
+    ...data,
+  };
+}
+
+function contextLogFields(context: RequestContext, data: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    requestId: context.requestId,
+    correlationId: context.correlationId,
+    ...data,
+  };
+}
 
 function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
   const fields = REDACTED_FIELDS[entity];
@@ -825,7 +866,7 @@ validateProductionConfig();
 const { db } = bootstrapRuntime();
 const registryPubKey = await initRegistryPublicKey();
 
-type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext, signal: AbortSignal) => Response | Promise<Response>;
+type Handler = (req: Request, params: Record<string, string>, auth: T.AuthContext, signal: AbortSignal, context: RequestContext) => Response | Promise<Response>;
 
 interface Route {
   method: string;
@@ -882,7 +923,7 @@ const routes: Route[] = [
   { method: "GET", path: "/identity/public-key", handler: async () => {
     return corsResponse({ publicKey: registryPubKey });
   }},
-  { method: "POST", path: "/identity/challenge", handler: async (req, _, __, signal) => {
+  { method: "POST", path: "/identity/challenge", handler: async (req, _, __, signal, context) => {
     const input = await readJson<{ email: string; publicKey: string }>(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const { email, publicKey } = input.data;
@@ -893,12 +934,12 @@ const routes: Route[] = [
     if (!result.ok) {
       return corsResponse(result, { status: S.statusForResult(result) });
     }
-    log("info", "identity challenge created", { email });
+    log("info", "identity challenge created", contextLogFields(context, { email }));
     // In production, code must be sent via email. In dev, return it for testing.
     if (PRODUCTION) {
       const delivery = await sendIdentityChallengeEmail(email, result.data.code, result.data.challengeId);
       if (!delivery.ok) {
-        log("error", "identity challenge email delivery failed", { email, error: delivery.error });
+        log("error", "identity challenge email delivery failed", contextLogFields(context, { email, error: delivery.error }));
         return corsResponse(delivery, { status: 502 });
       }
       return corsResponse({ challengeId: result.data.challengeId, message: "verification code sent to email" });
@@ -986,27 +1027,34 @@ function corsHeaders(req: Request): Headers {
   }
   headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
   headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
-  headers.set("Access-Control-Expose-Headers", "ETag, " + API_VERSION_HEADER);
+  headers.set("Access-Control-Expose-Headers", "ETag, " + API_VERSION_HEADER + ", " + REQUEST_ID_HEADER + ", " + CORRELATION_ID_HEADER);
   headers.set("Vary", "Origin");
   return headers;
 }
 
-function applyCors(req: Request, res: Response): Response {
-  for (const [k, v] of corsHeaders(req)) {
-    res.headers.set(k, v);
-  }
+function applyRequestContext(res: Response, context?: RequestContext): Response {
+  if (!context) return res;
+  res.headers.set(REQUEST_ID_HEADER, context.requestId);
+  res.headers.set(CORRELATION_ID_HEADER, context.correlationId);
   return res;
 }
 
-function response(req: Request, body: unknown, init?: ResponseInit): Response {
-  return applyCors(req, corsResponse(body, init));
+function applyCors(req: Request, res: Response, context?: RequestContext): Response {
+  for (const [k, v] of corsHeaders(req)) {
+    res.headers.set(k, v);
+  }
+  return applyRequestContext(res, context);
 }
 
-function preflightResponse(req: Request): Response {
+function response(req: Request, body: unknown, init?: ResponseInit, context?: RequestContext): Response {
+  return applyCors(req, corsResponse(body, init), context);
+}
+
+function preflightResponse(req: Request, context?: RequestContext): Response {
   if (req.headers.has("origin") && !allowedCorsOrigin(req)) {
-    return response(req, { error: "origin not allowed", code: "forbidden" }, { status: 403 });
+    return response(req, { error: "origin not allowed", code: "forbidden" }, { status: 403 }, context);
   }
-  return new Response(null, { status: 204, headers: corsHeaders(req) });
+  return applyRequestContext(new Response(null, { status: 204, headers: corsHeaders(req) }), context);
 }
 
 async function runRouteWithTimeout(handler: (signal: AbortSignal) => Response | Promise<Response>): Promise<Response> {
@@ -1050,23 +1098,29 @@ function apiVersionError(requested: string): S.Result<never> {
 export const server = Bun.serve({
   port: PORT,
   async fetch(req) {
-    const start = performance.now();
+    const context = createRequestContext(req);
     const url = new URL(req.url);
     let authContext: T.AuthContext = AUTH_ENABLED ? T.ANONYMOUS_AUTH_CONTEXT : T.SYSTEM_AUTH_CONTEXT;
 
     // CORS preflight
     if (req.method === "OPTIONS") {
-      return preflightResponse(req);
+      const res = preflightResponse(req, context);
+      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      return res;
     }
 
     // Health check (no auth)
     if (url.pathname === "/health") {
-      return response(req, { status: "ok", app: APP_CONFIG.slug, version: API_VERSION, db: DB_PATH, auth: AUTH_ENABLED });
+      const res = response(req, { status: "ok", app: APP_CONFIG.slug, version: API_VERSION, db: DB_PATH, auth: AUTH_ENABLED }, undefined, context);
+      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      return res;
     }
 
     const requestedApiVersion = req.headers.get(API_VERSION_HEADER);
     if (requestedApiVersion && requestedApiVersion !== API_VERSION && hasApiVersionSurface(url.pathname)) {
-      return response(req, apiVersionError(requestedApiVersion), { status: 400 });
+      const res = response(req, apiVersionError(requestedApiVersion), { status: 400 }, context);
+      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      return res;
     }
 
     // Skip auth for identity endpoints
@@ -1087,7 +1141,9 @@ export const server = Bun.serve({
           const cert = JSON.parse(certHeader) as T.Certificate;
           const identity = await S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
-            return response(req, { error: "invalid certificate or signature", code: "invalid" }, { status: 401 });
+            const res = response(req, { error: "invalid certificate or signature", code: "invalid" }, { status: 401 }, context);
+            log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+            return res;
           }
           // Ensure user record exists for this identity
           const userId = S.ensureUser(db, identity.email);
@@ -1095,9 +1151,11 @@ export const server = Bun.serve({
             userId,
             scopes: [...S.SELF_SERVICE_SCOPES],
           };
-          log("debug", "authenticated", { email: identity.email, userId });
+          log("debug", "authenticated", contextLogFields(context, { email: identity.email, userId }));
         } catch {
-          return response(req, { error: "invalid certificate format", code: "invalid" }, { status: 401 });
+          const res = response(req, { error: "invalid certificate format", code: "invalid" }, { status: 401 }, context);
+          log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+          return res;
         }
       } else if (authHeader?.startsWith("Bearer ")) {
         // Bearer auth supports browser identity sessions and service API keys.
@@ -1105,7 +1163,9 @@ export const server = Bun.serve({
         const sessionAuth = await S.verifyIdentitySession(db, key);
         const auth = sessionAuth || (SUPPORTS_API_KEYS ? await S.verifyApiKey(db, key) : null);
         if (!auth) {
-          return response(req, { error: "invalid bearer token", code: "invalid" }, { status: 401 });
+          const res = response(req, { error: "invalid bearer token", code: "invalid" }, { status: 401 }, context);
+          log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+          return res;
         }
         authContext = auth;
       }
@@ -1113,19 +1173,18 @@ export const server = Bun.serve({
 
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
-      log("info", "not found", { method: req.method, path: url.pathname });
-      return response(req, { error: "not found", code: "not_found" }, { status: 404 });
+      const res = response(req, { error: "not found", code: "not_found" }, { status: 404 }, context);
+      log("info", "not found", requestLogFields(context, req, url, { status: res.status }));
+      return res;
     }
 
     try {
-      const res = await runRouteWithTimeout((signal) => result.route.handler(req, result.params, authContext, signal));
-      const ms = (performance.now() - start).toFixed(1);
-      log("info", "request", { method: req.method, path: url.pathname, status: res.status, ms });
-      return applyCors(req, res);
+      const res = await runRouteWithTimeout((signal) => result.route.handler(req, result.params, authContext, signal, context));
+      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      return applyCors(req, res, context);
     } catch (err) {
-      const ms = (performance.now() - start).toFixed(1);
-      log("error", "request failed", { method: req.method, path: url.pathname, error: String(err), ms });
-      return response(req, { error: "internal error", code: "internal_error" }, { status: 500 });
+      log("error", "request failed", requestLogFields(context, req, url, { error: String(err) }));
+      return response(req, { error: "internal error", code: "internal_error" }, { status: 500 }, context);
     }
   },
 });

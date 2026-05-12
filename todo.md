@@ -186,7 +186,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 
 ### Observability And Operations
 
-- [ ] Add request IDs and correlation IDs to logs.
+- [x] Add request IDs and correlation IDs to logs.
 - [ ] Add structured audit log table for sensitive operations.
 - [ ] Add metrics endpoint or documented log-based metrics.
 - [ ] Add startup diagnostics that report config, migrations, and integration status.
