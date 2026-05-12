@@ -144,7 +144,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 
 - [x] Generate typed request parsing and validation per endpoint.
 - [x] Generate OpenAPI security schemes for API keys and certificate auth.
-- [ ] Generate OpenAPI request and response schemas for operation endpoints.
+- [x] Generate OpenAPI request and response schemas for operation endpoints.
 - [ ] Generate proper response schemas for create, update, delete, and custom operations.
 - [ ] Add consistent `404`, `409`, `422`, and `500` response handling.
 - [ ] Add optimistic concurrency or updated-at checks where needed.

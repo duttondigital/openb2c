@@ -427,6 +427,34 @@ function derivedValueSchema(field: DerivedField): Record<string, unknown> {
   return schema;
 }
 
+function operationComponentName(entityName: string, opName: string, suffix: "Input" | "Result"): string {
+  return `${entityName}${pascalCase(opName)}${suffix}`;
+}
+
+function operationRequestSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+    description: "This generated operation does not accept a request body.",
+  };
+}
+
+function operationResultSchema(op: Operation): Record<string, unknown> {
+  const status = op.set?.status;
+  return {
+    type: "object",
+    properties: {
+      id: { type: "integer" },
+      status: status
+        ? { type: "string", enum: [status] }
+        : { type: "string", description: "Operation status result." },
+    },
+    required: ["id", "status"],
+    additionalProperties: false,
+  };
+}
+
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const auditMetadata = openApiAuditMetadata(schema);
@@ -612,6 +640,11 @@ export function genOpenAPI(schema: Schema): string {
     }
     schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };
 
+    for (const [opName, op] of Object.entries(ops).filter(([name]) => !CRUD_ACTIONS.has(name))) {
+      schemas[operationComponentName(Entity, opName, "Input")] = operationRequestSchema();
+      schemas[operationComponentName(Entity, opName, "Result")] = operationResultSchema(op);
+    }
+
     // List endpoint
     const readOp = operationFor(ops, "read");
     const createOp = operationFor(ops, "create");
@@ -680,12 +713,18 @@ export function genOpenAPI(schema: Schema): string {
 
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
+      const inputSchema = operationComponentName(Entity, opName, "Input");
+      const resultSchema = operationComponentName(Entity, opName, "Result");
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
         post: withAuth(withAudit(withWorkflow(withPolicy({
           summary: `${opName.replace(/_/g, " ")} ${entity}`,
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            required: false,
+            content: { "application/json": { schema: { $ref: `#/components/schemas/${inputSchema}` } } },
+          },
           responses: {
-            "200": { description: "Success", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" }, status: { type: "string" } } } } } },
+            "200": { description: "Success", content: { "application/json": { schema: { $ref: `#/components/schemas/${resultSchema}` } } } },
             "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         }, entity, opName, ops[opName]), ops[opName]), schema, entity, opName, ops[opName]), ops[opName]?.public),
