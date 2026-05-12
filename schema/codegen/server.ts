@@ -404,6 +404,56 @@ function contextLogFields(context: RequestContext, data: Record<string, unknown>
   };
 }
 
+const METRICS_STARTED_AT = new Date().toISOString();
+const REQUESTS_BY_STATUS: Record<string, number> = {};
+const REQUESTS_BY_ROUTE: Record<string, number> = {};
+let requestsTotal = 0;
+let requestDurationCount = 0;
+let requestDurationTotalMs = 0;
+let requestDurationMaxMs = 0;
+
+function incrementCounter(counter: Record<string, number>, key: string) {
+  counter[key] = (counter[key] || 0) + 1;
+}
+
+function recordRequestMetric(req: Request, url: URL, status: number, ms: string) {
+  const duration = Number(ms);
+  requestsTotal += 1;
+  incrementCounter(REQUESTS_BY_STATUS, String(status));
+  incrementCounter(REQUESTS_BY_ROUTE, req.method + " " + url.pathname);
+  if (Number.isFinite(duration)) {
+    requestDurationCount += 1;
+    requestDurationTotalMs += duration;
+    requestDurationMaxMs = Math.max(requestDurationMaxMs, duration);
+  }
+}
+
+function logRequest(context: RequestContext, req: Request, url: URL, msg: string, data: Record<string, unknown>, level = "info") {
+  const fields = requestLogFields(context, req, url, data);
+  if (typeof fields.status === "number") {
+    recordRequestMetric(req, url, fields.status, String(fields.ms));
+  }
+  log(level, msg, fields);
+}
+
+function metricsSnapshot() {
+  return {
+    startedAt: METRICS_STARTED_AT,
+    uptimeSeconds: Math.max(0, Math.round((Date.now() - Date.parse(METRICS_STARTED_AT)) / 1000)),
+    requests: {
+      total: requestsTotal,
+      byStatus: { ...REQUESTS_BY_STATUS },
+      byRoute: { ...REQUESTS_BY_ROUTE },
+      durationMs: {
+        count: requestDurationCount,
+        sum: Number(requestDurationTotalMs.toFixed(1)),
+        average: requestDurationCount ? Number((requestDurationTotalMs / requestDurationCount).toFixed(1)) : 0,
+        max: Number(requestDurationMaxMs.toFixed(1)),
+      },
+    },
+  };
+}
+
 function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
   const fields = REDACTED_FIELDS[entity];
   if (!fields) return obj;
@@ -889,6 +939,10 @@ const routes: Route[] = [
     if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
     return corsResponse({ items: FAKE_EMAILS });
   }},
+  { method: "GET", path: "/ops/metrics", handler: (_, __, auth) => {
+    if (!S.hasScope(auth, "effect.admin")) return corsResponse({ error: "forbidden", code: "forbidden" }, { status: 403 });
+    return corsResponse(metricsSnapshot());
+  }},
 
   // Authenticated session context
   { method: "GET", path: "/auth/context", handler: (_, __, auth) => {
@@ -1105,21 +1159,21 @@ export const server = Bun.serve({
     // CORS preflight
     if (req.method === "OPTIONS") {
       const res = preflightResponse(req, context);
-      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      logRequest(context, req, url, "request", { status: res.status });
       return res;
     }
 
     // Health check (no auth)
     if (url.pathname === "/health") {
       const res = response(req, { status: "ok", app: APP_CONFIG.slug, version: API_VERSION, db: DB_PATH, auth: AUTH_ENABLED }, undefined, context);
-      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      logRequest(context, req, url, "request", { status: res.status });
       return res;
     }
 
     const requestedApiVersion = req.headers.get(API_VERSION_HEADER);
     if (requestedApiVersion && requestedApiVersion !== API_VERSION && hasApiVersionSurface(url.pathname)) {
       const res = response(req, apiVersionError(requestedApiVersion), { status: 400 }, context);
-      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      logRequest(context, req, url, "request", { status: res.status });
       return res;
     }
 
@@ -1142,7 +1196,7 @@ export const server = Bun.serve({
           const identity = await S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY, req.method, url.pathname, tsHeader, sigHeader);
           if (!identity) {
             const res = response(req, { error: "invalid certificate or signature", code: "invalid" }, { status: 401 }, context);
-            log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+            logRequest(context, req, url, "request", { status: res.status });
             return res;
           }
           // Ensure user record exists for this identity
@@ -1154,7 +1208,7 @@ export const server = Bun.serve({
           log("debug", "authenticated", contextLogFields(context, { email: identity.email, userId }));
         } catch {
           const res = response(req, { error: "invalid certificate format", code: "invalid" }, { status: 401 }, context);
-          log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+          logRequest(context, req, url, "request", { status: res.status });
           return res;
         }
       } else if (authHeader?.startsWith("Bearer ")) {
@@ -1164,7 +1218,7 @@ export const server = Bun.serve({
         const auth = sessionAuth || (SUPPORTS_API_KEYS ? await S.verifyApiKey(db, key) : null);
         if (!auth) {
           const res = response(req, { error: "invalid bearer token", code: "invalid" }, { status: 401 }, context);
-          log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+          logRequest(context, req, url, "request", { status: res.status });
           return res;
         }
         authContext = auth;
@@ -1174,16 +1228,16 @@ export const server = Bun.serve({
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
       const res = response(req, { error: "not found", code: "not_found" }, { status: 404 }, context);
-      log("info", "not found", requestLogFields(context, req, url, { status: res.status }));
+      logRequest(context, req, url, "not found", { status: res.status });
       return res;
     }
 
     try {
       const res = await runRouteWithTimeout((signal) => result.route.handler(req, result.params, authContext, signal, context));
-      log("info", "request", requestLogFields(context, req, url, { status: res.status }));
+      logRequest(context, req, url, "request", { status: res.status });
       return applyCors(req, res, context);
     } catch (err) {
-      log("error", "request failed", requestLogFields(context, req, url, { error: String(err) }));
+      logRequest(context, req, url, "request failed", { status: 500, error: String(err) }, "error");
       return response(req, { error: "internal error", code: "internal_error" }, { status: 500 }, context);
     }
   },

@@ -335,6 +335,48 @@ describe("generated request safety", () => {
     }
   });
 
+  test("ops metrics aggregates completed request outcomes", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "metrics.sqlite");
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+    const { server } = await import(pathToFileURL(join(dir, "server.ts")).href);
+    const base = `http://127.0.0.1:${server.port}`;
+
+    try {
+      await fetch(`${base}/health`);
+      await fetch(`${base}/api/notes`);
+      await fetch(`${base}/missing`);
+
+      const metrics = await fetch(`${base}/ops/metrics`);
+      expect(metrics.status).toBe(200);
+      const body = await metrics.json() as {
+        startedAt: string;
+        requests: {
+          total: number;
+          byStatus: Record<string, number>;
+          byRoute: Record<string, number>;
+          durationMs: { count: number; sum: number; average: number; max: number };
+        };
+      };
+
+      expect(new Date(body.startedAt).toString()).not.toBe("Invalid Date");
+      expect(body.requests.total).toBe(3);
+      expect(body.requests.byStatus["200"]).toBe(2);
+      expect(body.requests.byStatus["404"]).toBe(1);
+      expect(body.requests.byRoute["GET /health"]).toBe(1);
+      expect(body.requests.byRoute["GET /api/notes"]).toBe(1);
+      expect(body.requests.byRoute["GET /missing"]).toBe(1);
+      expect(body.requests.durationMs.count).toBe(3);
+      expect(body.requests.durationMs.max).toBeGreaterThanOrEqual(0);
+    } finally {
+      server.stop(true);
+      delete process.env.DB_PATH;
+      delete process.env.PORT;
+      delete process.env.AUTH_ENABLED;
+    }
+  });
+
   test("MCP HTTP transport uses the same configurable CORS policy", () => {
     const mcp = genMcpServer(schema);
 
