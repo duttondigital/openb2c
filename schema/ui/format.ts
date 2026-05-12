@@ -37,6 +37,8 @@ export function fieldLabel(field: string): string {
 export type FieldSchema = {
   title?: string;
   description?: string;
+  type?: string;
+  default?: unknown;
   format?: string;
   enum?: unknown[];
   "x-openb2c-relationship"?: {
@@ -100,6 +102,26 @@ export function orderedSchemaFields(schema: { properties?: Record<string, FieldS
       return aPriority - bPriority || a.index - b.index;
     })
     .map(({ name, prop }) => [name, prop] as [string, FieldSchema]);
+}
+
+export function isLongTextField(field: string, prop?: FieldSchema | null): boolean {
+  return fieldFormat(prop) === "textarea" || ["description", "notes", "body", "content"].some((part) => field.includes(part));
+}
+
+export function listSchemaFields(schema: { properties?: Record<string, FieldSchema> } | null | undefined): [string, FieldSchema][] {
+  return orderedSchemaFields(schema).filter(([field, prop]) => !isLongTextField(field, prop));
+}
+
+export function filterableSchemaFields(
+  schema: { properties?: Record<string, FieldSchema> } | null | undefined,
+  foreignKeys: Record<string, string> = {},
+): [string, FieldSchema][] {
+  return orderedSchemaFields(schema).filter(([field, prop]) => {
+    if (isLongTextField(field, prop)) return false;
+    if (foreignKeys[field]) return true;
+    if (Array.isArray(prop.enum) && prop.enum.length > 0) return true;
+    return false;
+  });
 }
 
 export function labelFor(row: Record<string, unknown>): string {

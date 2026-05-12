@@ -2,7 +2,7 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, formatValue, orderedSchemaFields, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
@@ -11,6 +11,9 @@ export class ObEntityList extends HTMLElement {
   private _offset = 0;
   private _limit = 25;
   private _total = 0;
+  private _filters: Record<string, string> = {};
+  private _filterAttr = "";
+  private _error = "";
 
   constructor() {
     super();
@@ -42,6 +45,7 @@ export class ObEntityList extends HTMLElement {
     const api = ObApi.instance;
     if (!api || !this.entity) return;
     await api.ready();
+    this._syncFiltersFromAttribute();
 
     const schema = api.getSchema(this.entity);
     if (!schema) {
@@ -49,10 +53,15 @@ export class ObEntityList extends HTMLElement {
       return;
     }
 
-    const cols = orderedSchemaFields(schema);
+    const inputSchema = api.getInputSchema(this.entity);
+    const cols = listSchemaFields(schema);
     const fks = api.getForeignKeys(this.entity);
+    const relationships = api.getForeignKeyRelationships(this.entity);
+    const filterFields = filterableSchemaFields(inputSchema || schema, fks);
+    const sortableFields = new Set(["id", ...Object.keys(inputSchema?.properties || {})]);
+    if (this._sort && !sortableFields.has(this._sort)) this._sort = "";
+    const filterOptions = await this._loadFilterOptions(filterFields, fks, api);
 
-    // Fetch data
     const params = new URLSearchParams();
     params.set("limit", String(this._limit));
     params.set("offset", String(this._offset));
@@ -60,25 +69,38 @@ export class ObEntityList extends HTMLElement {
       params.set("sort", this._sort);
       params.set("order", this._order);
     }
-    if (this.filter) {
-      for (const part of this.filter.split("&")) {
-        const [k, v] = part.split("=");
-        if (k && v) params.set(k, v);
-      }
+    for (const [field, value] of Object.entries(this._filters)) {
+      if (value !== "") params.set(field, value);
     }
 
     let items: any[] = [];
+    this._error = "";
     try {
       const res = await api.request(`/api/${this.entity}s?${params}`);
+      if (!res.ok) throw new Error(`Request failed with ${res.status}`);
       const data = await res.json();
       items = data.items || [];
       this._total = data.total || 0;
-    } catch {
+    } catch (error: any) {
       items = [];
+      this._total = 0;
+      this._error = error?.message || "Could not load records.";
     }
 
     const totalPages = Math.max(1, Math.ceil(this._total / this._limit));
     const currentPage = Math.floor(this._offset / this._limit) + 1;
+    const activeFilterCount = Object.keys(this._filters).filter((field) => this._filters[field] !== "").length;
+    const emptyState = activeFilterCount > 0
+      ? {
+          title: "No matching records.",
+          body: "Adjust or clear the current filters.",
+          action: `<button type="button" data-action="clear-filters">Clear filters</button>`,
+        }
+      : {
+          title: `No ${pluralDisplayName(this.entity).toLowerCase()} yet.`,
+          body: `Create the first ${displayName(this.entity).toLowerCase()} record.`,
+          action: `<button type="button" class="primary" data-action="create-empty">New ${escapeHtml(displayName(this.entity))}</button>`,
+        };
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
@@ -89,6 +111,15 @@ export class ObEntityList extends HTMLElement {
         </div>
         <button class="primary" type="button" data-action="create">New ${escapeHtml(displayName(this.entity))}</button>
       </div>
+      ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
+      ${filterFields.length > 0 ? `
+        <form class="filter-bar" aria-label="${escapeAttr(pluralDisplayName(this.entity))} filters">
+          ${filterFields.map(([field, prop]) => this._renderFilterControl(field, prop, fks, relationships, filterOptions)).join("")}
+          <div class="filter-actions">
+            <button type="button" data-action="clear-filters" ${activeFilterCount === 0 ? "disabled" : ""}>Clear</button>
+          </div>
+        </form>
+      ` : ""}
       <div class="table-wrap">
         <table>
           <thead>
@@ -96,19 +127,20 @@ export class ObEntityList extends HTMLElement {
               ${cols.map(([c, prop]) => {
                 const arrow = this._sort === c ? (this._order === "asc" ? "up" : "down") : "";
                 const ariaSort = this._sort === c ? (this._order === "asc" ? "ascending" : "descending") : "none";
+                const sortable = sortableFields.has(c);
                 return `
                   <th scope="col" aria-sort="${ariaSort}">
-                    <button class="sort-btn" data-col="${escapeAttr(c)}">
+                    ${sortable ? `<button class="sort-btn" data-col="${escapeAttr(c)}">` : `<span class="column-label">`}
                       ${escapeHtml(fieldDisplayLabel(c, prop))}
                       ${arrow ? `<span class="arrow" aria-hidden="true">${arrow === "up" ? "^" : "v"}</span>` : ""}
-                    </button>
+                    ${sortable ? "</button>" : "</span>"}
                   </th>`;
               }).join("")}
               <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            ${items.length === 0 ? `<tr><td colspan="${cols.length + 1}"><div class="empty-state">No records yet.</div></td></tr>` : ""}
+            ${items.length === 0 ? `<tr><td colspan="${cols.length + 1}"><div class="empty-state"><strong>${escapeHtml(emptyState.title)}</strong><span>${escapeHtml(emptyState.body)}</span>${emptyState.action}</div></td></tr>` : ""}
             ${items.map((row: any) => `
               <tr data-id="${escapeAttr(row.id)}">
                 ${cols.map(([c, prop]) => this._renderCell(c, row[c], fks, prop)).join("")}
@@ -121,6 +153,12 @@ export class ObEntityList extends HTMLElement {
       <div class="pagination">
         <span>${this._total} record${this._total !== 1 ? "s" : ""}</span>
         <div class="controls">
+          <label class="page-size">
+            <span>Rows</span>
+            <select data-action="page-size" aria-label="Rows per page">
+              ${[10, 25, 50, 100].map((size) => `<option value="${size}" ${this._limit === size ? "selected" : ""}>${size}</option>`).join("")}
+            </select>
+          </label>
           <button data-action="previous-page" ${currentPage <= 1 ? "disabled" : ""} aria-label="Previous page">Previous</button>
           <span>Page ${currentPage} of ${totalPages}</span>
           <button data-action="next-page" ${currentPage >= totalPages ? "disabled" : ""} aria-label="Next page">Next</button>
@@ -142,6 +180,20 @@ export class ObEntityList extends HTMLElement {
       });
     });
 
+    this.shadowRoot!.querySelectorAll<HTMLSelectElement>("[data-filter-field]").forEach((control) => {
+      control.addEventListener("change", () => {
+        const field = control.dataset.filterField || "";
+        if (!field) return;
+        if (control.value === "") {
+          delete this._filters[field];
+        } else {
+          this._filters[field] = control.value;
+        }
+        this._offset = 0;
+        this._render();
+      });
+    });
+
     this.shadowRoot!.querySelectorAll("tr[data-id]").forEach((tr) => {
       tr.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).tagName === "A") return;
@@ -149,8 +201,28 @@ export class ObEntityList extends HTMLElement {
       });
     });
 
-    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="create"]')?.addEventListener("click", () => {
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-action="create"], [data-action="create-empty"]').forEach((button) => button.addEventListener("click", () => {
       location.hash = `#/${this.entity}s/new`;
+    }));
+
+    this.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-action="clear-filters"]').forEach((button) => button.addEventListener("click", () => {
+      this._filters = {};
+      this._filterAttr = "";
+      this._offset = 0;
+      if (this.hasAttribute("filter")) {
+        this.removeAttribute("filter");
+      } else {
+        this._render();
+      }
+    }));
+
+    this.shadowRoot!.querySelector<HTMLSelectElement>('[data-action="page-size"]')?.addEventListener("change", (event) => {
+      const value = Number((event.target as HTMLSelectElement).value);
+      if (Number.isFinite(value) && value > 0) {
+        this._limit = value;
+        this._offset = 0;
+        this._render();
+      }
     });
 
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="previous-page"]')?.addEventListener("click", () => {
@@ -164,6 +236,70 @@ export class ObEntityList extends HTMLElement {
         this._render();
       }
     });
+  }
+
+  private _syncFiltersFromAttribute() {
+    const raw = this.filter;
+    if (raw === this._filterAttr) return;
+    this._filterAttr = raw;
+    this._filters = parseFilter(raw);
+  }
+
+  private async _loadFilterOptions(fields: [string, any][], fks: Record<string, string>, api: ObApi): Promise<Record<string, any[]>> {
+    const options: Record<string, any[]> = {};
+    await Promise.all(fields.map(async ([field]) => {
+      const entity = fks[field];
+      if (!entity) return;
+      try {
+        const res = await api.request(`/api/${entity}s?limit=200`);
+        const data = await res.json();
+        options[field] = data.items || [];
+      } catch {
+        options[field] = [];
+      }
+    }));
+    return options;
+  }
+
+  private _renderFilterControl(
+    field: string,
+    prop: any,
+    fks: Record<string, string>,
+    relationships: Record<string, any>,
+    filterOptions: Record<string, any[]>,
+  ): string {
+    const id = `filter-${field}`;
+    const label = fieldDisplayLabel(field, prop);
+    const current = this._filters[field] || "";
+
+    if (fks[field]) {
+      const options = filterOptions[field] || [];
+      const relationship = relationships[field];
+      return `
+        <div class="filter-control">
+          <label for="${escapeAttr(id)}">${escapeHtml(label)}</label>
+          <select id="${escapeAttr(id)}" data-filter-field="${escapeAttr(field)}">
+            <option value="">All ${escapeHtml(label.toLowerCase())}</option>
+            ${options.map((row: any) => {
+              const optionLabel = relationshipLabelFor(row, relationship);
+              return `<option value="${escapeAttr(row.id)}" ${String(row.id) === String(current) ? "selected" : ""}>${escapeHtml(optionLabel)} (${escapeHtml(row.id)})</option>`;
+            }).join("")}
+          </select>
+        </div>`;
+    }
+
+    if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+      return `
+        <div class="filter-control">
+          <label for="${escapeAttr(id)}">${escapeHtml(label)}</label>
+          <select id="${escapeAttr(id)}" data-filter-field="${escapeAttr(field)}">
+            <option value="">All ${escapeHtml(label.toLowerCase())}</option>
+            ${prop.enum.map((choice: unknown) => `<option value="${escapeAttr(choice)}" ${String(choice) === String(current) ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}
+          </select>
+        </div>`;
+    }
+
+    return "";
   }
 
   private _renderCell(column: string, value: unknown, fks: Record<string, string>, prop: any): string {
@@ -183,6 +319,24 @@ export class ObEntityList extends HTMLElement {
 
     return `<td>${escapeHtml(formatted)}</td>`;
   }
+}
+
+function parseFilter(raw: string): Record<string, string> {
+  const filters: Record<string, string> = {};
+  if (!raw) return filters;
+  const params = new URLSearchParams(raw);
+  for (const [field, value] of params) {
+    if (field && value !== "") filters[field] = value;
+  }
+  return filters;
+}
+
+function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
+  const targetField = relationship?.targetLabel?.field;
+  if (targetField && row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== "") {
+    return String(row[targetField]);
+  }
+  return labelFor(row);
 }
 
 customElements.define("ob-entity-list", ObEntityList);

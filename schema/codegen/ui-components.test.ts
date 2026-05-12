@@ -156,6 +156,7 @@ describe("generated UI web components", () => {
     const authPanel = await Bun.file(join(UI_DIR, "components", "ob-auth-panel.ts")).text();
     const authPage = await Bun.file(join(UI_DIR, "components", "ob-auth-page.ts")).text();
     const accountSummary = await Bun.file(join(UI_DIR, "components", "ob-account-summary.ts")).text();
+    const entityList = await Bun.file(join(UI_DIR, "components", "ob-entity-list.ts")).text();
     const entityDetail = await Bun.file(join(UI_DIR, "components", "ob-entity-detail.ts")).text();
     const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
@@ -194,6 +195,11 @@ describe("generated UI web components", () => {
     expect(accountSummary).toContain("/api/users/${this._userId}");
     expect(accountSummary).toContain("user_id=${encodeURIComponent");
     expect(accountSummary).toContain('data-form="profile"');
+    expect(entityList).toContain("listSchemaFields");
+    expect(entityList).toContain("filterableSchemaFields");
+    expect(entityList).toContain('data-filter-field');
+    expect(entityList).toContain('data-action="page-size"');
+    expect(entityList).toContain('data-action="clear-filters"');
     expect(entityDetail).toContain("getOperationWorkflow");
     expect(entityDetail).toContain("confirmation?.required");
     expect(entityDetail).toContain('data-action="confirm-operation"');

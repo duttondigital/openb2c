@@ -11,7 +11,7 @@ import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import { validateSchema } from "./validation";
 import type { Column, Operation, Schema } from "./types";
-import { fieldDisplayLabel, orderedSchemaFields } from "../ui/format";
+import { fieldDisplayLabel, filterableSchemaFields, listSchemaFields, orderedSchemaFields } from "../ui/format";
 
 const baseColumn: Column = {
   type: "text",
@@ -53,6 +53,9 @@ function metadataSchema(): Schema {
           required: true,
           metadata: { label: "Full name", displayPriority: 20 },
           validation: { minLength: 1, maxLength: 80 },
+        }),
+        bio: col({
+          metadata: { label: "Biography", format: "textarea", displayPriority: 25 },
         }),
         status: col({
           default: "'active'",
@@ -117,7 +120,9 @@ describe("field metadata generation", () => {
   test("generated UI helpers use metadata labels, ordering, and redaction hints", () => {
     const openapi = JSON.parse(genOpenAPI(metadataSchema()));
     const schema = openapi.components.schemas.UserInput;
-    expect(orderedSchemaFields(schema).map(([name]) => name)).toEqual(["email", "name", "status", "age"]);
+    expect(orderedSchemaFields(schema).map(([name]) => name)).toEqual(["email", "name", "bio", "status", "age"]);
+    expect(listSchemaFields(schema).map(([name]) => name)).toEqual(["email", "name", "status", "age"]);
+    expect(filterableSchemaFields(schema).map(([name]) => name)).toEqual(["status"]);
     expect(fieldDisplayLabel("email", schema.properties.email)).toBe("Email address");
   });
 

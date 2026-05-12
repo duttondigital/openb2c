@@ -166,7 +166,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add login and identity challenge flow.
 - [x] Add API key or certificate-aware fetch client.
 - [x] Generate navigation from ontology metadata, not only entity names.
-- [ ] Generate list views with configured columns, filters, sorting, empty states, and pagination.
+- [x] Generate list views with configured columns, filters, sorting, empty states, and pagination.
 - [ ] Generate detail views with related records and visible operation buttons.
 - [ ] Generate forms from field metadata, including enum controls, dates, times, money, textarea, and relationship selectors.
 - [ ] Add role-aware and permission-aware UI hiding and disabling.
