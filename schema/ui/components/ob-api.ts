@@ -13,6 +13,26 @@ export interface OpenAPISpec {
     logo?: { src: string; alt: string | null } | null;
   };
   "x-openb2c-ecommerce"?: any;
+  "x-openb2c-navigation"?: {
+    groups?: NavigationGroup[];
+    items?: NavigationItem[];
+  };
+}
+
+export interface NavigationGroup {
+  id: string;
+  label: string;
+  displayPriority?: number;
+  internal?: boolean;
+}
+
+export interface NavigationItem {
+  entity: string;
+  path: string;
+  label: string;
+  group?: string;
+  displayPriority?: number;
+  internal?: boolean;
 }
 
 export interface Certificate {
@@ -477,6 +497,50 @@ export class ObApi extends HTMLElement {
     return entities;
   }
 
+  getNavigationGroups(options: { includeInternal?: boolean } = {}): NavigationGroup[] {
+    const items = this.getNavigationItems(options);
+    const usedGroups = new Set(items.map((item) => item.group || "data"));
+    const configured = this.spec?.["x-openb2c-navigation"]?.groups || [];
+    const groups = configured.length > 0 ? configured : [{ id: "data", label: "Data", displayPriority: 100 }];
+    const byId = new Map(groups.map((group) => [group.id, group]));
+
+    for (const groupId of usedGroups) {
+      if (!byId.has(groupId)) byId.set(groupId, { id: groupId, label: titleCase(groupId), displayPriority: 1000 });
+    }
+
+    return [...byId.values()]
+      .filter((group) => usedGroups.has(group.id))
+      .filter((group) => options.includeInternal || !group.internal)
+      .sort(sortNavigationGroups);
+  }
+
+  getNavigationItems(options: { includeInternal?: boolean } = {}): NavigationItem[] {
+    const items = this.spec?.["x-openb2c-navigation"]?.items || [];
+    if (items.length > 0) {
+      return [...items]
+        .filter((item) => options.includeInternal || !item.internal)
+        .sort((a, b) => {
+          const groupDelta = this._navigationGroupPriority(a.group) - this._navigationGroupPriority(b.group);
+          if (groupDelta !== 0) return groupDelta;
+          return sortNavigationItems(a, b);
+        });
+    }
+
+    return this.getEntities().map((entity, index) => ({
+      entity,
+      path: `#/${entity}s`,
+      label: pluralLabel(titleCase(entity)),
+      group: "data",
+      displayPriority: index * 10,
+      internal: false,
+    }));
+  }
+
+  private _navigationGroupPriority(groupId?: string): number {
+    const group = (this.spec?.["x-openb2c-navigation"]?.groups || []).find((candidate) => candidate.id === groupId);
+    return group?.displayPriority ?? 1000;
+  }
+
   hasCommerceWorkflow(): boolean {
     if (!this.spec) return false;
     return Boolean(this.spec["x-openb2c-ecommerce"]?.enabled);
@@ -557,6 +621,28 @@ export class ObApi extends HTMLElement {
 
 function pascalCase(s: string): string {
   return s.replace(/(^|_)(\w)/g, (_, __, c) => c.toUpperCase());
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\bId\b/g, "ID")
+    .replace(/\bApi\b/g, "API");
+}
+
+function pluralLabel(label: string): string {
+  if (/[^aeiou]y$/i.test(label)) return `${label.slice(0, -1)}ies`;
+  if (label.endsWith("s")) return `${label}es`;
+  return `${label}s`;
+}
+
+function sortNavigationGroups(a: NavigationGroup, b: NavigationGroup): number {
+  return (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label);
+}
+
+function sortNavigationItems(a: NavigationItem, b: NavigationItem): number {
+  return (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label);
 }
 
 function bytesToHex(bytes: Uint8Array): string {

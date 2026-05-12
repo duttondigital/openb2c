@@ -2,6 +2,14 @@ import type { AuthConfig, Column, DerivedField, Operation, Schema } from "./type
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+const NAV_GROUPS: Record<string, { label: string; displayPriority: number; internal?: boolean }> = {
+  commerce: { label: "Commerce", displayPriority: 10 },
+  workflow: { label: "Workflow", displayPriority: 20 },
+  payment: { label: "Payment", displayPriority: 30 },
+  data: { label: "Data", displayPriority: 100 },
+  security: { label: "Security", displayPriority: 900, internal: true },
+  system: { label: "System", displayPriority: 1000, internal: true },
+};
 const AUTH_SECURITY = [
   { bearerAuth: [] },
   { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
@@ -81,6 +89,126 @@ function withPolicy(operation: Record<string, unknown>, entity: string, action: 
     ...operation,
     "x-openb2c-policy": operationPolicy(entity, action, op),
   };
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\bId\b/g, "ID")
+    .replace(/\bApi\b/g, "API");
+}
+
+function pluralLabel(label: string): string {
+  if (/[^aeiou]y$/i.test(label)) return `${label.slice(0, -1)}ies`;
+  if (label.endsWith("s")) return `${label}es`;
+  return `${label}s`;
+}
+
+function ecommerceEntityPriorities(schema: Schema): Record<string, number> {
+  if (!schema.ecommerce?.enabled) return {};
+  const priorities: Record<string, number> = {};
+  const assign = (entity: string | undefined, priority: number) => {
+    if (entity && priorities[entity] === undefined) priorities[entity] = priority;
+  };
+  assign(schema.ecommerce.catalog?.entity, 10);
+  assign(schema.ecommerce.order?.entity, 20);
+  assign(schema.ecommerce.lineItem?.entity, 30);
+  assign(schema.ecommerce.transaction?.entity, 40);
+  return priorities;
+}
+
+function workflowPriority(schema: Schema, entity: string): number | null {
+  let priority: number | null = null;
+  const groups = schema.workflows?.groups || {};
+  for (const op of Object.values(schema.operations[entity] || {})) {
+    const group = op.workflow?.group;
+    if (!group) continue;
+    const groupPriority = groups[group]?.displayPriority;
+    if (groupPriority === null || groupPriority === undefined) continue;
+    priority = priority === null ? groupPriority : Math.min(priority, groupPriority);
+  }
+  return priority;
+}
+
+function hasWorkflowOperations(schema: Schema, entity: string): boolean {
+  return Object.values(schema.operations[entity] || {}).some(op => {
+    const workflow = op.workflow || {};
+    return Boolean(workflow.group || workflow.transitions?.length || workflow.audit || workflow.confirmation?.required);
+  });
+}
+
+function isInternalEntity(entity: string): boolean {
+  return entity.startsWith("identity_") || entity === "api_key" || entity.startsWith("openb2c_");
+}
+
+function referencedEntity(reference: string | null): string | null {
+  return reference?.match(/^([a-z_]+)\(/)?.[1] || null;
+}
+
+function isAssociativeEntity(schema: Schema, entity: string): boolean {
+  const columns = schema.tables[entity] || {};
+  const references = new Set(
+    Object.values(columns)
+      .map((column) => referencedEntity(column.references))
+      .filter((reference): reference is string => Boolean(reference && schema.tables[reference])),
+  );
+  if (references.size < 2) return false;
+
+  const parts = entity.split("_");
+  for (let i = 1; i < parts.length; i++) {
+    const left = parts.slice(0, i).join("_");
+    const right = parts.slice(i).join("_");
+    if (references.has(left) && references.has(right)) return true;
+  }
+  return false;
+}
+
+function isPrimaryNavigationEntity(schema: Schema, entity: string, commercePriorities: Record<string, number>): boolean {
+  if (isInternalEntity(entity)) return true;
+  if (commercePriorities[entity] !== undefined) return true;
+  if (schema.audit?.entities?.[entity]) return true;
+  if (hasWorkflowOperations(schema, entity)) return true;
+  return !isAssociativeEntity(schema, entity);
+}
+
+function navigationGroup(schema: Schema, entity: string, commercePriorities: Record<string, number>): string {
+  if (isInternalEntity(entity)) return entity.startsWith("identity_") || entity === "api_key" ? "security" : "system";
+  const auditCategory = schema.audit?.entities?.[entity]?.category;
+  if (auditCategory === "security" || auditCategory === "payment" || auditCategory === "system" || auditCategory === "workflow") {
+    return auditCategory;
+  }
+  if (commercePriorities[entity] !== undefined) return "commerce";
+  if (hasWorkflowOperations(schema, entity)) return "workflow";
+  return "data";
+}
+
+function openApiNavigationMetadata(schema: Schema): Record<string, unknown> {
+  const commercePriorities = ecommerceEntityPriorities(schema);
+  const entities = Object.keys(schema.tables).filter((entity) => isPrimaryNavigationEntity(schema, entity, commercePriorities));
+  const items = entities.map((entity, index) => {
+    const label = titleCase(entity);
+    const group = navigationGroup(schema, entity, commercePriorities);
+    const priority =
+      commercePriorities[entity] ??
+      workflowPriority(schema, entity) ??
+      index * 10;
+    return {
+      entity,
+      path: `#/${entity}s`,
+      label: pluralLabel(label),
+      group,
+      displayPriority: priority,
+      internal: isInternalEntity(entity) || Boolean(NAV_GROUPS[group]?.internal),
+    };
+  });
+
+  const usedGroups = new Set(items.map(item => item.group));
+  const groups = Object.entries(NAV_GROUPS)
+    .filter(([id]) => usedGroups.has(id))
+    .map(([id, group]) => ({ id, ...group }));
+
+  return { groups, items };
 }
 
 function operationWorkflow(op: Operation): Record<string, unknown> | null {
@@ -520,6 +648,7 @@ export function genOpenAPI(schema: Schema): string {
   const workflowMetadata = openApiWorkflowMetadata(schema);
   const validationMetadata = openApiValidationMetadata(schema);
   const ecommerceMetadata = openApiEcommerceMetadata(schema);
+  const navigationMetadata = openApiNavigationMetadata(schema);
   const paths: Record<string, unknown> = {};
   const schemas: Record<string, unknown> = {};
 
@@ -1067,6 +1196,7 @@ export function genOpenAPI(schema: Schema): string {
     ...(workflowMetadata ? { "x-openb2c-workflows": workflowMetadata } : {}),
     ...(validationMetadata ? { "x-openb2c-validation": validationMetadata } : {}),
     ...(ecommerceMetadata ? { "x-openb2c-ecommerce": ecommerceMetadata } : {}),
+    "x-openb2c-navigation": navigationMetadata,
     "x-openb2c-api-versioning": {
       current: app.version,
       requestHeader: "X-OpenB2C-API-Version",

@@ -3,9 +3,10 @@ import { gzipSync } from "node:zlib";
 import { dirname, join, normalize } from "node:path";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { genOpenAPI } from "./openapi";
 import { genAdminAppShell, genAppShell, genPublicAppShell } from "./ui";
 import { genAdminStylesheet, genPublicStylesheet } from "./ui-styles";
-import type { Schema } from "./types";
+import type { Column, Operation, Schema } from "./types";
 
 const PROJECT_ROOT = join(import.meta.dir, "..", "..");
 const UI_DIR = join(PROJECT_ROOT, "schema", "ui");
@@ -19,6 +20,82 @@ const shellSchema: Schema = {
   },
   operations: {},
 };
+
+const baseColumn: Column = {
+  type: "text",
+  pk: false,
+  auto: false,
+  required: false,
+  unique: false,
+  default: null,
+  references: null,
+};
+
+function col(overrides: Partial<Column>): Column {
+  return { ...baseColumn, ...overrides };
+}
+
+function op(overrides: Partial<Operation> = {}): Operation {
+  return { guard: null, relationships: [], public: false, scope: null, policy: {}, workflow: {}, audit: {}, set: {}, cascade: [], effects: [], ...overrides };
+}
+
+function navigationSchema(): Schema {
+  return {
+    organization: { name: "Navigation Test", description: "Navigation metadata test app", logo: null },
+    workflows: {
+      groups: {
+        issueLifecycle: {
+          label: "Issue lifecycle",
+          displayPriority: 15,
+        },
+      },
+    },
+    audit: {
+      entities: {
+        payment: {
+          operations: ["create"],
+          category: "payment",
+          reason: "Payments require payment-specific handling.",
+        },
+      },
+    },
+    tables: {
+      user: {
+        id: col({ type: "integer", pk: true, auto: true }),
+      },
+      issue: {
+        id: col({ type: "integer", pk: true, auto: true }),
+        status: col({ required: true }),
+      },
+      payment: {
+        id: col({ type: "integer", pk: true, auto: true }),
+      },
+      label: {
+        id: col({ type: "integer", pk: true, auto: true }),
+      },
+      issue_label: {
+        id: col({ type: "integer", pk: true, auto: true }),
+        issue_id: col({ type: "integer", required: true, references: "issue(id)" }),
+        label_id: col({ type: "integer", required: true, references: "label(id)" }),
+      },
+      api_key: {
+        id: col({ type: "integer", pk: true, auto: true }),
+      },
+      identity_challenge: {
+        id: col({ type: "integer", pk: true, auto: true }),
+      },
+    },
+    operations: {
+      issue: {
+        triage: op({
+          workflow: {
+            group: "issueLifecycle",
+          },
+        }),
+      },
+    },
+  };
+}
 
 describe("generated UI web components", () => {
   test("app shell delegates layout and routing to web components", () => {
@@ -97,6 +174,9 @@ describe("generated UI web components", () => {
     expect(adminApp).not.toContain("ob-auth-menu");
     expect(adminApp).not.toContain("function escapeAttr");
     expect(adminNav).toContain("./ob-auth-menu");
+    expect(adminNav).toContain("getNavigationItems");
+    expect(adminNav).toContain("getNavigationGroups");
+    expect(adminNav).not.toContain("INTERNAL_PREFIXES");
     expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
     expect(authMenu).toContain("#/login");
     expect(authMenu).toContain("#/account");
@@ -120,6 +200,8 @@ describe("generated UI web components", () => {
     const obApi = await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text();
     expect(obApi).toContain("getOperationWorkflow");
     expect(obApi).toContain("getOperationPolicy");
+    expect(obApi).toContain("getNavigationItems");
+    expect(obApi).toContain("getNavigationGroups");
     expect(obApi).toContain("restoreAuthContext");
     expect(obApi).toContain("setBearerAuth");
     expect(obApi).toContain("setApiKeyAuth");
@@ -146,11 +228,32 @@ describe("generated UI web components", () => {
     expect(publicRoute).not.toContain("./ob-entity");
     expect(adminRoute).toContain("./ob-auth-page");
     expect(adminRoute).toContain("../route");
+    expect(adminRoute).toContain("getNavigationItems");
+    expect(adminRoute).not.toContain("INTERNAL_PREFIXES");
     expect(adminRoute).toContain('page.setAttribute("context", "admin")');
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
     expect(adminRoute).toContain("./ob-entity-detail");
     expect(adminRoute).not.toContain("./ob-commerce");
+  });
+
+  test("OpenAPI exposes ontology-derived navigation metadata", () => {
+    const openapi = JSON.parse(genOpenAPI(navigationSchema()));
+
+    expect(openapi["x-openb2c-navigation"].groups).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "data", label: "Data" }),
+      expect.objectContaining({ id: "workflow", label: "Workflow" }),
+      expect.objectContaining({ id: "payment", label: "Payment" }),
+      expect.objectContaining({ id: "security", label: "Security", internal: true }),
+    ]));
+    expect(openapi["x-openb2c-navigation"].items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entity: "user", path: "#/users", label: "Users", group: "data", internal: false }),
+      expect.objectContaining({ entity: "issue", path: "#/issues", label: "Issues", group: "workflow", displayPriority: 15, internal: false }),
+      expect.objectContaining({ entity: "payment", path: "#/payments", label: "Payments", group: "payment", internal: false }),
+      expect.objectContaining({ entity: "api_key", path: "#/api_keys", label: "API Keys", group: "security", internal: true }),
+      expect.objectContaining({ entity: "identity_challenge", path: "#/identity_challenges", label: "Identity Challenges", group: "security", internal: true }),
+    ]));
+    expect(openapi["x-openb2c-navigation"].items.some((item: any) => item.entity === "issue_label")).toBe(false);
   });
 
   test("auth panel implements the generated identity challenge login flow", async () => {

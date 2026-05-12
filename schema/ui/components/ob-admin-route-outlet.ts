@@ -4,8 +4,6 @@
 import { ObApi } from "./ob-api";
 import { parseHash, safeReturnTo } from "../route";
 
-const INTERNAL_PREFIXES = ["identity_", "api_key"];
-
 export class ObAdminRouteOutlet extends HTMLElement {
   private _routeSeq = 0;
   private _onHashChange = () => {
@@ -85,8 +83,8 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: entityElement("ob-entity-list", match[1]) };
     }
 
-    const entities = api.getEntities().filter((entity) => !INTERNAL_PREFIXES.some((prefix) => entity.startsWith(prefix)));
-    if (entities.length > 0) return { redirect: `#/${entities[0]}s` };
+    const firstItem = api.getNavigationItems()[0];
+    if (firstItem) return { redirect: firstItem.path };
 
     const empty = document.createElement("p");
     empty.className = "empty";

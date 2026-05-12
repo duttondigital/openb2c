@@ -2,12 +2,10 @@
  * <ob-nav> - Admin sidebar navigation derived from OpenAPI spec entities.
  */
 import { ObApi } from "./ob-api";
-import { escapeAttr, escapeHtml, pluralDisplayName } from "../format";
+import { escapeAttr, escapeHtml } from "../format";
 import { apiDescription, apiLogo } from "../shell";
 import { stylesheetLink } from "../style-link";
 import "./ob-auth-menu";
-
-const INTERNAL_PREFIXES = ["identity_", "api_key"];
 
 export class ObNav extends HTMLElement {
   private _onHashChange = () => this._highlight();
@@ -22,9 +20,8 @@ export class ObNav extends HTMLElement {
     if (!api) return;
     await api.ready();
 
-    const entities = api.getEntities().filter(
-      (e) => !INTERNAL_PREFIXES.some((p) => e.startsWith(p))
-    );
+    const items = api.getNavigationItems();
+    const groups = api.getNavigationGroups();
     const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
     const appTitle = escapeHtml(appTitleRaw);
     const appDescription = escapeHtml(apiDescription(api));
@@ -43,10 +40,16 @@ export class ObNav extends HTMLElement {
             </div>
           </div>
         </div>
-        <div class="group">
-          <div class="group-title">Data</div>
-          ${entities.map((e) => `<button type="button" class="nav-link" data-href="#/${escapeAttr(e)}s" data-entity="${escapeAttr(e)}">${escapeHtml(pluralDisplayName(e))}</button>`).join("")}
-        </div>
+        ${groups.map((group) => {
+          const groupItems = items.filter((item) => (item.group || "data") === group.id);
+          if (groupItems.length === 0) return "";
+          return `
+            <div class="group">
+              <div class="group-title">${escapeHtml(group.label)}</div>
+              ${groupItems.map((item) => `<button type="button" class="nav-link" data-href="${escapeAttr(item.path)}" data-entity="${escapeAttr(item.entity)}">${escapeHtml(item.label)}</button>`).join("")}
+            </div>
+          `;
+        }).join("")}
         <div class="account">
           <ob-auth-menu placement="sidebar"></ob-auth-menu>
         </div>
