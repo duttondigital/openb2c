@@ -69,6 +69,14 @@ export interface Expr {
   [key: string]: unknown;
 }
 
+export interface CrossFieldValidationConstraint {
+  fields: FieldRef[];
+  expression: Expr;
+  message: string;
+}
+
+export type Validations = Record<string, Record<string, CrossFieldValidationConstraint>>;
+
 export interface Cascade {
   entity: string;
   via: string | null;
@@ -282,6 +290,7 @@ export interface Schema {
   indexes?: Indexes;
   refs?: Refs;
   relationships?: Relationships;
+  validations?: Validations;
   operations: Operations;
   ecommerce?: EcommerceConfig;
 }

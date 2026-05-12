@@ -121,6 +121,7 @@ in {
   indexes = modules.config.indexes;
   refs = modules.config.refs;
   relationships = modules.config.relationships;
+  validations = modules.config.validations;
   operations = composeLib.processOperations modules.config.tables modules.config.relationships modules.config.operations;
   ecommerce = modules.config.ecommerce;
 }

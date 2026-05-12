@@ -10,7 +10,7 @@ That ontology is the source of truth for the whole system. OpenB2C evaluates the
 
 Authentication uses a fixed platform foundation with configurable domain authorization. OpenB2C standardizes credential handling and the generated `AuthContext`, while each composition declares operation scopes, record relationships, public access, and guards. See [Authentication And Authorization Principles](./docs/auth-and-authorization.md).
 
-Generated API and UI behavior can also derive from field-level presentation, validation, ordering, privacy, redaction, relationship metadata, role/policy metadata, and workflow metadata. See [Field Metadata](./docs/field-metadata.md), [Relationship Metadata](./docs/relationship-metadata.md), [Role And Policy Metadata](./docs/policy-metadata.md), and [Workflow Metadata](./docs/workflow-metadata.md).
+Generated API and UI behavior can also derive from field-level presentation, validation, ordering, privacy, redaction, relationship metadata, role/policy metadata, and workflow metadata. See [Field Metadata](./docs/field-metadata.md), [Validation Metadata](./docs/validation-metadata.md), [Relationship Metadata](./docs/relationship-metadata.md), [Role And Policy Metadata](./docs/policy-metadata.md), and [Workflow Metadata](./docs/workflow-metadata.md).
 
 ## Features
 

@@ -279,6 +279,24 @@ let
 
   relationshipSpecType = lib.types.either lib.types.str relationshipType;
 
+  crossFieldValidationType = lib.types.submodule {
+    options = {
+      fields = lib.mkOption {
+        type = lib.types.listOf fieldRefType;
+        default = [];
+        description = "Structured local field references covered by this constraint.";
+      };
+      expression = lib.mkOption {
+        type = lib.types.attrs;
+        description = "Boolean expression AST that must evaluate truthy for a valid record.";
+      };
+      message = lib.mkOption {
+        type = lib.types.str;
+        description = "Human-readable validation error shown when the expression fails.";
+      };
+    };
+  };
+
   ecommerceOptionType = lib.types.submodule {
     options = {
       field = lib.mkOption {
@@ -706,6 +724,12 @@ in {
       type = lib.types.attrsOf (lib.types.attrsOf relationshipType);
       default = {};
       description = "Record relationship definitions per entity.";
+    };
+
+    validations = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf crossFieldValidationType);
+      default = {};
+      description = "Cross-field validation constraints per entity.";
     };
 
     indexes = lib.mkOption {

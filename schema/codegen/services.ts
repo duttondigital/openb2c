@@ -180,10 +180,26 @@ function fieldValidationRules(schema: Schema): Record<string, Record<string, unk
   return rules;
 }
 
+function crossFieldValidationCases(schema: Schema): string {
+  const cases: string[] = [];
+  for (const [entity, constraints] of Object.entries(schema.validations || {})) {
+    const checks: string[] = [];
+    for (const constraint of Object.values(constraints)) {
+      checks.push(`    if (!(${compileExpr(constraint.expression, "record")})) return ${JSON.stringify(constraint.message)};`);
+    }
+    if (checks.length > 0) {
+      cases.push(`    case ${JSON.stringify(entity)}:\n${checks.join("\n")}\n      return null;`);
+    }
+  }
+  return cases.join("\n");
+}
+
 function genServiceImports(schema: Schema): string {
   const policy = JSON.stringify(operationPolicies(schema), null, 2);
   const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
   const validationRules = JSON.stringify(fieldValidationRules(schema), null, 2);
+  const crossFieldCases = crossFieldValidationCases(schema);
+  const crossFieldSwitchCases = `${crossFieldCases}${crossFieldCases ? "\n" : ""}    default:\n      return null;`;
   return `import { Database } from "bun:sqlite";
 import * as T from "./types";
 
@@ -261,7 +277,7 @@ type FieldValidationRule = {
 
 const FIELD_VALIDATION_RULES: Record<string, Record<string, FieldValidationRule>> = ${validationRules};
 
-function validate(input: Record<string, unknown>, entity?: string): string | null {
+function validate(input: Record<string, unknown>, entity?: string, current?: Record<string, unknown>): string | null {
   if (input.email !== undefined && typeof input.email === "string" && !validateEmail(input.email)) {
     return "invalid email format";
   }
@@ -283,8 +299,17 @@ function validate(input: Record<string, unknown>, entity?: string): string | nul
       const error = validateField(field, input[field], rule);
       if (error) return error;
     }
+    const crossFieldError = validateCrossField(entity, input, current);
+    if (crossFieldError) return crossFieldError;
   }
   return null;
+}
+
+function validateCrossField(entity: string, input: Record<string, unknown>, current?: Record<string, unknown>): string | null {
+  const record = current ? { ...current, ...input } : input;
+  switch (entity) {
+${crossFieldSwitchCases}
+  }
 }
 
 function validateField(field: string, value: unknown, rule: FieldValidationRule): string | null {
@@ -1026,7 +1051,7 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
   }
 
   // Validate formats
-  const validationError = validate(input as Record<string, unknown>, "${entity}");
+  const validationError = validate(input as Record<string, unknown>, "${entity}", existing as Record<string, unknown>);
   if (validationError) return { ok: false, error: validationError, code: "invalid" };
 
   const sets: string[] = [];

@@ -175,6 +175,26 @@ function openApiWorkflowMetadata(schema: Schema): Record<string, unknown> | null
   };
 }
 
+function openApiValidationMetadata(schema: Schema): Record<string, unknown> | null {
+  const crossFieldConstraints: Record<string, Record<string, unknown>> = {};
+  for (const [entity, constraints] of Object.entries(schema.validations || {})) {
+    crossFieldConstraints[entity] = {};
+    for (const [name, constraint] of Object.entries(constraints)) {
+      crossFieldConstraints[entity][name] = {
+        fields: constraint.fields.map(field => ({
+          table: field.table,
+          field: field.field,
+          references: field.references,
+        })),
+        expression: constraint.expression,
+        message: constraint.message,
+      };
+    }
+  }
+  if (Object.keys(crossFieldConstraints).length === 0) return null;
+  return { crossFieldConstraints };
+}
+
 function errorResponse(description: string): unknown {
   return {
     description,
@@ -344,6 +364,7 @@ function columnValueSchema(col: Column, options: { includeDefault?: boolean } = 
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const workflowMetadata = openApiWorkflowMetadata(schema);
+  const validationMetadata = openApiValidationMetadata(schema);
   const ecommerceMetadata = openApiEcommerceMetadata(schema);
   const paths: Record<string, unknown> = {};
   const schemas: Record<string, unknown> = {};
@@ -867,6 +888,7 @@ export function genOpenAPI(schema: Schema): string {
     },
     "x-openb2c-auth": openApiAuthMetadata(schema),
     ...(workflowMetadata ? { "x-openb2c-workflows": workflowMetadata } : {}),
+    ...(validationMetadata ? { "x-openb2c-validation": validationMetadata } : {}),
     ...(ecommerceMetadata ? { "x-openb2c-ecommerce": ecommerceMetadata } : {}),
   };
 

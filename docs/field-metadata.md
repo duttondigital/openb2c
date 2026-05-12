@@ -37,4 +37,4 @@ Per-field validation metadata currently supports:
 - `pattern` for JavaScript-compatible regular expressions.
 - `enum` for finite allowed values.
 
-Generated OpenAPI schemas expose these constraints, generated forms use them for native browser validation where possible, and generated services enforce them before writes. Cross-field constraints are intentionally not modeled here; those need table or workflow-level validation because they depend on more than one column.
+Generated OpenAPI schemas expose these constraints, generated forms use them for native browser validation where possible, and generated services enforce them before writes. Cross-field constraints live under top-level validation metadata because they depend on more than one column. See [Validation Metadata](./validation-metadata.md).

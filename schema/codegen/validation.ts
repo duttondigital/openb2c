@@ -37,6 +37,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
     tables,
     operations: schema.operations || {},
     indexes: schema.indexes || {},
+    validations: schema.validations || {},
     workflows: schema.workflows || { groups: {} },
   } as Schema;
 
@@ -46,6 +47,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   validateColumns(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
+  validateCrossFieldValidations(normalized, diagnostics);
   validateWorkflows(normalized, diagnostics);
   validateOperations(normalized, diagnostics);
   validateEcommerce(normalized, diagnostics);
@@ -241,6 +243,34 @@ function validateRelationships(schema: Schema, diagnostics: SchemaDiagnostic[]):
   }
 }
 
+function validateCrossFieldValidations(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  for (const [entity, constraints] of Object.entries(schema.validations || {})) {
+    if (!tableExists(schema.tables, entity)) {
+      add(diagnostics, `validations.${entity}`, `references unknown entity ${JSON.stringify(entity)}`);
+      continue;
+    }
+    for (const [name, constraint] of Object.entries(constraints)) {
+      const path = `validations.${entity}.${name}`;
+      if (!constraint.fields || constraint.fields.length < 2) {
+        add(diagnostics, `${path}.fields`, "must include at least two fields");
+      }
+      for (const [index, field] of (constraint.fields || []).entries()) {
+        validateFieldRef(schema, field, `${path}.fields.${index}`, diagnostics, entity);
+      }
+      if (!constraint.message) {
+        add(diagnostics, `${path}.message`, "is required");
+      }
+      validateConstraintExpr(schema, entity, constraint.expression, `${path}.expression`, diagnostics);
+      const declaredFields = new Set((constraint.fields || []).filter(field => field.table === entity).map(field => field.field));
+      for (const field of expressionFields(constraint.expression)) {
+        if (!declaredFields.has(field)) {
+          add(diagnostics, `${path}.fields`, `must include expression field ${entity}.${field}`);
+        }
+      }
+    }
+  }
+}
+
 function validateWorkflows(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
   for (const [name, group] of Object.entries(schema.workflows?.groups || {})) {
     if (!group.label) {
@@ -253,6 +283,62 @@ function validateWorkflows(schema: Schema, diagnostics: SchemaDiagnostic[]): voi
     ) {
       add(diagnostics, `workflows.groups.${name}.displayPriority`, "must be a finite number");
     }
+  }
+}
+
+function expressionFields(expr: Expr | null | undefined): string[] {
+  const fields = new Set<string>();
+  function walk(e: Expr | null | undefined): void {
+    if (!e) return;
+    switch (e._t) {
+      case "field":
+        fields.add(String(e.name || ""));
+        return;
+      case "bin":
+        walk(e.left as Expr);
+        walk(e.right as Expr);
+        return;
+      case "un":
+        walk(e.arg as Expr);
+        return;
+      default:
+        return;
+    }
+  }
+  walk(expr);
+  return [...fields].filter(Boolean);
+}
+
+function validateConstraintExpr(schema: Schema, entity: string, expr: Expr | null | undefined, path: string, diagnostics: SchemaDiagnostic[]): void {
+  if (!expr) {
+    add(diagnostics, path, "is required");
+    return;
+  }
+  switch (expr._t) {
+    case "field": {
+      const name = String(expr.name || "");
+      if (!columnExists(schema.tables, entity, name)) {
+        add(diagnostics, `${path}.name`, `references unknown field ${entity}.${name}`);
+      }
+      return;
+    }
+    case "lit":
+      return;
+    case "bin":
+      validateConstraintExpr(schema, entity, expr.left as Expr, `${path}.left`, diagnostics);
+      validateConstraintExpr(schema, entity, expr.right as Expr, `${path}.right`, diagnostics);
+      return;
+    case "un":
+      validateConstraintExpr(schema, entity, expr.arg as Expr, `${path}.arg`, diagnostics);
+      return;
+    case "rel":
+      add(diagnostics, path, "cross-field validation expressions cannot reference related records");
+      return;
+    case "agg":
+      add(diagnostics, path, "cross-field validation expressions cannot use aggregate expressions");
+      return;
+    default:
+      add(diagnostics, path, `has unsupported expression type ${(expr as { _t?: unknown })._t}`);
   }
 }
 

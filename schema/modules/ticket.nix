@@ -94,6 +94,17 @@ in
     unique = true;
   };
 
+  validations.ticket.vipPriceMinimum = {
+    fields = [
+      config.refs.ticket.ticket_type
+      config.refs.ticket.price_pence
+    ];
+    expression = E.or
+      (E.ne (E.f "ticket_type") (E.lit "vip"))
+      (E.gte (E.f "price_pence") (E.lit 2500));
+    message = "VIP tickets must cost at least GBP 25.00.";
+  };
+
   workflows.groups.ticketLifecycle = {
     label = "Ticket lifecycle";
     description = "Customer and staff operations that move a ticket from reservation through admission or cancellation.";
