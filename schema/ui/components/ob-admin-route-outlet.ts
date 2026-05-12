@@ -80,7 +80,9 @@ export class ObAdminRouteOutlet extends HTMLElement {
 
     if ((match = hash.match(/^\/([a-z_]+s)$/))) {
       await import("./ob-entity-list");
-      return { node: entityElement("ob-entity-list", match[1]) };
+      const filter = params.toString();
+      const attrs = filter ? { filter } : {};
+      return { node: entityElement("ob-entity-list", match[1], attrs) };
     }
 
     const firstItem = api.getNavigationItems()[0];

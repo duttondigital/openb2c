@@ -476,12 +476,7 @@ export class ObApi extends HTMLElement {
 
   /** Get entity names from API paths (e.g., /api/issues → issue), filtering join tables */
   getEntities(): string[] {
-    if (!this.spec) return [];
-    const all = new Set<string>();
-    for (const path of Object.keys(this.spec.paths)) {
-      const m = path.match(/^\/api\/([a-z_]+)s$/);
-      if (m) all.add(m[1]);
-    }
+    const all = new Set(this.getAllEntities());
     // Filter out join tables: names like "issue_label" where both "issue" and "label" are entities
     const entities = [...all].filter((name) => {
       const parts = name.split("_");
@@ -495,6 +490,22 @@ export class ObApi extends HTMLElement {
       return true;
     });
     return entities;
+  }
+
+  /** Get every API-backed entity from collection paths, including relationship/link tables. */
+  getAllEntities(): string[] {
+    if (!this.spec) return [];
+    const all = new Set<string>();
+    for (const path of Object.keys(this.spec.paths)) {
+      const m = path.match(/^\/api\/([a-z_]+)s$/);
+      if (m) all.add(m[1]);
+    }
+    return [...all];
+  }
+
+  isInternalEntity(entity: string): boolean {
+    const item = this.spec?.["x-openb2c-navigation"]?.items?.find((candidate) => candidate.entity === entity);
+    return item?.internal ?? (entity.startsWith("identity_") || entity === "api_key" || entity.startsWith("openb2c_"));
   }
 
   getNavigationGroups(options: { includeInternal?: boolean } = {}): NavigationGroup[] {

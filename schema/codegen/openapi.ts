@@ -1,4 +1,4 @@
-import type { AuthConfig, Column, DerivedField, Operation, Schema } from "./types";
+import type { AuthConfig, Column, DerivedField, Expr, Operation, Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -215,6 +215,7 @@ function operationWorkflow(op: Operation): Record<string, unknown> | null {
   const workflow = op.workflow || {};
   const extension: Record<string, unknown> = {};
   if (workflow.group) extension.group = workflow.group;
+  if (op.guard) extension.preconditions = operationPreconditions(op.guard);
   if (workflow.transitions?.length) {
     extension.transitions = workflow.transitions.map(transition => ({
       field: {
@@ -250,6 +251,12 @@ function operationWorkflow(op: Operation): Record<string, unknown> | null {
     }
   }
   return Object.keys(extension).length > 0 ? extension : null;
+}
+
+function operationPreconditions(expr: Expr): Record<string, unknown> {
+  return {
+    expression: expr,
+  };
 }
 
 function withWorkflow(operation: Record<string, unknown>, op: Operation): Record<string, unknown> {

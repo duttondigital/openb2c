@@ -798,6 +798,67 @@ const entityForm = `
 `;
 
 const entityDetail = `
+  :host(ob-entity-detail) .section-title {
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--ob-text-muted);
+  }
+  :host(ob-entity-detail) .related-section,
+  :host(ob-entity-detail) .operation-section {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ob-border);
+  }
+  :host(ob-entity-detail) .related-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+  :host(ob-entity-detail) .related-group {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
+  :host(ob-entity-detail) .related-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :host(ob-entity-detail) .related-header h2 {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  :host(ob-entity-detail) .related-header p {
+    margin-top: 3px;
+    color: var(--ob-text-muted);
+    font-size: 12px;
+  }
+  :host(ob-entity-detail) .related-list {
+    display: grid;
+    gap: 6px;
+  }
+  :host(ob-entity-detail) .related-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+  }
+  :host(ob-entity-detail) .related-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   :host(ob-entity-detail) .header-actions {
     display: flex;
     gap: 8px;
@@ -808,9 +869,6 @@ const entityDetail = `
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    margin-top: 18px;
-    padding-top: 18px;
-    border-top: 1px solid var(--ob-border);
   }
   :host(ob-entity-detail) .delete-confirm {
     margin: 0 0 14px;

@@ -203,9 +203,18 @@ describe("generated UI web components", () => {
     expect(entityDetail).toContain("getOperationWorkflow");
     expect(entityDetail).toContain("confirmation?.required");
     expect(entityDetail).toContain('data-action="confirm-operation"');
+    expect(entityDetail).toContain("_loadRelatedRecords");
+    expect(entityDetail).toContain("getAllEntities");
+    expect(entityDetail).toContain("related-section");
+    expect(entityDetail).toContain("operationAvailability");
+    expect(entityDetail).toContain("evaluatePrecondition");
+    expect(entityDetail).toContain("disabled");
+    expect(entityDetail).toContain("relatedListHref");
     const obApi = await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text();
     expect(obApi).toContain("getOperationWorkflow");
     expect(obApi).toContain("getOperationPolicy");
+    expect(obApi).toContain("getAllEntities");
+    expect(obApi).toContain("isInternalEntity");
     expect(obApi).toContain("getNavigationItems");
     expect(obApi).toContain("getNavigationGroups");
     expect(obApi).toContain("restoreAuthContext");
@@ -237,6 +246,7 @@ describe("generated UI web components", () => {
     expect(adminRoute).toContain("getNavigationItems");
     expect(adminRoute).not.toContain("INTERNAL_PREFIXES");
     expect(adminRoute).toContain('page.setAttribute("context", "admin")');
+    expect(adminRoute).toContain("const filter = params.toString()");
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
     expect(adminRoute).toContain("./ob-entity-detail");

@@ -72,6 +72,7 @@ function workflowSchema(): Schema {
     operations: {
       ticket: {
         cancel: op({
+          guard: { _t: "bin", op: "==", left: { _t: "field", name: "status" }, right: { _t: "lit", value: "reserved" } },
           set: { status: "cancelled" },
           workflow: {
             group: "ticketLifecycle",
@@ -128,6 +129,9 @@ describe("workflow metadata generation", () => {
     });
     expect(openapi["x-openb2c-workflows"].operationWorkflows.ticket.cancel).toMatchObject({
       group: "ticketLifecycle",
+      preconditions: {
+        expression: { _t: "bin", op: "==" },
+      },
       audit: { summary: "Cancelled ticket" },
       confirmation: {
         required: true,
@@ -137,6 +141,9 @@ describe("workflow metadata generation", () => {
     });
     expect(openapi.paths["/api/tickets/{id}/cancel"].post["x-openb2c-workflow"]).toMatchObject({
       group: "ticketLifecycle",
+      preconditions: {
+        expression: { _t: "bin", op: "==" },
+      },
       transitions: [{
         field: { table: "ticket", field: "status", references: null },
         from: ["reserved", "confirmed"],
