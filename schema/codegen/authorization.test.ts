@@ -80,6 +80,22 @@ const schema: Schema = {
       delete: operation({ relationships: [ownerRel] }),
       confirm: operation({
         relationships: [ownerRel],
+        policy: {
+          label: "Confirm ticket",
+          description: "Confirm a reserved ticket.",
+          audiences: ["customer"],
+          risk: "medium",
+        },
+        workflow: {
+          audit: { summary: "Confirmed ticket" },
+          confirmation: {
+            required: true,
+            title: "Confirm ticket",
+            message: "This confirms the selected ticket.",
+            confirmLabel: "Confirm ticket",
+            severity: "warning",
+          },
+        },
         set: { status: "confirmed" },
       }),
     },
@@ -307,6 +323,50 @@ describe("generated authorization enforcement", () => {
     const denied = await callTool("confirm_ticket", { id: 1 }, { userId: 1, scopes: ["ticket.read"] });
     expect(denied.isError).toBe(true);
     expect(denied.content[0].text).toContain("not authorized");
+  });
+
+  test("MCP operation tools expose destructive hints and confirmation metadata", async () => {
+    const dir = writeGenerated();
+    process.env.DB_PATH = join(dir, "mcp-confirmation-metadata.sqlite");
+    const { handleRequest } = await import(pathToFileURL(join(dir, "mcp.ts")).href);
+
+    const res = await handleRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { userId: 1, scopes: ["ticket.confirm", "ticket.delete"] },
+    );
+    const tools = (res.result as { tools: Array<{ name: string; annotations?: unknown; _meta?: Record<string, unknown> }> }).tools;
+    const confirmTool = tools.find(tool => tool.name === "confirm_ticket");
+    const deleteTool = tools.find(tool => tool.name === "delete_ticket");
+
+    expect(confirmTool?.annotations).toMatchObject({
+      title: "Confirm ticket",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(confirmTool?._meta?.["openb2c/confirmation"]).toMatchObject({
+      required: true,
+      severity: "warning",
+      title: "Confirm ticket",
+      message: "This confirms the selected ticket.",
+      confirmLabel: "Confirm ticket",
+    });
+
+    expect(deleteTool?.annotations).toMatchObject({
+      title: "Delete Ticket record",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(deleteTool?._meta?.["openb2c/confirmation"]).toMatchObject({
+      required: true,
+      severity: "danger",
+      title: "Delete Ticket",
+      message: "This will delete the selected Ticket record.",
+      confirmLabel: "Delete Ticket",
+    });
   });
 
   test("MCP list tools support pagination, sorting, and exact-match filters", async () => {

@@ -102,6 +102,31 @@ describe("MCP metadata generation", () => {
     expect(mcp).toContain(`description: ${JSON.stringify("Browse tickets. Public ticket browsing. Key fields: Performance, Status, Seat.")}`);
     expect(mcp).toContain(`description: ${JSON.stringify("Delete a Ticket record. Key fields: Performance, Status, Seat.")}`);
     expect(mcp).toContain(`description: ${JSON.stringify("Cancel ticket. Cancel a reserved ticket. Workflow: Cancelled ticket. Requires confirmation: Cancel ticket.")}`);
+    expect(mcp).toContain(`annotations: ${JSON.stringify({
+      title: "Cancel ticket",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    })}`);
+    expect(mcp).toContain(`_meta: ${JSON.stringify({
+      "openb2c/confirmation": {
+        required: true,
+        severity: "warning",
+        title: "Cancel ticket",
+        message: "This will run Cancel ticket.",
+        confirmLabel: "Cancel ticket",
+      },
+    })}`);
+    expect(mcp).toContain(`_meta: ${JSON.stringify({
+      "openb2c/confirmation": {
+        required: true,
+        severity: "danger",
+        title: "Delete Ticket",
+        message: "This will delete the selected Ticket record.",
+        confirmLabel: "Delete Ticket",
+      },
+    })}`);
     expect(mcp).not.toContain("Secret token");
   });
 

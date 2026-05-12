@@ -170,6 +170,90 @@ function toolDescription(
   return parts.map(part => sentence(part)).filter(Boolean).join(" ");
 }
 
+function hasExternalEffects(op: Operation | undefined): boolean {
+  return Boolean(op?.effects?.some(effect => effect.notify || effect.call));
+}
+
+function operationMutates(op: Operation | undefined): boolean {
+  return Boolean(
+    op &&
+    (Object.keys(op.set || {}).length > 0 ||
+      (op.cascade || []).length > 0 ||
+      (op.effects || []).length > 0)
+  );
+}
+
+function isDestructiveOperation(action: string, op: Operation | undefined): boolean {
+  if (action === "delete") return true;
+  return Boolean(
+    op?.workflow?.confirmation?.required ||
+    op?.policy?.risk === "high" ||
+    (op?.cascade || []).length > 0
+  );
+}
+
+function operationToolTitle(action: string, entity: string, op: Operation | undefined): string {
+  return op?.policy?.label || `${titleCase(action)} ${titleCase(entity)}`;
+}
+
+function toolAnnotations(
+  title: string,
+  options: {
+    readOnly: boolean;
+    destructive: boolean;
+    idempotent: boolean;
+    openWorld: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    title,
+    readOnlyHint: options.readOnly,
+    destructiveHint: options.destructive,
+    idempotentHint: options.idempotent,
+    openWorldHint: options.openWorld,
+  };
+}
+
+function confirmationMetadata(
+  action: string,
+  entity: string,
+  op: Operation | undefined,
+): Record<string, unknown> | null {
+  const configured = op?.workflow?.confirmation;
+  const destructive = isDestructiveOperation(action, op);
+  if (!configured && !destructive) return null;
+
+  const fallbackTitle = operationToolTitle(action, entity, op);
+  const severity = configured?.severity || (action === "delete" || op?.policy?.risk === "high" ? "danger" : "warning");
+  const confirmation: Record<string, unknown> = {
+    required: configured?.required ?? true,
+    severity,
+  };
+
+  const title = configured?.title || fallbackTitle;
+  const message = configured?.message || (action === "delete"
+    ? `This will delete the selected ${titleCase(entity)} record.`
+    : `This will run ${fallbackTitle}.`);
+  const confirmLabel = configured?.confirmLabel || fallbackTitle;
+
+  if (title) confirmation.title = title;
+  if (message) confirmation.message = message;
+  if (confirmLabel) confirmation.confirmLabel = confirmLabel;
+
+  return { "openb2c/confirmation": confirmation };
+}
+
+function toolExtraFields(
+  annotations: Record<string, unknown>,
+  meta?: Record<string, unknown> | null,
+): string {
+  const fields = [`      annotations: ${JSON.stringify(annotations)},`];
+  if (meta && Object.keys(meta).length > 0) {
+    fields.push(`      _meta: ${JSON.stringify(meta)},`);
+  }
+  return `${fields.join("\n")}\n`;
+}
+
 export function genMcpServer(schema: Schema): string {
   const app = getAppMetadata(schema);
   const entities = Object.keys(schema.tables);
@@ -199,10 +283,16 @@ export function genMcpServer(schema: Schema): string {
 
     // List tool
     const listDescription = toolDescription("read", ops.read, `List ${titleCase(entity)} records`, cols);
+    const listExtras = toolExtraFields(toolAnnotations(`List ${titleCase(entity)} records`, {
+      readOnly: true,
+      destructive: false,
+      idempotent: true,
+      openWorld: false,
+    }));
     tools.push(`    {
       name: "list_${entity}s",
       description: ${JSON.stringify(listDescription)},
-      inputSchema: ${JSON.stringify(listInputSchema(cols))},
+${listExtras}      inputSchema: ${JSON.stringify(listInputSchema(cols))},
     }`);
     toolAuthz.push(`  "list_${entity}s": { entity: "${entity}", action: "read" }`);
     handlers.push(`      case "list_${entity}s":
@@ -218,10 +308,16 @@ export function genMcpServer(schema: Schema): string {
 
     // Get tool
     const getDescription = toolDescription("read", ops.read, `Get a ${titleCase(entity)} record by ID`, cols);
+    const getExtras = toolExtraFields(toolAnnotations(`Get ${titleCase(entity)} record`, {
+      readOnly: true,
+      destructive: false,
+      idempotent: true,
+      openWorld: false,
+    }));
     tools.push(`    {
       name: "get_${entity}",
       description: ${JSON.stringify(getDescription)},
-      inputSchema: {
+${getExtras}      inputSchema: {
         type: "object",
         properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
@@ -235,10 +331,16 @@ export function genMcpServer(schema: Schema): string {
 
     // Create tool
     const createDescription = toolDescription("create", ops.create, `Create a ${titleCase(entity)} record`, cols);
+    const createExtras = toolExtraFields(toolAnnotations(`Create ${titleCase(entity)} record`, {
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      openWorld: hasExternalEffects(ops.create),
+    }));
     tools.push(`    {
       name: "create_${entity}",
       description: ${JSON.stringify(createDescription)},
-      inputSchema: {
+${createExtras}      inputSchema: {
         type: "object",
         properties: ${JSON.stringify(inputProps)},
         required: ${JSON.stringify(requiredProps)},
@@ -252,10 +354,19 @@ export function genMcpServer(schema: Schema): string {
 
     // Delete tool
     const deleteDescription = toolDescription("delete", ops.delete, `Delete a ${titleCase(entity)} record`, cols);
+    const deleteExtras = toolExtraFields(
+      toolAnnotations(`Delete ${titleCase(entity)} record`, {
+        readOnly: false,
+        destructive: true,
+        idempotent: false,
+        openWorld: hasExternalEffects(ops.delete),
+      }),
+      confirmationMetadata("delete", entity, ops.delete),
+    );
     tools.push(`    {
       name: "delete_${entity}",
       description: ${JSON.stringify(deleteDescription)},
-      inputSchema: {
+${deleteExtras}      inputSchema: {
         type: "object",
         properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
@@ -270,11 +381,22 @@ export function genMcpServer(schema: Schema): string {
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
-      const operationDescription = toolDescription(opName, ops[opName], `${titleCase(opName)} ${titleCase(entity)} record`);
+      const operation = ops[opName];
+      const operationDescription = toolDescription(opName, operation, `${titleCase(opName)} ${titleCase(entity)} record`);
+      const operationDestructive = isDestructiveOperation(opName, operation);
+      const operationExtras = toolExtraFields(
+        toolAnnotations(operationToolTitle(opName, entity, operation), {
+          readOnly: !operationMutates(operation),
+          destructive: operationDestructive,
+          idempotent: !operationMutates(operation),
+          openWorld: hasExternalEffects(operation),
+        }),
+        confirmationMetadata(opName, entity, operation),
+      );
       tools.push(`    {
       name: "${opName}_${entity}",
       description: ${JSON.stringify(operationDescription)},
-      inputSchema: {
+${operationExtras}      inputSchema: {
         type: "object",
         properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
@@ -299,7 +421,13 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "list_commerce_catalog",
       description: "List configured ecommerce catalog items",
-      inputSchema: { type: "object", properties: {} },
+      annotations: ${JSON.stringify(toolAnnotations("List commerce catalog", {
+        readOnly: true,
+        destructive: false,
+        idempotent: true,
+        openWorld: false,
+      }))},
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
     }`);
     handlers.push(`      case "list_commerce_catalog":
         const commerceCatalogResult = S.listCommerceCatalog(db);
@@ -309,6 +437,12 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "checkout_cart",
       description: "Checkout a configured ecommerce cart",
+      annotations: ${JSON.stringify(toolAnnotations("Checkout cart", {
+        readOnly: false,
+        destructive: false,
+        idempotent: false,
+        openWorld: true,
+      }))},
       inputSchema: {
         type: "object",
         properties: {
@@ -347,6 +481,12 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "create_order_payment_intent",
       description: "Create a payment intent for a commerce order",
+      annotations: ${JSON.stringify(toolAnnotations("Create order payment intent", {
+        readOnly: false,
+        destructive: false,
+        idempotent: false,
+        openWorld: true,
+      }))},
       inputSchema: {
         type: "object",
         properties: { order_id: { type: "number", description: "order ID" } },
@@ -369,6 +509,21 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "expire_commerce_orders",
       description: "Expire stale commerce orders",
+      annotations: ${JSON.stringify(toolAnnotations("Expire commerce orders", {
+        readOnly: false,
+        destructive: true,
+        idempotent: false,
+        openWorld: false,
+      }))},
+      _meta: ${JSON.stringify({
+        "openb2c/confirmation": {
+          required: true,
+          severity: "warning",
+          title: "Expire commerce orders",
+          message: "This will expire stale commerce orders.",
+          confirmLabel: "Expire orders",
+        },
+      })},
       inputSchema: { type: "object", properties: {} },
     }`);
     toolAuthz.push(`  "expire_commerce_orders": { scope: "commerce.expire" }`);
@@ -382,6 +537,12 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "reserve_booking",
       description: "Reserve tickets for checkout",
+      annotations: ${JSON.stringify(toolAnnotations("Reserve booking", {
+        readOnly: false,
+        destructive: false,
+        idempotent: false,
+        openWorld: true,
+      }))},
       inputSchema: {
         type: "object",
         properties: {
@@ -410,6 +571,12 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "create_booking_payment_intent",
       description: "Create a payment intent for a booking",
+      annotations: ${JSON.stringify(toolAnnotations("Create booking payment intent", {
+        readOnly: false,
+        destructive: false,
+        idempotent: false,
+        openWorld: true,
+      }))},
       inputSchema: {
         type: "object",
         properties: { booking_id: { type: "number", description: "booking ID" } },
@@ -432,6 +599,21 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "expire_checkout_bookings",
       description: "Expire stale checkout bookings",
+      annotations: ${JSON.stringify(toolAnnotations("Expire checkout bookings", {
+        readOnly: false,
+        destructive: true,
+        idempotent: false,
+        openWorld: false,
+      }))},
+      _meta: ${JSON.stringify({
+        "openb2c/confirmation": {
+          required: true,
+          severity: "warning",
+          title: "Expire checkout bookings",
+          message: "This will expire stale checkout bookings.",
+          confirmLabel: "Expire bookings",
+        },
+      })},
       inputSchema: { type: "object", properties: {} },
     }`);
     toolAuthz.push(`  "expire_checkout_bookings": { scope: "booking.expire" }`);
