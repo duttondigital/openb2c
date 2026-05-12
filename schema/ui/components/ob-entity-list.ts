@@ -52,6 +52,13 @@ export class ObEntityList extends HTMLElement {
       this.shadowRoot!.innerHTML = `<p>Unknown entity: ${this.entity}</p>`;
       return;
     }
+    if (!api.canCollection(this.entity, "read")) {
+      this.shadowRoot!.innerHTML = `
+        ${stylesheetLink()}
+        ${permissionNotice(api.permissionReason(this.entity, "read") || `You do not have access to ${pluralDisplayName(this.entity).toLowerCase()}.`)}
+      `;
+      return;
+    }
 
     const inputSchema = api.getInputSchema(this.entity);
     const cols = listSchemaFields(schema);
@@ -90,6 +97,7 @@ export class ObEntityList extends HTMLElement {
     const totalPages = Math.max(1, Math.ceil(this._total / this._limit));
     const currentPage = Math.floor(this._offset / this._limit) + 1;
     const activeFilterCount = Object.keys(this._filters).filter((field) => this._filters[field] !== "").length;
+    const canCreate = api.canCollection(this.entity, "create");
     const emptyState = activeFilterCount > 0
       ? {
           title: "No matching records.",
@@ -98,18 +106,18 @@ export class ObEntityList extends HTMLElement {
         }
       : {
           title: `No ${pluralDisplayName(this.entity).toLowerCase()} yet.`,
-          body: `Create the first ${displayName(this.entity).toLowerCase()} record.`,
-          action: `<button type="button" class="primary" data-action="create-empty">New ${escapeHtml(displayName(this.entity))}</button>`,
+          body: canCreate ? `Create the first ${displayName(this.entity).toLowerCase()} record.` : "No records are visible to your current session.",
+          action: canCreate ? `<button type="button" class="primary" data-action="create-empty">New ${escapeHtml(displayName(this.entity))}</button>` : "",
         };
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
       <div class="header">
-        <div>
-          <div class="eyebrow">${this._total} record${this._total !== 1 ? "s" : ""}</div>
-          <h1>${escapeHtml(pluralDisplayName(this.entity))}</h1>
-        </div>
-        <button class="primary" type="button" data-action="create">New ${escapeHtml(displayName(this.entity))}</button>
+          <div>
+            <div class="eyebrow">${this._total} record${this._total !== 1 ? "s" : ""}</div>
+            <h1>${escapeHtml(pluralDisplayName(this.entity))}</h1>
+          </div>
+        ${canCreate ? `<button class="primary" type="button" data-action="create">New ${escapeHtml(displayName(this.entity))}</button>` : ""}
       </div>
       ${this._error ? `<div class="error-msg" role="alert">${escapeHtml(this._error)}</div>` : ""}
       ${filterFields.length > 0 ? `
@@ -319,6 +327,15 @@ export class ObEntityList extends HTMLElement {
 
     return `<td>${escapeHtml(formatted)}</td>`;
   }
+}
+
+function permissionNotice(message: string): string {
+  return `
+    <div class="empty-state permission-state" role="status">
+      <strong>Not available</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
 }
 
 function parseFilter(raw: string): Record<string, string> {

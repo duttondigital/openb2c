@@ -9,6 +9,9 @@ import "./ob-auth-menu";
 
 export class ObNav extends HTMLElement {
   private _onHashChange = () => this._highlight();
+  private _onAuthChanged = () => {
+    void this._render();
+  };
 
   constructor() {
     super();
@@ -16,11 +19,22 @@ export class ObNav extends HTMLElement {
   }
 
   async connectedCallback() {
+    document.addEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
+    window.addEventListener("hashchange", this._onHashChange);
+    await this._render();
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener("ob-auth-changed", this._onAuthChanged as EventListener);
+    window.removeEventListener("hashchange", this._onHashChange);
+  }
+
+  private async _render() {
     const api = ObApi.instance;
     if (!api) return;
     await api.ready();
 
-    const items = api.getNavigationItems();
+    const items = api.getNavigationItems().filter((item) => api.canCollection(item.entity, "read"));
     const groups = api.getNavigationGroups();
     const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
     const appTitle = escapeHtml(appTitleRaw);
@@ -65,12 +79,7 @@ export class ObNav extends HTMLElement {
       });
     });
 
-    window.addEventListener("hashchange", this._onHashChange);
     this._highlight();
-  }
-
-  disconnectedCallback() {
-    window.removeEventListener("hashchange", this._onHashChange);
   }
 
   private _highlight() {

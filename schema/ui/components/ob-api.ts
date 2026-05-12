@@ -110,6 +110,9 @@ export class ObApi extends HTMLElement {
     this.spec = await res.json();
     this.apiBase = this._resolveApiBase();
     await this.restoreAuthContext();
+    if (this.authContext.userId === null && !this.hasScope("*")) {
+      await this.refreshAuthContext({ silent: true });
+    }
     this._resolve();
     this.dispatchEvent(new CustomEvent("ob-spec-ready", { bubbles: true }));
   }
@@ -213,6 +216,20 @@ export class ObApi extends HTMLElement {
     this._privateKey = null;
     await this._deleteStoredIdentitySession();
     this.setAuthContext(ANONYMOUS_AUTH_CONTEXT);
+  }
+
+  async refreshAuthContext(options: { silent?: boolean } = {}): Promise<AuthContext | null> {
+    if (!this.hasIdentityAuth()) return this.authContext;
+    const res = await this.request("/auth/context");
+    if (!res.ok) {
+      if (options.silent) return null;
+      const error = await res.json().catch(() => ({ error: "authentication required" }));
+      throw new Error(error.error || "authentication required");
+    }
+    const auth = await res.json() as AuthContext;
+    this.authContext = auth;
+    this.dispatchEvent(new CustomEvent("ob-auth-changed", { bubbles: true, detail: auth }));
+    return auth;
   }
 
   async restoreAuthContext(): Promise<AuthContext> {
@@ -576,6 +593,46 @@ export class ObApi extends HTMLElement {
 
   getOperationPolicy(entity: string, operation: string): any | null {
     return this.getOperationSpec(entity, operation)?.["x-openb2c-policy"] || null;
+  }
+
+  getActionPolicy(entity: string, action: string): any | null {
+    if (!this.spec) return null;
+    if (action === "read") return this.spec.paths?.[`/api/${entity}s`]?.get?.["x-openb2c-policy"] || null;
+    if (action === "create") return this.spec.paths?.[`/api/${entity}s`]?.post?.["x-openb2c-policy"] || null;
+    if (action === "update") return this.spec.paths?.[`/api/${entity}s/{id}`]?.put?.["x-openb2c-policy"] || null;
+    if (action === "delete") return this.spec.paths?.[`/api/${entity}s/{id}`]?.delete?.["x-openb2c-policy"] || null;
+    return this.getOperationPolicy(entity, action);
+  }
+
+  hasScope(required: string): boolean {
+    return this.authContext.scopes.includes("*") || this.authContext.scopes.includes(required);
+  }
+
+  canCollection(entity: string, action: string): boolean {
+    const policy = this.getActionPolicy(entity, action);
+    if (!policy || policy.public) return true;
+    if (!this.hasScope(policy.scope)) return false;
+    if (this.authContext.scopes.includes("*")) return true;
+    const relationships = policy.relationships || [];
+    return relationships.length === 0 || this.authContext.userId !== null;
+  }
+
+  can(entity: string, action: string, record?: Record<string, unknown>): boolean {
+    const policy = this.getActionPolicy(entity, action);
+    if (!policy || policy.public) return true;
+    if (!this.hasScope(policy.scope)) return false;
+    if (this.authContext.scopes.includes("*")) return true;
+    const relationships = policy.relationships || [];
+    if (relationships.length === 0) return true;
+    if (this.authContext.userId === null || !record) return false;
+    return relationships.some((relationship: any) => Number(record[relationship.field?.field]) === this.authContext.userId);
+  }
+
+  permissionReason(entity: string, action: string): string {
+    const policy = this.getActionPolicy(entity, action);
+    if (!policy || policy.public) return "";
+    if (this.authContext.userId === null && !this.hasScope(policy.scope)) return "Sign in to access this action.";
+    return "Your current session does not include permission for this action.";
   }
 
   /** Get operations for an entity from OpenAPI paths */

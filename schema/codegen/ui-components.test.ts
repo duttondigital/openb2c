@@ -178,6 +178,8 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("./ob-auth-menu");
     expect(adminNav).toContain("getNavigationItems");
     expect(adminNav).toContain("getNavigationGroups");
+    expect(adminNav).toContain('canCollection(item.entity, "read")');
+    expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");
     expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
     expect(authMenu).toContain("#/login");
@@ -201,6 +203,8 @@ describe("generated UI web components", () => {
     expect(entityList).toContain('data-filter-field');
     expect(entityList).toContain('data-action="page-size"');
     expect(entityList).toContain('data-action="clear-filters"');
+    expect(entityList).toContain('api.canCollection(this.entity, "read")');
+    expect(entityList).toContain('api.canCollection(this.entity, "create")');
     expect(entityForm).toContain('type="date"');
     expect(entityForm).toContain('type="time"');
     expect(entityForm).toContain('type="datetime-local"');
@@ -208,9 +212,15 @@ describe("generated UI web components", () => {
     expect(entityForm).toContain("formValueFor");
     expect(entityForm).toContain("formDisplayValue");
     expect(entityForm).toContain("relationshipLabelFor");
+    expect(entityForm).toContain('api.can(this.entity, "update", record)');
+    expect(entityForm).toContain('api.canCollection(this.entity, "create")');
     expect(entityDetail).toContain("getOperationWorkflow");
     expect(entityDetail).toContain("confirmation?.required");
     expect(entityDetail).toContain('data-action="confirm-operation"');
+    expect(entityDetail).toContain('api.can(this.entity, "update", record)');
+    expect(entityDetail).toContain('api.can(this.entity, "delete", record)');
+    expect(entityDetail).toContain('api.can(this.entity, operation.op, record)');
+    expect(entityDetail).toContain('!api.canCollection(entity, "read")');
     expect(entityDetail).toContain("_loadRelatedRecords");
     expect(entityDetail).toContain("getAllEntities");
     expect(entityDetail).toContain("related-section");
@@ -223,6 +233,9 @@ describe("generated UI web components", () => {
     expect(obApi).toContain("getOperationPolicy");
     expect(obApi).toContain("getAllEntities");
     expect(obApi).toContain("isInternalEntity");
+    expect(obApi).toContain("refreshAuthContext");
+    expect(obApi).toContain("canCollection");
+    expect(obApi).toContain("permissionReason");
     expect(obApi).toContain("getNavigationItems");
     expect(obApi).toContain("getNavigationGroups");
     expect(obApi).toContain("restoreAuthContext");

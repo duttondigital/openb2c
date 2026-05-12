@@ -77,9 +77,27 @@ export class ObEntityDetail extends HTMLElement {
 
     const cols = orderedSchemaFields(schema);
     const title = `${displayName(this.entity)} #${this.recordId}`;
+    if (!api.can(this.entity, "read", record)) {
+      this.shadowRoot!.innerHTML = `
+        ${stylesheetLink()}
+        <div class="card">
+          <div class="card-header">
+            <h1>${escapeHtml(title)}</h1>
+            <button type="button" data-action="back">Back</button>
+          </div>
+          ${permissionNotice(api.permissionReason(this.entity, "read") || "You do not have access to this record.")}
+        </div>
+      `;
+      this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", () => {
+        location.hash = `#/${this.entity}s`;
+      });
+      return;
+    }
     const relatedGroups = await this._loadRelatedRecords(api, record);
     const operationViews = this._operationViews(api, record);
     const pendingOperation = operationViews.find((operation) => operation.op === this._confirmOperation);
+    const canUpdate = api.can(this.entity, "update", record);
+    const canDelete = api.can(this.entity, "delete", record);
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
@@ -89,8 +107,8 @@ export class ObEntityDetail extends HTMLElement {
             <h1>${escapeHtml(title)}</h1>
           </div>
           <div class="header-actions">
-            <button type="button" data-action="edit">Edit</button>
-            <button class="danger" type="button" data-action="delete">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>
+            ${canUpdate ? `<button type="button" data-action="edit">Edit</button>` : ""}
+            ${canDelete ? `<button class="danger" type="button" data-action="delete">${this._confirmDelete ? "Confirm Delete" : "Delete"}</button>` : ""}
             ${this._confirmDelete ? `<button type="button" data-action="cancel-delete">Cancel Delete</button>` : ""}
             <button type="button" data-action="back">Back</button>
           </div>
@@ -182,7 +200,7 @@ export class ObEntityDetail extends HTMLElement {
         available: availability.available,
         unavailableReason: availability.reason,
       };
-    });
+    }).filter((operation) => api.can(this.entity, operation.op, record));
   }
 
   private async _loadRelatedRecords(api: ObApi, record: Record<string, unknown>): Promise<RelatedGroup[]> {
@@ -191,7 +209,7 @@ export class ObEntityDetail extends HTMLElement {
     const candidates: Array<{ entity: string; field: string; relationship: any }> = [];
 
     for (const entity of api.getAllEntities()) {
-      if (entity === this.entity || api.isInternalEntity(entity)) continue;
+      if (entity === this.entity || api.isInternalEntity(entity) || !api.canCollection(entity, "read")) continue;
       const relationships = api.getForeignKeyRelationships(entity);
       for (const [field, relationship] of Object.entries(relationships)) {
         if ((relationship as any).targetEntity === this.entity) {
@@ -332,6 +350,15 @@ export class ObEntityDetail extends HTMLElement {
 
 function displayOperation(op: string): string {
   return op.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function permissionNotice(message: string): string {
+  return `
+    <div class="empty-state permission-state" role="status">
+      <strong>Not available</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
 }
 
 function relatedListHref(group: RelatedGroup): string {

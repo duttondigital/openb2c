@@ -58,6 +58,26 @@ export class ObEntityForm extends HTMLElement {
       } catch { /* empty */ }
     }
 
+    const allowed = this.mode === "edit"
+      ? api.can(this.entity, "update", record)
+      : api.canCollection(this.entity, "create");
+    if (!allowed) {
+      this.shadowRoot!.innerHTML = `
+        ${stylesheetLink()}
+        <div class="card">
+          <div class="card-header">
+            <h1>${this.mode === "edit" ? "Edit" : "New"} ${escapeHtml(displayName(this.entity))}</h1>
+            <button type="button" data-action="back">Back</button>
+          </div>
+          ${permissionNotice(api.permissionReason(this.entity, this.mode === "edit" ? "update" : "create") || "You do not have permission to use this form.")}
+        </div>
+      `;
+      this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", () => {
+        location.hash = this.mode === "edit" && this.recordId ? `#/${this.entity}s/${this.recordId}` : `#/${this.entity}s`;
+      });
+      return;
+    }
+
     // Load FK options
     const fkOptions: Record<string, any[]> = {};
     for (const [col, ref] of Object.entries(fks)) {
@@ -220,6 +240,15 @@ function inputAttrsFor(name: string, prop: any): string {
   if (format === "phone" || name.includes("phone")) return 'type="text" inputmode="tel" autocomplete="tel"';
   if (format === "url" || name.includes("url")) return 'type="text" inputmode="url"';
   return 'type="text"';
+}
+
+function permissionNotice(message: string): string {
+  return `
+    <div class="empty-state permission-state" role="status">
+      <strong>Not available</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
 }
 
 function validationAttrsFor(name: string, prop: any): string {
