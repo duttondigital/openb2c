@@ -112,6 +112,73 @@ function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
+export type WebhookSignatureHeaders = Pick<Headers, "get"> | Record<string, string | undefined>;
+
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+}
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+}
+
+function signatureHeaderValue(headers: WebhookSignatureHeaders, name: string): string {
+  const getter = (headers as Pick<Headers, "get">).get;
+  if (typeof getter === "function") return getter.call(headers, name) || "";
+  const record = headers as Record<string, string | undefined>;
+  return record[name] || record[name.toLowerCase()] || "";
+}
+
+function webhookSignatureToleranceSeconds(): number {
+  return Math.max(parseInt(process.env.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS || "300", 10) || 300, 1);
+}
+
+export async function webhookSigningHeaders(body: string): Promise<Record<string, string>> {
+  const secret = process.env.WEBHOOK_SIGNING_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("WEBHOOK_SIGNING_SECRET is required in production for webhook effects");
+    }
+    return {};
+  }
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = await hmacSha256Hex(secret, timestamp + "." + body);
+  return {
+    "X-OpenB2C-Timestamp": timestamp,
+    "X-OpenB2C-Signature": "sha256=" + signature,
+  };
+}
+
+export async function verifyOpenB2CWebhookSignature(
+  headers: WebhookSignatureHeaders,
+  body: string,
+  secret = process.env.WEBHOOK_SIGNING_SECRET || "",
+  toleranceSeconds = webhookSignatureToleranceSeconds(),
+): Promise<boolean> {
+  if (!secret) return false;
+  const timestamp = signatureHeaderValue(headers, "X-OpenB2C-Timestamp");
+  const signature = signatureHeaderValue(headers, "X-OpenB2C-Signature").trim().replace(/^sha256=/, "");
+  if (!timestamp || !signature) return false;
+  const timestampMs = Number(timestamp) * 1000;
+  if (!Number.isFinite(timestampMs)) return false;
+  if (toleranceSeconds > 0 && Math.abs(Date.now() - timestampMs) > toleranceSeconds * 1000) return false;
+  return safeEqual(signature, await hmacSha256Hex(secret, timestamp + "." + body));
+}
+
 export function ensureEffectTables(db: Database) {
   db.run(\`
     CREATE TABLE IF NOT EXISTS openb2c_effect_attempt (
@@ -148,10 +215,11 @@ export const defaultEffectHandlers: RuntimeEffectHandlers = {
   },
   async webhook(url, payload) {
     if (!url) return { skipped: true, reason: "WEBHOOK_URL not configured" };
+    const body = JSON.stringify(payload);
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: { "content-type": "application/json", ...await webhookSigningHeaders(body) },
+      body,
     });
     if (!res.ok) throw new Error(\`webhook failed with status \${res.status}\`);
     return { status: res.status };

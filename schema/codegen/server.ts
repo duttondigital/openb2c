@@ -876,7 +876,7 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 }
 
 const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match, X-OpenB2C-API-Version";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match, X-OpenB2C-API-Version";
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers);

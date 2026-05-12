@@ -69,7 +69,11 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
     );
   }
   if (hasWebhookEffects(schema)) {
-    specs.push({ name: "WEBHOOK_URL", description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true });
+    specs.push(
+      { name: "WEBHOOK_URL", description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true },
+      { name: "WEBHOOK_SIGNING_SECRET", description: "Shared secret used to sign outbound OpenB2C webhook effects.", requiredInProduction: true, secret: true },
+      { name: "WEBHOOK_SIGNATURE_TOLERANCE_SECONDS", description: "Maximum accepted age for OpenB2C webhook signatures when using the generated verifier.", requiredInProduction: false, secret: false, example: "300" },
+    );
   }
   if (hasPaymentEffects(schema) || hasCommerceWorkflow(schema)) {
     specs.push(

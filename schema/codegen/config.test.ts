@@ -79,6 +79,8 @@ function clearEnv() {
   delete process.env.PAYMENT_PROVIDER;
   delete process.env.PAYMENT_API_KEY;
   delete process.env.WEBHOOK_URL;
+  delete process.env.WEBHOOK_SIGNING_SECRET;
+  delete process.env.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS;
 }
 
 describe("generated configuration", () => {
@@ -90,9 +92,12 @@ describe("generated configuration", () => {
     expect(required).toContain("PAYMENT_PROVIDER");
     expect(required).toContain("PAYMENT_API_KEY");
     expect(required).toContain("WEBHOOK_URL");
+    expect(required).toContain("WEBHOOK_SIGNING_SECRET");
 
     const paymentKey = envVarSpecs(schema).find(spec => spec.name === "PAYMENT_API_KEY");
     expect(paymentKey?.secret).toBe(true);
+    const webhookSecret = envVarSpecs(schema).find(spec => spec.name === "WEBHOOK_SIGNING_SECRET");
+    expect(webhookSecret?.secret).toBe(true);
   });
 
   test("env examples include keys without embedding secret values", () => {
@@ -100,6 +105,7 @@ describe("generated configuration", () => {
     expect(example).toContain("PAYMENT_API_KEY=");
     expect(example).toContain("REGISTRY_PRIVATE_KEY=");
     expect(example).toContain("EMAIL_WEBHOOK_URL=");
+    expect(example).toContain("WEBHOOK_SIGNING_SECRET=");
     expect(example).not.toContain("sk_");
     expect(example).not.toContain("test-payment-key");
   });
@@ -126,6 +132,7 @@ describe("generated configuration", () => {
       process.env.PAYMENT_PROVIDER = "stripe";
       process.env.PAYMENT_API_KEY = "test-payment-key";
       process.env.WEBHOOK_URL = "https://hooks.example/openb2c";
+      process.env.WEBHOOK_SIGNING_SECRET = "test-webhook-secret";
       const { server } = await import(pathToFileURL(join(validDir, "server.ts")).href);
       server.stop(true);
     } finally {

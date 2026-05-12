@@ -44,6 +44,8 @@ The first production email provider is Resend. Generated identity challenge endp
 
 The first production payment provider is Stripe. Generated commerce payment-intent endpoints create Stripe PaymentIntents with `PAYMENT_PROVIDER=stripe`, `PAYMENT_API_KEY`, amount, lowercase currency, automatic payment methods, and an idempotency key derived from the generated order ID. `STRIPE_API_BASE` exists only for tests or an internal proxy.
 
+Declared outbound webhook effects require `WEBHOOK_URL` and `WEBHOOK_SIGNING_SECRET` in production. Generated webhook dispatch signs the exact JSON request body with HMAC-SHA256 over `<timestamp>.<body>` and sends `X-OpenB2C-Timestamp` plus `X-OpenB2C-Signature: sha256=<hex>`. Receivers should reject missing, stale, or mismatched signatures; the generated verifier uses `WEBHOOK_SIGNATURE_TOLERANCE_SECONDS` with a default of 300 seconds.
+
 ## Generated Templates
 
 Codegen writes `.env.example` beside generated artifacts. These templates list required and optional variables, but secret values are intentionally blank.

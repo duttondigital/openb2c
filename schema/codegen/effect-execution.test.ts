@@ -88,6 +88,21 @@ function effectRows(dbPath: string): { status: string; idempotency_key: string; 
   return rows;
 }
 
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+}
+
 describe("generated effect execution", () => {
   test("REST operations dispatch persisted idempotent effects and expose operator visibility", async () => {
     const dir = writeGenerated();
@@ -198,15 +213,23 @@ describe("generated effect execution", () => {
     const dir = writeGenerated();
     const effects = await import(pathToFileURL(join(dir, "effects.ts")).href);
     const db = new Database(join(dir, "webhook.sqlite"));
-    const received: unknown[] = [];
+    const received: Array<{ headers: Record<string, string>; body: string; json: unknown; valid: boolean }> = [];
     const hook = Bun.serve({
       port: 0,
       async fetch(req) {
-        received.push(await req.json());
+        const body = await req.text();
+        const headers = Object.fromEntries(req.headers);
+        received.push({
+          headers,
+          body,
+          json: JSON.parse(body),
+          valid: await effects.verifyOpenB2CWebhookSignature(req.headers, body, "test-webhook-secret"),
+        });
         return Response.json({ ok: true });
       },
     });
     process.env.WEBHOOK_URL = `http://127.0.0.1:${hook.port}`;
+    process.env.WEBHOOK_SIGNING_SECRET = "test-webhook-secret";
 
     try {
       const summary = await effects.dispatchEffects(db, [{
@@ -221,11 +244,23 @@ describe("generated effect execution", () => {
 
       expect(summary.succeeded).toBe(1);
       expect(received).toHaveLength(1);
-      expect(received[0]).toMatchObject({ action: "sync_ticket" });
+      expect(received[0].json).toMatchObject({ action: "sync_ticket" });
+      expect(received[0].valid).toBe(true);
+      const timestamp = received[0].headers["x-openb2c-timestamp"];
+      expect(timestamp).toMatch(/^\d+$/);
+      expect(received[0].headers["x-openb2c-signature"]).toBe(
+        `sha256=${await hmacSha256Hex("test-webhook-secret", `${timestamp}.${received[0].body}`)}`
+      );
+      expect(await effects.verifyOpenB2CWebhookSignature(
+        new Headers(received[0].headers),
+        received[0].body.replace("sync_ticket", "tampered"),
+        "test-webhook-secret",
+      )).toBe(false);
     } finally {
       hook.stop(true);
       db.close();
       delete process.env.WEBHOOK_URL;
+      delete process.env.WEBHOOK_SIGNING_SECRET;
     }
   });
 });
