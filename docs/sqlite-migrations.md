@@ -35,6 +35,31 @@ sqlite3 backup/app-YYYYmmdd-HHMMSS.db "PRAGMA integrity_check;"
 
 Keep the backup outside the deployment directory and retain the generated code version that produced it.
 
+## Maintenance
+
+For a single-server Bun + SQLite deployment, schedule maintenance from the host that owns the writable database file.
+
+Run lightweight planner/statistics maintenance regularly while the service is healthy:
+
+```bash
+sqlite3 app.db "PRAGMA optimize;"
+```
+
+Checkpoint WAL files before backups and after unusually heavy write periods:
+
+```bash
+sqlite3 app.db "PRAGMA wal_checkpoint(TRUNCATE);"
+```
+
+Use `VACUUM` only in a maintenance window after stopping the service or making the database read-only to the application, because it rewrites the database file and needs exclusive access:
+
+```bash
+sqlite3 app.db "VACUUM;"
+sqlite3 app.db "PRAGMA integrity_check;"
+```
+
+Keep enough free disk space for the live database, WAL files, and at least one fresh verified backup. Alert on disk usage before SQLite runs out of space.
+
 ## Rollback And Forward Fixes
 
 SQLite DDL rollback is limited. The default rollback procedure is to stop the service, restore the latest verified backup, and restart with the previous generated app version.
