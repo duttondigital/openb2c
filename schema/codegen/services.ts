@@ -249,7 +249,7 @@ export type ErrorCode =
 
 export type Result<D> =
   | { ok: true; data: D }
-  | { ok: false; error: string; code: ErrorCode };
+  | { ok: false; error: string; code: ErrorCode; details?: Record<string, string> };
 
 export interface ApiError {
   error: string;

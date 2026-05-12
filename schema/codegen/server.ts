@@ -1,4 +1,4 @@
-import type { Schema } from "./types";
+import type { Column, Schema } from "./types";
 import { requiredProductionEnvVars } from "./config";
 import { hasCommerceWorkflow, hasCommerceBookingAliases, pascalCase, camelCase } from "./utils";
 
@@ -73,7 +73,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},
   { method: "POST", path: "/commerce/checkout", handler: async (req, _, auth, signal) => {
-    const input = await readJson<S.CommerceCheckoutInput>(req, signal);
+    const input = await readCommerceCheckoutInput(req, signal);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const r = S.checkoutCommerceCart(db, input.data, auth);
     if (r.ok) {
@@ -113,13 +113,15 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
     if (!(await verifyPaymentWebhookSignature(req, raw.data))) {
       return corsResponse({ error: "invalid payment webhook signature", code: "invalid" }, { status: 401 });
     }
-    let input: S.PaymentWebhookInput;
+    let payload: unknown;
     try {
-      input = JSON.parse(raw.data) as S.PaymentWebhookInput;
+      payload = JSON.parse(raw.data);
     } catch {
       return corsResponse({ ok: false, error: "malformed JSON", code: "invalid" }, { status: 400 });
     }
-    const r = S.handleCommercePaymentWebhook(db, input);
+    const input = parsePaymentWebhookInput(payload);
+    if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
+    const r = S.handleCommercePaymentWebhook(db, input.data);
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",
@@ -127,7 +129,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
         entity: "commerce_order",
         recordId: r.data.order_id,
         result: r.data,
-        idempotencyKey: "payment-webhook:" + input.reference + ":" + input.status,
+        idempotencyKey: "payment-webhook:" + input.data.reference + ":" + input.data.status,
       });
     }
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
@@ -142,9 +144,76 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
   ];
 }
 
+type RequestFieldSpec = {
+  type: string;
+  required: boolean;
+  label: string;
+  format?: string;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  pattern?: string;
+  enum?: string[];
+};
+
+type RequestSchema = {
+  fields: Record<string, RequestFieldSpec>;
+};
+
+function requestFieldSpec(field: string, column: Column, required: boolean): RequestFieldSpec {
+  const metadata = column.metadata || {};
+  const validation = column.validation || {};
+  return {
+    type: column.type,
+    required,
+    label: metadata.label || field,
+    ...(metadata.format ? { format: metadata.format } : {}),
+    ...(validation.minLength !== undefined && validation.minLength !== null ? { minLength: validation.minLength } : {}),
+    ...(validation.maxLength !== undefined && validation.maxLength !== null ? { maxLength: validation.maxLength } : {}),
+    ...(validation.minimum !== undefined && validation.minimum !== null ? { minimum: validation.minimum } : {}),
+    ...(validation.maximum !== undefined && validation.maximum !== null ? { maximum: validation.maximum } : {}),
+    ...(validation.pattern ? { pattern: validation.pattern } : {}),
+    ...(validation.enum?.length ? { enum: validation.enum } : {}),
+  };
+}
+
+function createRelationshipFields(schema: Schema, entity: string): Set<string> {
+  const fields = new Set<string>();
+  for (const relationship of schema.operations[entity]?.create?.relationships || []) {
+    if (relationship.field.table === entity) fields.add(relationship.field.field);
+  }
+  return fields;
+}
+
+function requestSchemasForSchema(schema: Schema): Record<string, { create: RequestSchema; update: RequestSchema }> {
+  const result: Record<string, { create: RequestSchema; update: RequestSchema }> = {};
+  for (const [entity, columns] of Object.entries(schema.tables)) {
+    const createOptional = createRelationshipFields(schema, entity);
+    const createFields: Record<string, RequestFieldSpec> = {};
+    const updateFields: Record<string, RequestFieldSpec> = {};
+
+    for (const [field, column] of Object.entries(columns)) {
+      if (column.pk && column.auto) continue;
+      const generatedApiKeyField = entity === "api_key" && (field === "key_hash" || field === "key_prefix");
+      if (!generatedApiKeyField) {
+        createFields[field] = requestFieldSpec(field, column, column.required && !createOptional.has(field));
+      }
+      updateFields[field] = requestFieldSpec(field, column, false);
+    }
+
+    result[entity] = {
+      create: { fields: createFields },
+      update: { fields: updateFields },
+    };
+  }
+  return result;
+}
+
 export function genRoutes(schema: Schema): string {
   const requiredProductionEnv = requiredProductionEnvVars(schema);
   const redactedFields = redactedFieldsForSchema(schema);
+  const requestSchemas = requestSchemasForSchema(schema);
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -184,7 +253,7 @@ export function genRoutes(schema: Schema): string {
     // Special handling for api_key creation - generate and hash key
     if (entity === "api_key") {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth, signal) => {
-    const input = await readJson<{ name: string; user_id?: number; scopes?: string; expires_at?: string }>(req, signal);
+    const input = await readTypedJson<{ name: string; user_id?: number; scopes?: string; expires_at?: string }>(req, signal, REQUEST_SCHEMAS["${entity}"].create);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const rawKey = S.generateApiKey();
     const keyHash = await S.hashApiKey(rawKey);
@@ -195,7 +264,7 @@ export function genRoutes(schema: Schema): string {
   }},`);
     } else {
       routes.push(`  { method: "POST", path: "/api/${entity}s", handler: async (req, _, auth, signal) => {
-    const input = await readJson<T.${Entity}Input>(req, signal);
+    const input = await readTypedJson<T.${Entity}Input>(req, signal, REQUEST_SCHEMAS["${entity}"].create);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const r = S.create${Entity}(db, input.data, auth);
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
@@ -203,7 +272,7 @@ export function genRoutes(schema: Schema): string {
     }
 
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth, signal) => {
-    const input = await readJson<Partial<T.${Entity}Input>>(req, signal);
+    const input = await readTypedJson<Partial<T.${Entity}Input>>(req, signal, REQUEST_SCHEMAS["${entity}"].update, { partial: true });
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const r = S.update${Entity}(db, +p.id, input.data, auth);
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
@@ -256,6 +325,25 @@ const REQUIRED_PRODUCTION_ENV = ${JSON.stringify(requiredProductionEnv, null, 2)
 
 // Fields to exclude from API responses (sensitive data)
 const REDACTED_FIELDS: Record<string, string[]> = ${JSON.stringify(redactedFields, null, 2)};
+
+type RequestFieldSpec = {
+  type: string;
+  required: boolean;
+  label: string;
+  format?: string;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  pattern?: string;
+  enum?: string[];
+};
+
+type RequestSchema = {
+  fields: Record<string, RequestFieldSpec>;
+};
+
+const REQUEST_SCHEMAS: Record<string, { create: RequestSchema; update: RequestSchema }> = ${JSON.stringify(requestSchemas, null, 2)};
 
 function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
   const fields = REDACTED_FIELDS[entity];
@@ -340,6 +428,173 @@ async function readJson<T>(req: Request, signal: AbortSignal): Promise<S.Result<
   } catch {
     return { ok: false, error: "malformed JSON", code: "invalid" };
   }
+}
+
+function requestValidationError<T>(details: Record<string, string>): S.Result<T> {
+  return { ok: false, error: "request validation failed", code: "invalid", details };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateRequestField(field: string, value: unknown, spec: RequestFieldSpec, details: Record<string, string>) {
+  const label = spec.label || field;
+  if (value === null) {
+    details[field] = \`\${label} cannot be null\`;
+    return;
+  }
+
+  const type = spec.type.toLowerCase();
+  if (type === "integer") {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      details[field] = \`\${label} must be an integer\`;
+      return;
+    }
+  } else if (type === "real") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      details[field] = \`\${label} must be a finite number\`;
+      return;
+    }
+  } else if (type === "text") {
+    if (typeof value !== "string") {
+      details[field] = \`\${label} must be a string\`;
+      return;
+    }
+  } else if (type === "blob" && typeof value !== "string") {
+    details[field] = \`\${label} must be a string\`;
+    return;
+  }
+
+  const text = typeof value === "string" ? value : String(value);
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (spec.enum?.length && !spec.enum.includes(text)) details[field] = \`\${label} must be one of: \${spec.enum.join(", ")}\`;
+  if (spec.minLength !== undefined && text.length < spec.minLength) details[field] = \`\${label} must be at least \${spec.minLength} characters\`;
+  if (spec.maxLength !== undefined && text.length > spec.maxLength) details[field] = \`\${label} must be at most \${spec.maxLength} characters\`;
+  if (spec.pattern && !new RegExp(spec.pattern).test(text)) details[field] = \`\${label} has an invalid format\`;
+  if (spec.minimum !== undefined && (!Number.isFinite(numeric) || numeric < spec.minimum)) details[field] = \`\${label} must be at least \${spec.minimum}\`;
+  if (spec.maximum !== undefined && (!Number.isFinite(numeric) || numeric > spec.maximum)) details[field] = \`\${label} must be at most \${spec.maximum}\`;
+
+  switch (spec.format) {
+    case "email":
+      if (!S.validateEmail(text)) details[field] = \`\${label} must be a valid email address\`;
+      break;
+    case "postcode":
+      if (!S.validatePostcode(text)) details[field] = \`\${label} must be a valid UK postcode\`;
+      break;
+    case "phone":
+      if (!S.validatePhone(text)) details[field] = \`\${label} must be a valid UK phone number\`;
+      break;
+    case "date":
+      if (!S.validateDate(text)) details[field] = \`\${label} must use YYYY-MM-DD\`;
+      break;
+    case "time":
+      if (!S.validateTime(text)) details[field] = \`\${label} must use HH:MM\`;
+      break;
+    case "url":
+      try {
+        new URL(text);
+      } catch {
+        details[field] = \`\${label} must be a valid URL\`;
+      }
+      break;
+  }
+}
+
+function parseTypedObject<T>(value: unknown, schema: RequestSchema, options: { partial?: boolean } = {}): S.Result<T> {
+  if (!isPlainObject(value)) {
+    return requestValidationError<T>({ body: "body must be a JSON object" });
+  }
+
+  const details: Record<string, string> = {};
+  for (const key of Object.keys(value)) {
+    const spec = schema.fields[key];
+    if (!spec) {
+      details[key] = "field is not allowed";
+      continue;
+    }
+    validateRequestField(key, value[key], spec, details);
+  }
+
+  if (!options.partial) {
+    for (const [field, spec] of Object.entries(schema.fields)) {
+      if (spec.required && value[field] === undefined) {
+        details[field] = \`\${spec.label || field} is required\`;
+      }
+    }
+  }
+
+  return Object.keys(details).length ? requestValidationError<T>(details) : { ok: true, data: value as T };
+}
+
+async function readTypedJson<T>(req: Request, signal: AbortSignal, schema: RequestSchema, options: { partial?: boolean } = {}): Promise<S.Result<T>> {
+  const input = await readJson<unknown>(req, signal);
+  if (!input.ok) return input;
+  return parseTypedObject<T>(input.data, schema, options);
+}
+
+function parseCommerceOptionValue(value: unknown): S.Result<S.CommerceOptionValue> {
+  if (value === null || typeof value === "string" || typeof value === "number") return { ok: true, data: value };
+  return { ok: false, error: "option values must be strings, numbers, or null", code: "invalid" };
+}
+
+function parseCommerceCheckoutPayload(value: unknown): S.Result<S.CommerceCheckoutInput> {
+  if (!isPlainObject(value)) return requestValidationError<S.CommerceCheckoutInput>({ body: "body must be a JSON object" });
+  const details: Record<string, string> = {};
+  for (const key of Object.keys(value)) {
+    if (!["user_id", "client", "items"].includes(key)) details[key] = "field is not allowed";
+  }
+  if (value.user_id !== undefined && (typeof value.user_id !== "number" || !Number.isInteger(value.user_id))) {
+    details.user_id = "user_id must be an integer";
+  }
+  if (value.client !== undefined && typeof value.client !== "string") {
+    details.client = "client must be a string";
+  }
+  if (!Array.isArray(value.items)) {
+    details.items = "items must be an array";
+  } else {
+    value.items.forEach((item, index) => {
+      const prefix = \`items.\${index}\`;
+      if (!isPlainObject(item)) {
+        details[prefix] = "item must be an object";
+        return;
+      }
+      for (const key of Object.keys(item)) {
+        if (!["item_id", "quantity", "options"].includes(key)) details[\`\${prefix}.\${key}\`] = "field is not allowed";
+      }
+      if (typeof item.item_id !== "number" || !Number.isInteger(item.item_id)) details[\`\${prefix}.item_id\`] = "item_id must be an integer";
+      if (item.quantity !== undefined && (typeof item.quantity !== "number" || !Number.isInteger(item.quantity))) details[\`\${prefix}.quantity\`] = "quantity must be an integer";
+      if (item.options !== undefined) {
+        if (!isPlainObject(item.options)) {
+          details[\`\${prefix}.options\`] = "options must be an object";
+        } else {
+          for (const [name, optionValue] of Object.entries(item.options)) {
+            const parsed = parseCommerceOptionValue(optionValue);
+            if (!parsed.ok) details[\`\${prefix}.options.\${name}\`] = parsed.error;
+          }
+        }
+      }
+    });
+  }
+  return Object.keys(details).length ? requestValidationError<S.CommerceCheckoutInput>(details) : { ok: true, data: value as S.CommerceCheckoutInput };
+}
+
+async function readCommerceCheckoutInput(req: Request, signal: AbortSignal): Promise<S.Result<S.CommerceCheckoutInput>> {
+  const input = await readJson<unknown>(req, signal);
+  if (!input.ok) return input;
+  return parseCommerceCheckoutPayload(input.data);
+}
+
+function parsePaymentWebhookInput(value: unknown): S.Result<S.PaymentWebhookInput> {
+  if (!isPlainObject(value)) return requestValidationError<S.PaymentWebhookInput>({ body: "body must be a JSON object" });
+  const details: Record<string, string> = {};
+  for (const key of Object.keys(value)) {
+    if (!["reference", "status", "provider"].includes(key)) details[key] = "field is not allowed";
+  }
+  if (typeof value.reference !== "string" || value.reference.length === 0) details.reference = "reference is required";
+  if (value.status !== "succeeded" && value.status !== "failed") details.status = "status must be succeeded or failed";
+  if (value.provider !== undefined && typeof value.provider !== "string") details.provider = "provider must be a string";
+  return Object.keys(details).length ? requestValidationError<S.PaymentWebhookInput>(details) : { ok: true, data: value as S.PaymentWebhookInput };
 }
 
 function hex(bytes: ArrayBuffer): string {
