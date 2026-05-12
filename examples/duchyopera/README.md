@@ -47,6 +47,8 @@ bun run dev:duchyopera
 
 This example's `composition.nix` directly imports the modules it needs from `schema/modules/`. To add or remove features, simply edit the imports in `composition.nix` and regenerate.
 
+Fresh local databases apply the Hall for Cornwall reference venue and demo performance fixtures by default. Set `OPENB2C_APPLY_FIXTURES=false` to start with reference data only.
+
 ## Checkout Flow
 
 Duchy Opera enables the generic ecommerce workflow in `composition.nix`. The configuration maps catalog items to performances, orders to bookings, line items to tickets, and settlement records to transactions.

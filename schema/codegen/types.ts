@@ -272,6 +272,15 @@ export interface AuditConfig {
   entities: Record<string, AuditEntityMetadata>;
 }
 
+export type SeedValue = string | number | boolean | null;
+export type SeedRows = Record<string, SeedValue>[];
+
+export interface SeedConfig {
+  reference: Record<string, SeedRows>;
+  fixtures: Record<string, SeedRows>;
+  applyFixturesByDefault?: boolean;
+}
+
 export type WorkflowConfirmationSeverity = "info" | "warning" | "danger";
 
 export interface WorkflowGroupMetadata {
@@ -314,6 +323,7 @@ export interface Schema {
   organization: OrganizationMetadata;
   auth?: AuthConfig;
   audit?: AuditConfig;
+  seed?: SeedConfig;
   workflows?: WorkflowConfig;
   tables: Tables;
   derived?: DerivedFields;

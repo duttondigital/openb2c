@@ -4,10 +4,11 @@
  * Usage: nix eval --json -f schema/default.nix | bun schema/codegen/index.ts
  */
 
-export type { AppMetadata, OrganizationMetadata, Column, DerivedField, DerivedFields, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
+export type { AppMetadata, OrganizationMetadata, Column, DerivedField, DerivedFields, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, SeedConfig, SeedRows, SeedValue, Schema } from "./types";
 export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
 export { envVarSpecs, requiredProductionEnvVars, genEnvExample } from "./config";
 export { sqlType, genSQL } from "./sql";
+export { genSeedSQL, hasSeedRows } from "./seed";
 export { planMigration, generateMigrationStub } from "./migration";
 export { tsType, genRowInterface, genInputInterface, genTypes } from "./typescript";
 export { compileExpr, extractRelations } from "./expr";
@@ -25,6 +26,7 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } 
 import { extname, isAbsolute, join, resolve } from "path";
 import type { Schema } from "./types";
 import { genSQL } from "./sql";
+import { genSeedSQL } from "./seed";
 import { genTypes } from "./typescript";
 import { genServices } from "./services";
 import { genRuntime } from "./runtime";
@@ -55,6 +57,8 @@ if (import.meta.main) {
   mkdirSync(outDir, { recursive: true });
 
   writeFileSync(join(outDir, "schema.sql"), genSQL(schema.tables, schema.indexes));
+  writeFileSync(join(outDir, "seed.sql"), genSeedSQL(schema, "reference"));
+  writeFileSync(join(outDir, "fixtures.sql"), genSeedSQL(schema, "fixtures"));
   writeFileSync(join(outDir, "types.ts"), genTypes(schema.tables, schema.operations, schema.derived));
   writeFileSync(join(outDir, "services.ts"), genServices(schema));
   writeFileSync(join(outDir, "runtime.ts"), genRuntime(schema));
@@ -66,6 +70,8 @@ if (import.meta.main) {
   writeFileSync(join(outDir, ".env.example"), genEnvExample(schema));
 
   console.log(`wrote ${outDir}/schema.sql`);
+  console.log(`wrote ${outDir}/seed.sql`);
+  console.log(`wrote ${outDir}/fixtures.sql`);
   console.log(`wrote ${outDir}/types.ts`);
   console.log(`wrote ${outDir}/services.ts`);
   console.log(`wrote ${outDir}/runtime.ts`);

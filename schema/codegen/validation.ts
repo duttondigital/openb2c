@@ -1,4 +1,4 @@
-import type { Cascade, Column, Expr, FieldRef, Operation, Schema, Tables } from "./types";
+import type { Cascade, Column, Expr, FieldRef, Operation, Schema, SeedValue, Tables } from "./types";
 
 export interface SchemaDiagnostic {
   path: string;
@@ -37,6 +37,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
     tables,
     derived: schema.derived || {},
     audit: schema.audit || { entities: {} },
+    seed: schema.seed || { reference: {}, fixtures: {}, applyFixturesByDefault: false },
     operations: schema.operations || {},
     indexes: schema.indexes || {},
     validations: schema.validations || {},
@@ -49,6 +50,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   validateColumns(normalized, diagnostics);
   validateDerivedFields(normalized, diagnostics);
   validateAudit(normalized, diagnostics);
+  validateSeed(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
   validateCrossFieldValidations(normalized, diagnostics);
@@ -335,6 +337,84 @@ function validateAudit(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
         add(diagnostics, `audit.entities.${entity}.operations.${index}`, `references unknown operation ${entity}.${operation}`);
       }
     }
+  }
+}
+
+function validateSeed(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  for (const kind of ["reference", "fixtures"] as const) {
+    for (const [table, rows] of Object.entries(schema.seed?.[kind] || {})) {
+      if (!tableExists(schema.tables, table)) {
+        add(diagnostics, `seed.${kind}.${table}`, `references unknown table ${JSON.stringify(table)}`);
+        continue;
+      }
+
+      const columns = schema.tables[table];
+      rows.forEach((row, index) => {
+        const path = `seed.${kind}.${table}.${index}`;
+        const fields = Object.keys(row);
+        if (fields.length === 0) {
+          add(diagnostics, path, "must include at least one field");
+        }
+
+        for (const [field, value] of Object.entries(row)) {
+          const column = columns[field];
+          if (!column) {
+            add(diagnostics, `${path}.${field}`, `references unknown field ${table}.${field}`);
+            continue;
+          }
+          validateSeedValue(column, value, `${path}.${field}`, diagnostics);
+        }
+
+        for (const [field, column] of Object.entries(columns)) {
+          if (column.required && column.default === null && !column.auto && !hasOwn(row, field)) {
+            add(diagnostics, path, `missing required field ${table}.${field}`);
+          }
+        }
+
+        if (seedConflictColumns(columns, row).length === 0) {
+          add(diagnostics, path, "must include a primary-key or unique field so seeding remains idempotent");
+        }
+      });
+    }
+  }
+}
+
+function hasOwn(row: Record<string, SeedValue>, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(row, field);
+}
+
+function seedConflictColumns(columns: Record<string, Column>, row: Record<string, SeedValue>): string[] {
+  const primaryKey = Object.entries(columns)
+    .filter(([field, column]) => column.pk && hasOwn(row, field))
+    .map(([field]) => field);
+  if (primaryKey.length > 0) return primaryKey;
+
+  const unique = Object.entries(columns)
+    .find(([field, column]) => column.unique && hasOwn(row, field));
+  return unique ? [unique[0]] : [];
+}
+
+function validateSeedValue(column: Column, value: SeedValue, path: string, diagnostics: SchemaDiagnostic[]): void {
+  if (value === null) {
+    if (column.required) add(diagnostics, path, "cannot be null for a required field");
+    return;
+  }
+
+  const type = column.type.toLowerCase();
+  if (type === "integer") {
+    if (typeof value !== "number" || !Number.isInteger(value)) add(diagnostics, path, "must be an integer");
+    return;
+  }
+  if (type === "real") {
+    if (typeof value !== "number" || !Number.isFinite(value)) add(diagnostics, path, "must be a finite number");
+    return;
+  }
+  if (type === "text") {
+    if (typeof value !== "string") add(diagnostics, path, "must be a string");
+    return;
+  }
+  if (type === "blob" && typeof value !== "string") {
+    add(diagnostics, path, "must be a string");
   }
 }
 

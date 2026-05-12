@@ -1,4 +1,5 @@
 import type { Schema } from "./types";
+import { hasSeedRows } from "./seed";
 import { hasCommerceWorkflow } from "./utils";
 
 export interface EnvVarSpec {
@@ -65,6 +66,9 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   }
   if (hasCommerceWorkflow(schema)) {
     specs.push({ name: "PAYMENT_WEBHOOK_SECRET", description: "Shared secret used to verify payment provider webhook signatures.", requiredInProduction: true, secret: true });
+  }
+  if (hasSeedRows(schema, "fixtures")) {
+    specs.push({ name: "OPENB2C_APPLY_FIXTURES", description: "Apply generated fixture seed data at startup. Set false to disable non-production defaults.", requiredInProduction: false, secret: false, example: "false" });
   }
 
   return specs;

@@ -160,6 +160,35 @@ let
     };
   };
 
+  seedValueType = lib.types.nullOr (lib.types.oneOf [
+    lib.types.str
+    lib.types.int
+    lib.types.number
+    lib.types.bool
+  ]);
+
+  seedRowType = lib.types.attrsOf seedValueType;
+
+  seedType = lib.types.submodule {
+    options = {
+      reference = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf seedRowType);
+        default = {};
+        description = "Stable reference data inserted or updated during runtime bootstrap.";
+      };
+      fixtures = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf seedRowType);
+        default = {};
+        description = "Example or demo rows generated separately and applied only when fixtures are enabled.";
+      };
+      applyFixturesByDefault = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Apply fixture seed data by default in non-production runtime environments.";
+      };
+    };
+  };
+
   # Structured reference to a table field. These are generated under
   # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
   # references.
@@ -794,6 +823,12 @@ in {
       type = auditType;
       default = {};
       description = "Audit logging requirement metadata.";
+    };
+
+    seed = lib.mkOption {
+      type = seedType;
+      default = {};
+      description = "Reference and fixture seed data.";
     };
 
     tables = lib.mkOption {

@@ -10,7 +10,7 @@ That ontology is the source of truth for the whole system. OpenB2C evaluates the
 
 Authentication uses a fixed platform foundation with configurable domain authorization. OpenB2C standardizes credential handling and the generated `AuthContext`, while each composition declares operation scopes, record relationships, public access, and guards. See [Authentication And Authorization Principles](./docs/auth-and-authorization.md).
 
-Generated API and UI behavior can also derive from field-level presentation, validation, ordering, privacy, redaction, derived display fields, relationship metadata, role/policy metadata, workflow metadata, and audit requirements. See [Field Metadata](./docs/field-metadata.md), [Validation Metadata](./docs/validation-metadata.md), [Derived Fields](./docs/derived-fields.md), [Relationship Metadata](./docs/relationship-metadata.md), [Role And Policy Metadata](./docs/policy-metadata.md), [Workflow Metadata](./docs/workflow-metadata.md), and [Audit Metadata](./docs/audit-metadata.md).
+Generated API and UI behavior can also derive from field-level presentation, validation, ordering, privacy, redaction, derived display fields, relationship metadata, role/policy metadata, workflow metadata, audit requirements, and seed data. See [Field Metadata](./docs/field-metadata.md), [Validation Metadata](./docs/validation-metadata.md), [Derived Fields](./docs/derived-fields.md), [Relationship Metadata](./docs/relationship-metadata.md), [Role And Policy Metadata](./docs/policy-metadata.md), [Workflow Metadata](./docs/workflow-metadata.md), [Audit Metadata](./docs/audit-metadata.md), and [Seed Data](./docs/seed-data.md).
 
 ## Features
 
@@ -89,6 +89,8 @@ examples/              # Example compositions
 
 examples/*/generated/  # Generated code (gitignored)
 ├── schema.sql         # SQLite DDL
+├── seed.sql           # Reference seed data
+├── fixtures.sql       # Optional example fixtures
 ├── types.ts           # TypeScript interfaces
 ├── services.ts        # Business logic
 ├── server.ts          # REST API

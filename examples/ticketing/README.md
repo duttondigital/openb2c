@@ -63,6 +63,8 @@ bun run mcp
 bun run dev
 ```
 
+Fresh local databases apply demo users, a project, an issue, a label, and a comment by default. Set `OPENB2C_APPLY_FIXTURES=false` to start without fixtures.
+
 ## Testing
 
 The generated integration tests use an in-memory SQLite database and include:

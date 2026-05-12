@@ -15,6 +15,70 @@ let
             alt = "Duchy Opera";
           };
         };
+        seed = {
+          applyFixturesByDefault = true;
+          reference.venue = [
+            {
+              id = 1;
+              name = "Hall for Cornwall";
+              address = "Back Quay";
+              city = "Truro";
+              postcode = "TR1 2LL";
+              capacity = 900;
+              active = 1;
+            }
+          ];
+          fixtures = {
+            user = [
+              {
+                id = 1;
+                email = "ada@example.test";
+                name = "Ada Lovelace";
+                customer_type = "patron";
+              }
+            ];
+            artist = [
+              {
+                id = 1;
+                name = "Elowen Trevorrow";
+                role = "Soprano";
+                bio = "Cornish soprano performing as Pamina.";
+                active = 1;
+              }
+              {
+                id = 2;
+                name = "Morgan Trelawny";
+                role = "Conductor";
+                bio = "Music director for the Duchy Opera summer season.";
+                active = 1;
+              }
+            ];
+            performance = [
+              {
+                id = 1;
+                title = "The Magic Flute";
+                venue_id = 1;
+                date = "2026-06-12";
+                time = "19:30";
+                duration_mins = 150;
+                price_pence = 2500;
+                description = "Mozart's final opera staged for a Cornish charity audience.";
+                status = "scheduled";
+              }
+              {
+                id = 2;
+                title = "Cancelled Gala";
+                venue_id = 1;
+                date = "2026-06-13";
+                time = "19:30";
+                duration_mins = 120;
+                price_pence = 3000;
+                description = "Fixture used to prove unavailable catalog items stay out of checkout.";
+                status = "cancelled";
+              }
+            ];
+          };
+        };
         ecommerce = {
           enabled = true;
           catalog = {
@@ -117,6 +181,7 @@ in {
   organization = modules.config.organization;
   auth = modules.config.auth;
   audit = modules.config.audit;
+  seed = modules.config.seed;
   workflows = modules.config.workflows;
   tables = modules.config.tables;
   derived = modules.config.derived;
