@@ -68,12 +68,40 @@ For shared environments, prefer forward-fix migrations after a migration has bee
 
 ## Restore Drill
 
-Practice this before production:
+Practice this before production and after any schema or operationally significant release. A restore drill must never overwrite the production database; restore into an isolated path and prove the generated app can run against that copy. Run the drill from the generated release directory that contains `server.ts`.
 
 ```bash
-cp backup/app-YYYYmmdd-HHMMSS.db restore-test.db
-sqlite3 restore-test.db "PRAGMA integrity_check;"
-DB_PATH=restore-test.db PORT=0 bun generated/server.ts
+restore_dir="$(mktemp -d)"
+backup="/var/backups/openb2c/app-YYYYmmdd-HHMMSS.db"
+cp "$backup" "$restore_dir/app.db"
+sqlite3 "$restore_dir/app.db" "PRAGMA integrity_check;"
+sqlite3 "$restore_dir/app.db" "SELECT id, checksum, applied_at FROM openb2c_migration ORDER BY applied_at;"
+DB_PATH="$restore_dir/app.db" PORT=3099 AUTH_ENABLED=false bun generated/server.ts &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+curl --retry 10 --retry-connrefused -fsS http://127.0.0.1:3099/health
 ```
 
-Confirm startup succeeds, migration history is intact, and key read/write flows work against the restored database.
+The drill passes only when:
+
+- `PRAGMA integrity_check;` returns `ok`.
+- `openb2c_migration` exists and shows the expected migration history for the generated code version under test.
+- The generated server starts successfully and startup diagnostics report the restored `DB_PATH`.
+- `GET /health` succeeds against the restored server.
+- A representative read flow works for each important entity.
+- A representative write flow works against the restored copy, or the drill explicitly records why the backup was validated read-only.
+- The operator records the backup file, app version, restore time, validation result, and follow-up actions.
+
+For an emergency production restore, stop the service, verify the selected backup, replace the database file, remove stale WAL sidecars, then restart:
+
+```bash
+sudo systemctl stop openb2c-duchyopera.service
+backup="/var/backups/openb2c/duchyopera/app-YYYYmmdd-HHMMSS.db"
+sqlite3 "$backup" "PRAGMA integrity_check;"
+sudo install -o openb2c -g openb2c -m 0600 "$backup" /var/lib/openb2c/duchyopera/app.db
+sudo rm -f /var/lib/openb2c/duchyopera/app.db-wal /var/lib/openb2c/duchyopera/app.db-shm
+sudo systemctl start openb2c-duchyopera.service
+curl -fsS http://127.0.0.1:3085/health
+```
+
+If the failed release applied migrations, restore the matching generated app release as well as the matching database backup. Do not start an older generated release against a newer migrated database unless the migration plan explicitly says that downgrade is supported.
