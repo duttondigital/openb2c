@@ -177,7 +177,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 
 ### External Integrations
 
-- [ ] Choose first email provider and implement production OTP delivery.
+- [x] Choose first email provider and implement production OTP delivery.
 - [ ] Choose first payment provider and implement checkout or payment intent flow.
 - [ ] Add webhook signing and verification.
 - [ ] Add integration configuration metadata to Nix.

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { envVarSpecs, genEnvExample, requiredProductionEnvVars } from "./config";
 import { genEffectsInterface } from "./effects";
 import { genRoutes } from "./server";
 import { genServices } from "./services";
@@ -103,6 +104,14 @@ function clearServerEnv() {
   delete process.env.DB_PATH;
   delete process.env.PORT;
   delete process.env.AUTH_ENABLED;
+  delete process.env.CORS_ORIGINS;
+  delete process.env.REGISTRY_PUBLIC_KEY;
+  delete process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS;
+  delete process.env.EMAIL_PROVIDER;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_EMAILS_URL;
+  delete process.env.EMAIL_FROM;
+  delete process.env.IDENTITY_OTP_SUBJECT;
   delete process.env.NODE_ENV;
 }
 
@@ -138,6 +147,7 @@ describe("identity hardening generation", () => {
     expect(server).toContain("S.verifyRequest(db, cert, registryPubKey, REQUIRE_LOCAL_CERTIFICATE_REGISTRY");
     expect(server).toContain("S.createChallenge(db, email, publicKey, clientIp(req))");
     expect(server).toContain("S.issueIdentitySession(db, userId)");
+    expect(server).toContain("sendIdentityChallengeEmail(email, result.data.code, result.data.challengeId)");
     expect(server).toContain("await S.verifyIdentitySession(db, key)");
     expect(server).toContain("const SUPPORTS_API_KEYS = false;");
     expect(server).toContain("SUPPORTS_API_KEYS ? await S.verifyApiKey(db, key) : null");
@@ -160,6 +170,22 @@ describe("identity hardening generation", () => {
       $ref: "#/components/schemas/IdentityVerifyResult",
     });
     expect(openapi.components.schemas.IdentityVerifyResult.required).toEqual(["certificate", "sessionToken", "sessionExpiresAt", "auth"]);
+  });
+
+  test("identity production configuration requires Resend OTP delivery", () => {
+    const required = requiredProductionEnvVars(schema);
+    expect(required).toContain("RESEND_API_KEY");
+    expect(required).toContain("EMAIL_FROM");
+    expect(required).not.toContain("EMAIL_WEBHOOK_URL");
+
+    const specs = envVarSpecs(schema);
+    expect(specs.find(spec => spec.name === "EMAIL_PROVIDER")?.example).toBe("resend");
+    expect(specs.find(spec => spec.name === "RESEND_API_KEY")?.secret).toBe(true);
+
+    const example = genEnvExample(schema);
+    expect(example).toContain("EMAIL_PROVIDER=resend");
+    expect(example).toContain("RESEND_API_KEY=");
+    expect(example).toContain("EMAIL_FROM=OpenB2C <login@example.com>");
   });
 
   test("certificate request verification applies the chosen registry state model", async () => {
@@ -298,6 +324,81 @@ describe("identity hardening generation", () => {
     } finally {
       server.stop(true);
       clearServerEnv();
+    }
+  });
+
+  test("production identity challenge sends OTP through Resend without returning the code", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const deliveries: Array<{ path: string; headers: Record<string, string>; body: any }> = [];
+    const resend = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        deliveries.push({
+          path: new URL(req.url).pathname,
+          headers: Object.fromEntries(req.headers),
+          body: await req.json(),
+        });
+        return Response.json({ id: "email_test_123" });
+      },
+    });
+    const dir = writeGenerated();
+    let server: Bun.Server | null = null;
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.DB_PATH = join(dir, "identity-prod-email.sqlite");
+      process.env.PORT = "0";
+      process.env.CORS_ORIGINS = "https://app.example";
+      process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS = "true";
+      process.env.RESEND_API_KEY = "re_test_identity";
+      process.env.RESEND_EMAILS_URL = `http://127.0.0.1:${resend.port}/emails`;
+      process.env.EMAIL_FROM = "OpenB2C <login@example.test>";
+
+      ({ server } = await import(`${pathToFileURL(join(dir, "server.ts")).href}?production-email=${Date.now()}`));
+      const base = `http://127.0.0.1:${server.port}`;
+      const keypair = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]) as CryptoKeyPair;
+      const publicKey = bytesToHex(await crypto.subtle.exportKey("raw", keypair.publicKey));
+
+      const challenge = await fetch(`${base}/identity/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "prod-login@example.test", publicKey }),
+      });
+      expect(challenge.status).toBe(200);
+      const challengeBody = await challenge.json() as { challengeId: number; message: string; code?: string };
+      expect(challengeBody.challengeId).toBeGreaterThan(0);
+      expect(challengeBody.message).toBe("verification code sent to email");
+      expect(challengeBody.code).toBeUndefined();
+
+      expect(deliveries).toHaveLength(1);
+      const delivery = deliveries[0];
+      expect(delivery.path).toBe("/emails");
+      expect(delivery.headers.authorization).toBe("Bearer re_test_identity");
+      expect(delivery.headers["idempotency-key"]).toBe(`identity-challenge-${challengeBody.challengeId}`);
+      expect(delivery.body).toMatchObject({
+        from: "OpenB2C <login@example.test>",
+        to: ["prod-login@example.test"],
+        subject: "OpenB2C sign-in code",
+      });
+      expect(delivery.body.html).toContain("Your sign-in code for OpenB2C is:");
+      const code = String(delivery.body.text).match(/\b\d{6}\b/)?.[0];
+      expect(code).toBeDefined();
+
+      const signature = await signText(keypair.privateKey, code!);
+      const verified = await fetch(`${base}/identity/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ challengeId: challengeBody.challengeId, code, signature }),
+      });
+      expect(verified.status).toBe(200);
+      const verifiedBody = await verified.json() as { certificate: { email: string; publicKey: string }; sessionToken: string };
+      expect(verifiedBody.certificate).toMatchObject({ email: "prod-login@example.test", publicKey });
+      expect(verifiedBody.sessionToken).toStartWith("sess_");
+    } finally {
+      server?.stop(true);
+      resend.stop(true);
+      clearServerEnv();
+      if (previousNodeEnv !== undefined) process.env.NODE_ENV = previousNodeEnv;
     }
   });
 

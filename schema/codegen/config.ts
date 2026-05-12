@@ -34,6 +34,10 @@ function hasPaymentEffects(schema: Schema): boolean {
   );
 }
 
+function hasIdentityChallenge(schema: Schema): boolean {
+  return Boolean(schema.tables.identity_challenge && schema.tables.identity_registry);
+}
+
 export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   const specs: EnvVarSpec[] = [
     { name: "NODE_ENV", description: "Set to production for production startup validation.", requiredInProduction: false, secret: false, example: "development" },
@@ -54,6 +58,15 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
 
   if (hasEmailEffects(schema)) {
     specs.push({ name: "EMAIL_WEBHOOK_URL", description: "Email provider dispatch endpoint used by generated email effects.", requiredInProduction: true, secret: true });
+  }
+  if (hasIdentityChallenge(schema)) {
+    specs.push(
+      { name: "EMAIL_PROVIDER", description: "Email provider used for production identity OTP delivery. The first supported provider is Resend.", requiredInProduction: false, secret: false, example: "resend" },
+      { name: "RESEND_API_KEY", description: "Resend API key used to send production identity OTP emails.", requiredInProduction: true, secret: true },
+      { name: "EMAIL_FROM", description: "Verified sender address for production identity OTP emails.", requiredInProduction: true, secret: false, example: "OpenB2C <login@example.com>" },
+      { name: "IDENTITY_OTP_SUBJECT", description: "Optional subject line override for identity OTP emails.", requiredInProduction: false, secret: false },
+      { name: "RESEND_EMAILS_URL", description: "Optional Resend emails API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.resend.com/emails" },
+    );
   }
   if (hasWebhookEffects(schema)) {
     specs.push({ name: "WEBHOOK_URL", description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true });

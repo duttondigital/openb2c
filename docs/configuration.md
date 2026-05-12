@@ -12,6 +12,7 @@ NODE_ENV=development AUTH_ENABLED=false DB_PATH=./dev.db bun examples/duchyopera
 ```
 
 Local development may use ephemeral registry keys and fake effect handlers. Email, webhook, and payment effects are persisted even when provider env vars are absent.
+Identity OTP challenges return the code in non-production so generated UI and browser tests can complete without a real mailbox.
 
 ## Staging
 
@@ -22,6 +23,7 @@ Staging should mirror production safety settings:
 - Explicit `CORS_ORIGINS`
 - `AUTH_ENABLED=true`
 - `REGISTRY_PRIVATE_KEY` for local issuance or `REGISTRY_PUBLIC_KEY` for an external registry
+- `RESEND_API_KEY` and `EMAIL_FROM` when the identity module is enabled
 - Provider env vars for every declared email, webhook, or payment effect
 
 Use staging to test migrations, backups, restore drills, and failed effect retries before production.
@@ -34,8 +36,11 @@ Production startup fails when required env vars are missing. The generated serve
 - Auth is not disabled unless `ALLOW_INSECURE_AUTH_DISABLED=true`.
 - CORS origins are explicit unless `ALLOW_WILDCARD_CORS=true`.
 - Registry keys are configured unless `ALLOW_EPHEMERAL_REGISTRY_KEYS=true`.
+- Identity OTP delivery is configured with the Resend provider when identity challenge tables are present.
 
 Secrets such as `REGISTRY_PRIVATE_KEY`, `PAYMENT_API_KEY`, email provider credentials, and webhook endpoints must come from a secret store. Keep `.env` files out of source control.
+
+The first production email provider is Resend. Generated identity challenge endpoints send OTP messages through `POST https://api.resend.com/emails` using `RESEND_API_KEY`, `EMAIL_FROM`, and an idempotency key derived from the challenge ID. `EMAIL_PROVIDER` defaults to `resend`; `RESEND_EMAILS_URL` exists only for tests or an internal proxy.
 
 ## Generated Templates
 

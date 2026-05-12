@@ -632,6 +632,89 @@ async function verifyPaymentWebhookSignature(req: Request, body: string): Promis
   return safeEqual(signature, await hmacSha256Hex(secret, body));
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function identityEmailProvider(): string {
+  return (process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
+}
+
+function identityOtpSubject(): string {
+  return process.env.IDENTITY_OTP_SUBJECT || \`\${APP_CONFIG.name} sign-in code\`;
+}
+
+function identityOtpText(code: string): string {
+  return [
+    \`Your \${APP_CONFIG.name} sign-in code is \${code}.\`,
+    "",
+    "This code expires in 10 minutes. If you did not request it, you can ignore this email.",
+  ].join("\\n");
+}
+
+function identityOtpHtml(code: string): string {
+  return [
+    \`<p>Your sign-in code for \${escapeHtml(APP_CONFIG.name)} is:</p>\`,
+    \`<p style="font-size:24px;font-weight:700;letter-spacing:4px">\${escapeHtml(code)}</p>\`,
+    "<p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>",
+  ].join("");
+}
+
+async function sendResendIdentityOtp(email: string, code: string, challengeId: number): Promise<S.Result<{ provider: string; id?: string }>> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!apiKey) return { ok: false, error: "RESEND_API_KEY is required for production identity OTP delivery", code: "internal_error" };
+  if (!from) return { ok: false, error: "EMAIL_FROM is required for production identity OTP delivery", code: "internal_error" };
+
+  const res = await fetch(process.env.RESEND_EMAILS_URL || "https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "authorization": \`Bearer \${apiKey}\`,
+      "content-type": "application/json",
+      "idempotency-key": \`identity-challenge-\${challengeId}\`,
+    },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject: identityOtpSubject(),
+      text: identityOtpText(code),
+      html: identityOtpHtml(code),
+      tags: [
+        { name: "openb2c_event", value: "identity_otp" },
+        { name: "openb2c_app", value: APP_CONFIG.slug },
+      ],
+    }),
+  });
+
+  const body = await res.text();
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: \`identity OTP email delivery failed with status \${res.status}\`,
+      code: "internal_error",
+      details: { provider: "resend", status: String(res.status) },
+    };
+  }
+
+  let id: string | undefined;
+  try {
+    const parsed = body ? JSON.parse(body) as { id?: unknown } : {};
+    if (typeof parsed.id === "string") id = parsed.id;
+  } catch {
+    // Resend normally returns JSON. A successful non-JSON proxy response is still deliverable.
+  }
+  return { ok: true, data: id ? { provider: "resend", id } : { provider: "resend" } };
+}
+
+async function sendIdentityChallengeEmail(email: string, code: string, challengeId: number): Promise<S.Result<{ provider: string; id?: string }>> {
+  const provider = identityEmailProvider();
+  if (provider === "resend") return sendResendIdentityOtp(email, code, challengeId);
+  return { ok: false, error: \`unsupported EMAIL_PROVIDER "\${provider}" for identity OTP delivery\`, code: "internal_error" };
+}
+
 function parseIntegerParam(value: string | null, fallback: number): number {
   if (value === null) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -738,6 +821,11 @@ const routes: Route[] = [
     log("info", "identity challenge created", { email });
     // In production, code must be sent via email. In dev, return it for testing.
     if (PRODUCTION) {
+      const delivery = await sendIdentityChallengeEmail(email, result.data.code, result.data.challengeId);
+      if (!delivery.ok) {
+        log("error", "identity challenge email delivery failed", { email, error: delivery.error });
+        return corsResponse(delivery, { status: 502 });
+      }
       return corsResponse({ challengeId: result.data.challengeId, message: "verification code sent to email" });
     }
     return corsResponse({ challengeId: result.data.challengeId, code: result.data.code });
