@@ -168,7 +168,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Generate navigation from ontology metadata, not only entity names.
 - [x] Generate list views with configured columns, filters, sorting, empty states, and pagination.
 - [x] Generate detail views with related records and visible operation buttons.
-- [ ] Generate forms from field metadata, including enum controls, dates, times, money, textarea, and relationship selectors.
+- [x] Generate forms from field metadata, including enum controls, dates, times, money, textarea, and relationship selectors.
 - [ ] Add role-aware and permission-aware UI hiding and disabling.
 - [ ] Add end-user flows for the public ticketing example, not only admin CRUD.
 - [ ] Add internal workflow screens for the ticketing/issue-tracking example.

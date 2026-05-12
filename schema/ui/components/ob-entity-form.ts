@@ -84,7 +84,7 @@ export class ObEntityForm extends HTMLElement {
           <div class="form-grid">
           ${fields.map(([name, prop]) => {
             const req = required.has(name);
-            const val = record[name] ?? prop.default ?? "";
+            const val = formDisplayValue(name, prop, record[name] ?? prop.default ?? "");
             const id = `field-${name}`;
             const label = fieldDisplayLabel(name, prop);
             const help = fieldHelpText(prop);
@@ -123,8 +123,8 @@ export class ObEntityForm extends HTMLElement {
             }
 
             const inputAttrs = inputAttrsFor(name, prop);
-            const validationAttrs = validationAttrsFor(prop);
-            const placeholder = fieldPlaceholder(prop);
+            const validationAttrs = validationAttrsFor(name, prop);
+            const placeholder = fieldPlaceholder(prop) || defaultPlaceholderFor(name, prop);
             const placeholderAttr = placeholder ? ` placeholder="${escapeAttr(placeholder)}"` : "";
             if (isWideField(name, prop)) {
               return `
@@ -177,7 +177,7 @@ export class ObEntityForm extends HTMLElement {
       const v = String(value);
       if (v === "") continue;
       const prop = inputSchema.properties[key];
-      data[key] = prop?.type === "integer" || prop?.type === "number" ? Number(v) : v;
+      data[key] = formValueFor(key, prop, v);
     }
 
     try {
@@ -210,24 +210,63 @@ export class ObEntityForm extends HTMLElement {
 
 function inputAttrsFor(name: string, prop: any): string {
   const format = fieldFormat(prop);
-  if (prop.type === "integer") return 'type="text" inputmode="numeric"';
-  if (prop.type === "number") return 'type="text" inputmode="decimal"';
+  if (isMoneyField(name, prop)) return 'type="number" inputmode="decimal" step="0.01"';
+  if (format === "date" || name === "date" || name.endsWith("_date")) return 'type="date"';
+  if (format === "time" || name === "time" || name.endsWith("_time")) return 'type="time"';
+  if (format === "date-time" || name.endsWith("_at")) return 'type="datetime-local"';
+  if (prop.type === "integer") return 'type="number" inputmode="numeric" step="1"';
+  if (prop.type === "number") return 'type="number" inputmode="decimal" step="any"';
   if (format === "email" || name === "email" || name.endsWith("_email")) return 'type="text" inputmode="email" autocomplete="email"';
-  if (format === "date" || name === "date" || name.endsWith("_date")) return `type="text" inputmode="numeric"${fieldPlaceholder(prop) ? "" : ' placeholder="YYYY-MM-DD"'}`;
-  if (format === "time" || name === "time" || name.endsWith("_time")) return `type="text" inputmode="numeric"${fieldPlaceholder(prop) ? "" : ' placeholder="HH:MM"'}`;
   if (format === "phone" || name.includes("phone")) return 'type="text" inputmode="tel" autocomplete="tel"';
   if (format === "url" || name.includes("url")) return 'type="text" inputmode="url"';
   return 'type="text"';
 }
 
-function validationAttrsFor(prop: any): string {
+function validationAttrsFor(name: string, prop: any): string {
   const attrs: string[] = [];
   if (prop.minLength !== undefined) attrs.push(`minlength="${escapeAttr(prop.minLength)}"`);
   if (prop.maxLength !== undefined) attrs.push(`maxlength="${escapeAttr(prop.maxLength)}"`);
-  if (prop.minimum !== undefined) attrs.push(`min="${escapeAttr(prop.minimum)}"`);
-  if (prop.maximum !== undefined) attrs.push(`max="${escapeAttr(prop.maximum)}"`);
+  if (prop.minimum !== undefined) attrs.push(`min="${escapeAttr(validationNumberValue(name, prop, prop.minimum))}"`);
+  if (prop.maximum !== undefined) attrs.push(`max="${escapeAttr(validationNumberValue(name, prop, prop.maximum))}"`);
   if (prop.pattern) attrs.push(`pattern="${escapeAttr(prop.pattern)}"`);
   return attrs.length ? ` ${attrs.join(" ")}` : "";
+}
+
+function formDisplayValue(name: string, prop: any, value: unknown): unknown {
+  if (value === null || value === undefined || value === "") return "";
+  if (isMoneyField(name, prop) && typeof value === "number") return moneyInputValue(value);
+  if (fieldFormat(prop) === "date-time" && typeof value === "string") return dateTimeInputValue(value);
+  return value;
+}
+
+function formValueFor(name: string, prop: any, value: string): string | number {
+  if (isMoneyField(name, prop)) return Math.round(Number(value) * 100);
+  if (prop?.type === "integer" || prop?.type === "number") return Number(value);
+  if (fieldFormat(prop) === "date-time") return value.replace("T", " ");
+  return value;
+}
+
+function defaultPlaceholderFor(name: string, prop: any): string {
+  if (isMoneyField(name, prop)) return "0.00";
+  return "";
+}
+
+function validationNumberValue(name: string, prop: any, value: unknown): unknown {
+  if (isMoneyField(name, prop) && typeof value === "number") return moneyInputValue(value);
+  return value;
+}
+
+function isMoneyField(name: string, prop?: any): boolean {
+  return fieldFormat(prop) === "money" || name.endsWith("_pence");
+}
+
+function moneyInputValue(value: number): string {
+  return (value / 100).toFixed(2);
+}
+
+function dateTimeInputValue(value: string): string {
+  const normalized = value.replace(" ", "T").replace(/Z$/, "").replace(/\.\d+$/, "");
+  return normalized.length >= 19 ? normalized.slice(0, 19) : normalized;
 }
 
 function isWideField(name: string, prop?: any): boolean {
