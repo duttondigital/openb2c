@@ -496,7 +496,7 @@ ${operationExtras}      inputSchema: {
     }`);
     toolAuthz.push(`  "create_order_payment_intent": { entity: "${schema.ecommerce?.order.entity}", action: "update" }`);
     handlers.push(`      case "create_order_payment_intent":
-        const orderPaymentIntentResult = S.createCommercePaymentIntent(db, args.order_id as number, auth);
+        const orderPaymentIntentResult = await S.createCommercePaymentIntent(db, args.order_id as number, auth);
         if (!orderPaymentIntentResult.ok) return { content: [{ type: "text", text: orderPaymentIntentResult.error }], isError: true };
         await FX.dispatchEffects(db, orderPaymentIntentResult.effects || [], {
           source: "mcp",
@@ -586,7 +586,7 @@ ${operationExtras}      inputSchema: {
     }`);
     toolAuthz.push(`  "create_booking_payment_intent": { entity: "${schema.ecommerce?.order.entity}", action: "update" }`);
     handlers.push(`      case "create_booking_payment_intent":
-        const paymentIntentResult = S.createPaymentIntentForBooking(db, args.booking_id as number, auth);
+        const paymentIntentResult = await S.createPaymentIntentForBooking(db, args.booking_id as number, auth);
         if (!paymentIntentResult.ok) return { content: [{ type: "text", text: paymentIntentResult.error }], isError: true };
         await FX.dispatchEffects(db, paymentIntentResult.effects || [], {
           source: "mcp",

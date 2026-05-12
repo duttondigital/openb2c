@@ -60,7 +60,7 @@ Duchy Opera enables the generic ecommerce workflow in `composition.nix`. The con
 
 The original booking-oriented route names remain available as compatibility aliases, but the generated UI and MCP tools use the generic cart/order model.
 
-Production deployments must configure `PAYMENT_PROVIDER`, `PAYMENT_API_KEY`, and `PAYMENT_WEBHOOK_SECRET`. The local provider remains available for tests and development.
+Production deployments should use `PAYMENT_PROVIDER=stripe` with `PAYMENT_API_KEY` set to a Stripe secret key and `PAYMENT_WEBHOOK_SECRET` set for signed callbacks. The local provider remains available for tests and development.
 
 ## Design Principles
 

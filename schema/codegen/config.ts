@@ -74,7 +74,8 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   if (hasPaymentEffects(schema) || hasCommerceWorkflow(schema)) {
     specs.push(
       { name: "PAYMENT_PROVIDER", description: "Payment provider identifier.", requiredInProduction: true, secret: false, example: "stripe" },
-      { name: "PAYMENT_API_KEY", description: "Payment provider API key.", requiredInProduction: true, secret: true }
+      { name: "PAYMENT_API_KEY", description: "Payment provider API key. For Stripe, use a Stripe secret key.", requiredInProduction: true, secret: true },
+      { name: "STRIPE_API_BASE", description: "Optional Stripe API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.stripe.com" }
     );
   }
   if (hasCommerceWorkflow(schema)) {

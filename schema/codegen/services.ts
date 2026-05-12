@@ -1487,6 +1487,106 @@ ${includeLegacyAliases ? "  booking_id: number;\n" : ""}  order_id: number;
   idempotent: boolean;
 }
 
+interface ProviderPaymentIntent {
+  provider: string;
+  reference: string;
+  client_secret: string;
+}
+
+function paymentProvider(): string {
+  return (process.env.PAYMENT_PROVIDER || "local").trim().toLowerCase();
+}
+
+function stripeApiBase(): string {
+  return (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\\/+$/, "");
+}
+
+function stripeApiKey(): string {
+  return process.env.STRIPE_SECRET_KEY || process.env.PAYMENT_API_KEY || "";
+}
+
+function stripeError(status: number, message: string): Result<ProviderPaymentIntent> {
+  return {
+    ok: false,
+    error: "Stripe payment intent request failed with status " + status,
+    code: "internal_error",
+    details: { provider: "stripe", status: String(status), message },
+  };
+}
+
+function parseStripeJson(body: string): Record<string, unknown> {
+  try {
+    return body ? JSON.parse(body) as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function localPaymentIntent(reference?: string): Result<ProviderPaymentIntent> {
+  const id = reference || ("fake_pi_" + crypto.randomUUID());
+  return { ok: true, data: { provider: "local", reference: id, client_secret: id + "_secret" } };
+}
+
+async function createStripePaymentIntent(orderId: number, amount: number, currency: string): Promise<Result<ProviderPaymentIntent>> {
+  const key = stripeApiKey();
+  if (!key) return { ok: false, error: "PAYMENT_API_KEY is required for Stripe payment intents", code: "internal_error" };
+
+  const body = new URLSearchParams();
+  body.set("amount", String(amount));
+  body.set("currency", currency.toLowerCase());
+  body.set("automatic_payment_methods[enabled]", "true");
+  body.set("metadata[openb2c_order_id]", String(orderId));
+
+  const res = await fetch(stripeApiBase() + "/v1/payment_intents", {
+    method: "POST",
+    headers: {
+      "authorization": "Bearer " + key,
+      "content-type": "application/x-www-form-urlencoded",
+      "idempotency-key": "openb2c-commerce-order-" + orderId,
+    },
+    body,
+  });
+  const text = await res.text();
+  if (!res.ok) return stripeError(res.status, text);
+
+  const payload = parseStripeJson(text);
+  if (typeof payload.id !== "string" || typeof payload.client_secret !== "string") {
+    return { ok: false, error: "Stripe payment intent response was missing id or client_secret", code: "internal_error" };
+  }
+  return { ok: true, data: { provider: "stripe", reference: payload.id, client_secret: payload.client_secret } };
+}
+
+async function retrieveStripePaymentIntent(reference: string): Promise<Result<ProviderPaymentIntent>> {
+  const key = stripeApiKey();
+  if (!key) return { ok: false, error: "PAYMENT_API_KEY is required for Stripe payment intents", code: "internal_error" };
+
+  const res = await fetch(stripeApiBase() + "/v1/payment_intents/" + encodeURIComponent(reference), {
+    headers: { "authorization": "Bearer " + key },
+  });
+  const text = await res.text();
+  if (!res.ok) return stripeError(res.status, text);
+
+  const payload = parseStripeJson(text);
+  if (typeof payload.id !== "string" || typeof payload.client_secret !== "string") {
+    return { ok: false, error: "Stripe payment intent response was missing id or client_secret", code: "internal_error" };
+  }
+  return { ok: true, data: { provider: "stripe", reference: payload.id, client_secret: payload.client_secret } };
+}
+
+async function createProviderPaymentIntent(orderId: number, amount: number, currency: string): Promise<Result<ProviderPaymentIntent>> {
+  const provider = paymentProvider();
+  if (provider === "local") return localPaymentIntent();
+  if (provider === "stripe") return createStripePaymentIntent(orderId, amount, currency);
+  return { ok: false, error: "unsupported PAYMENT_PROVIDER " + provider, code: "internal_error" };
+}
+
+async function retrieveProviderPaymentIntent(reference: string): Promise<Result<ProviderPaymentIntent>> {
+  const provider = paymentProvider();
+  if (provider === "local") return localPaymentIntent(reference);
+  if (provider === "stripe") return retrieveStripePaymentIntent(reference);
+  return { ok: false, error: "unsupported PAYMENT_PROVIDER " + provider, code: "internal_error" };
+}
+
 function column(ref: { field: string }): string {
   return "[" + ref.field.replace(/]/g, "]]") + "]";
 }
@@ -1746,7 +1846,7 @@ export function checkoutCommerceCart(db: Database, input: CommerceCheckoutInput,
   }
 }
 
-export function createCommercePaymentIntent(db: Database, orderId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<CommercePaymentIntentResult> {
+export async function createCommercePaymentIntent(db: Database, orderId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Promise<OpResult<CommercePaymentIntentResult>> {
   if (!Number.isInteger(orderId) || orderId <= 0) {
     return { ok: false, error: "order id is required", code: "invalid" };
   }
@@ -1769,16 +1869,18 @@ export function createCommercePaymentIntent(db: Database, orderId: number, auth:
     const existing = db.query("SELECT id FROM " + ECOMMERCE.transaction.table + " WHERE " + column(ECOMMERCE.transaction.reference) + " = ?")
       .get(existingReference) as { id: number } | null;
     if (existing) {
+      const providerIntent = await retrieveProviderPaymentIntent(String(existingReference));
+      if (!providerIntent.ok) return providerIntent;
       return {
         ok: true,
         data: {
           order_id: Number(order.id),
           transaction_id: existing.id,
-          reference: String(existingReference),
+          reference: providerIntent.data.reference,
           amount_pence: Number(order[ECOMMERCE.order.amount.field]),
           currency: String(order[ECOMMERCE.order.currency.field]),
-          client_secret: String(existingReference) + "_secret",
-          provider: process.env.PAYMENT_PROVIDER || "local",
+          client_secret: providerIntent.data.client_secret,
+          provider: providerIntent.data.provider,
         },
       };
     }
@@ -1786,7 +1888,11 @@ export function createCommercePaymentIntent(db: Database, orderId: number, auth:
 
   const lineItemIds = commerceLineItemIdsForOrder(db, Number(order.id));
   if (lineItemIds.length === 0) return { ok: false, error: "order has no line items", code: "invalid" };
-  const reference = "fake_pi_" + crypto.randomUUID();
+  const amount = Number(order[ECOMMERCE.order.amount.field]);
+  const currency = String(order[ECOMMERCE.order.currency.field]);
+  const providerIntent = await createProviderPaymentIntent(Number(order.id), amount, currency);
+  if (!providerIntent.ok) return providerIntent;
+  const reference = providerIntent.data.reference;
   const client = ECOMMERCE.order.client ? String(order[ECOMMERCE.order.client.field] ?? "web") : "web";
 
   const create = db.transaction(() => {
@@ -1800,7 +1906,7 @@ export function createCommercePaymentIntent(db: Database, orderId: number, auth:
     ];
     const txValues = [
       Number(order[ECOMMERCE.order.user.field]),
-      Number(order[ECOMMERCE.order.amount.field]),
+      amount,
       ECOMMERCE.transaction.pendingStatus,
       reference,
       ...(ECOMMERCE.transaction.type ? [ECOMMERCE.transaction.purchaseType] : []),
@@ -1828,10 +1934,10 @@ export function createCommercePaymentIntent(db: Database, orderId: number, auth:
       order_id: Number(order.id),
       transaction_id: transactionId,
       reference,
-      amount_pence: Number(order[ECOMMERCE.order.amount.field]),
-      currency: String(order[ECOMMERCE.order.currency.field]),
-      client_secret: reference + "_secret",
-      provider: process.env.PAYMENT_PROVIDER || "local",
+      amount_pence: amount,
+      currency,
+      client_secret: providerIntent.data.client_secret,
+      provider: providerIntent.data.provider,
     },
     effects: [
       {
@@ -1839,10 +1945,10 @@ export function createCommercePaymentIntent(db: Database, orderId: number, auth:
         payload: {
           service: "payment",
           action: "create_intent",
-          provider: process.env.PAYMENT_PROVIDER || "local",
+          provider: providerIntent.data.provider,
           reference,
-          amount_pence: Number(order[ECOMMERCE.order.amount.field]),
-          currency: String(order[ECOMMERCE.order.currency.field]),
+          amount_pence: amount,
+          currency,
           order_id: Number(order.id),
           transaction_id: transactionId,
         },
@@ -1963,8 +2069,8 @@ export function reserveBooking(db: Database, input: ReserveBookingInput, auth: T
   };
 }
 
-export function createPaymentIntentForBooking(db: Database, bookingId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<PaymentIntentResult> {
-  const result = createCommercePaymentIntent(db, bookingId, auth);
+export async function createPaymentIntentForBooking(db: Database, bookingId: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Promise<OpResult<PaymentIntentResult>> {
+  const result = await createCommercePaymentIntent(db, bookingId, auth);
   if (!result.ok) return result;
   return {
     ok: true,

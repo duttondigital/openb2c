@@ -80,6 +80,10 @@ function clearEnv() {
   delete process.env.PORT;
   delete process.env.AUTH_ENABLED;
   delete process.env.PAYMENT_WEBHOOK_SECRET;
+  delete process.env.PAYMENT_PROVIDER;
+  delete process.env.PAYMENT_API_KEY;
+  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.STRIPE_API_BASE;
 }
 
 function ref(table: string, field: string, references: string | null = null) {
@@ -452,6 +456,97 @@ describe("Duchy Opera commerce workflow", () => {
       }
     } finally {
       server.stop(true);
+      clearEnv();
+    }
+  });
+
+  test("creates Stripe payment intents with idempotent provider handoff", async () => {
+    const schema = await loadDuchyOperaSchema();
+    const dir = writeGenerated(schema);
+    const dbPath = join(dir, "duchy-stripe-commerce.sqlite");
+    const stripeRequests: Array<{ method: string; path: string; headers: Record<string, string>; body: string }> = [];
+    const stripe = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        const body = await req.text();
+        stripeRequests.push({
+          method: req.method,
+          path: url.pathname,
+          headers: Object.fromEntries(req.headers),
+          body,
+        });
+        if (req.method === "POST" && url.pathname === "/v1/payment_intents") {
+          return Response.json({ id: "pi_openb2c_stripe", client_secret: "pi_openb2c_stripe_secret_123" });
+        }
+        if (req.method === "GET" && url.pathname === "/v1/payment_intents/pi_openb2c_stripe") {
+          return Response.json({ id: "pi_openb2c_stripe", client_secret: "pi_openb2c_stripe_secret_123" });
+        }
+        return Response.json({ error: "not found" }, { status: 404 });
+      },
+    });
+
+    process.env.DB_PATH = dbPath;
+    process.env.PORT = "0";
+    process.env.AUTH_ENABLED = "false";
+    process.env.PAYMENT_PROVIDER = "stripe";
+    process.env.PAYMENT_API_KEY = "sk_test_openb2c";
+    process.env.STRIPE_API_BASE = `http://127.0.0.1:${stripe.port}`;
+
+    const { server } = await import(`${pathToFileURL(join(dir, "server.ts")).href}?stripe=${Date.now()}`);
+    const base = `http://127.0.0.1:${server.port}`;
+    seedDuchyOpera(dbPath);
+
+    try {
+      const checkout = await fetch(`${base}/commerce/checkout`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: 1,
+          client: "web",
+          items: [{ item_id: 1, quantity: 1, options: { ticket_type: "standard" } }],
+        }),
+      });
+      expect(checkout.status).toBe(201);
+      const checkedOut = await checkout.json() as { order_id: number; amount_pence: number };
+
+      const intent = await fetch(`${base}/commerce/orders/${checkedOut.order_id}/payment-intent`, { method: "POST" });
+      expect(intent.status).toBe(201);
+      const payment = await intent.json() as { order_id: number; reference: string; amount_pence: number; currency: string; client_secret: string; provider: string };
+      expect(payment).toMatchObject({
+        order_id: checkedOut.order_id,
+        reference: "pi_openb2c_stripe",
+        amount_pence: 2500,
+        currency: "GBP",
+        client_secret: "pi_openb2c_stripe_secret_123",
+        provider: "stripe",
+      });
+
+      const createRequest = stripeRequests[0];
+      expect(createRequest.method).toBe("POST");
+      expect(createRequest.path).toBe("/v1/payment_intents");
+      expect(createRequest.headers.authorization).toBe("Bearer sk_test_openb2c");
+      expect(createRequest.headers["idempotency-key"]).toBe(`openb2c-commerce-order-${checkedOut.order_id}`);
+      const createBody = new URLSearchParams(createRequest.body);
+      expect(createBody.get("amount")).toBe("2500");
+      expect(createBody.get("currency")).toBe("gbp");
+      expect(createBody.get("automatic_payment_methods[enabled]")).toBe("true");
+      expect(createBody.get("metadata[openb2c_order_id]")).toBe(String(checkedOut.order_id));
+
+      const repeated = await fetch(`${base}/commerce/orders/${checkedOut.order_id}/payment-intent`, { method: "POST" });
+      expect(repeated.status).toBe(201);
+      expect(await repeated.json()).toMatchObject({
+        reference: "pi_openb2c_stripe",
+        client_secret: "pi_openb2c_stripe_secret_123",
+        provider: "stripe",
+      });
+      expect(stripeRequests.map(request => `${request.method} ${request.path}`)).toEqual([
+        "POST /v1/payment_intents",
+        "GET /v1/payment_intents/pi_openb2c_stripe",
+      ]);
+    } finally {
+      server.stop(true);
+      stripe.stop(true);
       clearEnv();
     }
   });

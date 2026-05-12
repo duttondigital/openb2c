@@ -46,7 +46,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},
   { method: "POST", path: "/commerce/bookings/:id/payment-intent", handler: async (req, p, auth) => {
-    const r = S.createPaymentIntentForBooking(db, +p.id, auth);
+    const r = await S.createPaymentIntentForBooking(db, +p.id, auth);
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",
@@ -89,7 +89,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
     return r.ok ? corsResponse(r.data, { status: 201 }) : corsResponse(r, { status: S.statusForResult(r) });
   }},
   { method: "POST", path: "/commerce/orders/:id/payment-intent", handler: async (req, p, auth) => {
-    const r = S.createCommercePaymentIntent(db, +p.id, auth);
+    const r = await S.createCommercePaymentIntent(db, +p.id, auth);
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",

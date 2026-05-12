@@ -42,6 +42,8 @@ Secrets such as `REGISTRY_PRIVATE_KEY`, `PAYMENT_API_KEY`, email provider creden
 
 The first production email provider is Resend. Generated identity challenge endpoints send OTP messages through `POST https://api.resend.com/emails` using `RESEND_API_KEY`, `EMAIL_FROM`, and an idempotency key derived from the challenge ID. `EMAIL_PROVIDER` defaults to `resend`; `RESEND_EMAILS_URL` exists only for tests or an internal proxy.
 
+The first production payment provider is Stripe. Generated commerce payment-intent endpoints create Stripe PaymentIntents with `PAYMENT_PROVIDER=stripe`, `PAYMENT_API_KEY`, amount, lowercase currency, automatic payment methods, and an idempotency key derived from the generated order ID. `STRIPE_API_BASE` exists only for tests or an internal proxy.
+
 ## Generated Templates
 
 Codegen writes `.env.example` beside generated artifacts. These templates list required and optional variables, but secret values are intentionally blank.
