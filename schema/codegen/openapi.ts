@@ -243,6 +243,41 @@ function errorResponse(description: string): unknown {
   };
 }
 
+function hasOptimisticConcurrency(cols: Record<string, Column>): boolean {
+  return !!cols.updated_at;
+}
+
+function ifMatchParameter(): Record<string, unknown> {
+  return {
+    name: "If-Match",
+    in: "header",
+    required: false,
+    schema: { type: "string" },
+    description: "Optional optimistic concurrency token from the ETag returned by the read endpoint.",
+  };
+}
+
+function withConcurrencyParameters(parameters: unknown[] | undefined, enabled: boolean): unknown[] | undefined {
+  if (!enabled) return parameters;
+  return [...(parameters || []), ifMatchParameter()];
+}
+
+function foundResponse(schemaRef: string, concurrency: boolean): Record<string, unknown> {
+  const response: Record<string, unknown> = {
+    description: "Found",
+    content: { "application/json": { schema: { $ref: schemaRef } } },
+  };
+  if (concurrency) {
+    response.headers = {
+      ETag: {
+        description: "Optimistic concurrency token for If-Match write checks.",
+        schema: { type: "string" },
+      },
+    };
+  }
+  return response;
+}
+
 function addResponses(operation: Record<string, unknown>, responses: Record<string, unknown>): Record<string, unknown> {
   const current = { ...((operation.responses as Record<string, unknown> | undefined) || {}) };
   for (const [status, response] of Object.entries(responses)) {
@@ -635,6 +670,7 @@ export function genOpenAPI(schema: Schema): string {
   for (const [entity, cols] of Object.entries(schema.tables)) {
     const Entity = pascalCase(entity);
     const ops = schema.operations[entity] || {};
+    const concurrency = hasOptimisticConcurrency(cols);
     const createRelationshipFields = new Set(
       (ops.create?.relationships ?? [])
         .filter(rel => rel.field.table === entity)
@@ -712,13 +748,13 @@ export function genOpenAPI(schema: Schema): string {
         summary: `Get ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
-          "200": { description: "Found", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}` } } } },
+          "200": foundResponse(`#/components/schemas/${Entity}`, concurrency),
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }, entity, "read", readOp), readOp), schema, entity, "read", readOp), readOp.public),
       put: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Update ${entity}`,
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        parameters: withConcurrencyParameters([{ name: "id", in: "path", required: true, schema: { type: "integer" } }], concurrency),
         requestBody: {
           content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}Input` } } },
         },
@@ -726,14 +762,16 @@ export function genOpenAPI(schema: Schema): string {
           "200": { description: "Updated", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}UpdateResult` } } } },
           "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          ...(concurrency ? { "409": errorResponse("Optimistic concurrency conflict") } : {}),
         },
       }, entity, "update", updateOp), updateOp), schema, entity, "update", updateOp), updateOp.public),
       delete: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Delete ${entity}`,
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        parameters: withConcurrencyParameters([{ name: "id", in: "path", required: true, schema: { type: "integer" } }], concurrency),
         responses: {
           "200": { description: "Deleted", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}DeleteResult` } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          ...(concurrency ? { "409": errorResponse("Optimistic concurrency conflict") } : {}),
         },
       }, entity, "delete", deleteOp), deleteOp), schema, entity, "delete", deleteOp), deleteOp.public),
     };
@@ -745,7 +783,7 @@ export function genOpenAPI(schema: Schema): string {
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
         post: withAuth(withAudit(withWorkflow(withPolicy({
           summary: `${opName.replace(/_/g, " ")} ${entity}`,
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          parameters: withConcurrencyParameters([{ name: "id", in: "path", required: true, schema: { type: "integer" } }], concurrency),
           requestBody: {
             required: false,
             content: { "application/json": { schema: { $ref: `#/components/schemas/${inputSchema}` } } },

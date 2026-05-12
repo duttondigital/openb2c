@@ -116,6 +116,14 @@ function defaultOperation(): Operation {
   return { guard: null, relationships: [], public: false, scope: null, policy: {}, workflow: {}, audit: {}, set: {}, cascade: [], effects: [] };
 }
 
+function concurrencyFields(schema: Schema): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const [entity, columns] of Object.entries(schema.tables)) {
+    if (columns.updated_at) fields[entity] = "updated_at";
+  }
+  return fields;
+}
+
 function operationsForEntity(schema: Schema, entity: string): Record<string, Operation> {
   return {
     read: defaultOperation(),
@@ -227,6 +235,7 @@ function derivedFieldCases(schema: Schema): string {
 function genServiceImports(schema: Schema): string {
   const policy = JSON.stringify(operationPolicies(schema), null, 2);
   const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
+  const concurrency = JSON.stringify(concurrencyFields(schema), null, 2);
   const validationRules = JSON.stringify(fieldValidationRules(schema), null, 2);
   const crossFieldCases = crossFieldValidationCases(schema);
   const crossFieldSwitchCases = `${crossFieldCases}${crossFieldCases ? "\n" : ""}    default:\n      return null;`;
@@ -582,6 +591,44 @@ export function statusForResult(result: Result<unknown>): number {
     default:
       return 500;
   }
+}
+
+const CONCURRENCY_FIELDS: Record<string, string> = ${concurrency};
+
+function concurrencyHash(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function entityTagForRecord(entity: string, record: Record<string, unknown>): string | null {
+  const field = CONCURRENCY_FIELDS[entity];
+  if (!field) return null;
+  const value = record[field];
+  if (value === undefined || value === null) return null;
+  return \`"\${entity}:\${String(record.id ?? "")}:\${concurrencyHash(String(value))}"\`;
+}
+
+function matchesIfMatch(entity: string, record: Record<string, unknown>, ifMatch?: string | null): boolean {
+  if (!ifMatch) return true;
+  const current = entityTagForRecord(entity, record);
+  if (!current) return true;
+  return ifMatch
+    .split(",")
+    .map(candidate => candidate.trim())
+    .some(candidate => candidate === "*" || candidate === current || candidate === \`W/\${current}\`);
+}
+
+function concurrencyConflict<D>(): Result<D> {
+  return {
+    ok: false,
+    error: "record has changed",
+    code: "conflict",
+    details: { if_match: "refresh the record and retry with its current ETag" },
+  };
 }
 
 // ============================================================================
@@ -974,6 +1021,10 @@ function genCrudService(entity: string, cols: Record<string, Column>): string {
   const colNames = Object.keys(cols);
   const inputCols = colNames.filter(c => !(cols[c].pk && cols[c].auto));
   const requiredCols = inputCols.filter(c => cols[c].required);
+  const updateCols = inputCols.filter(c => c !== "updated_at");
+  const touchUpdatedAt = cols.updated_at
+    ? `sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");`
+    : "";
 
   return `
 // ============================================================================
@@ -1083,9 +1134,12 @@ export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.A
   return { ok: true, data: { id: result.id } };
 }
 
-export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ id: number }> {
+export function update${Entity}(db: Database, id: number, input: Partial<T.${Entity}Input>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): Result<{ id: number }> {
   const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
+  if (!matchesIfMatch("${entity}", existing as Record<string, unknown>, ifMatch)) {
+    return concurrencyConflict();
+  }
   if (!can("${entity}", "update", auth, existing as Record<string, unknown>)) {
     return authorizationError("${entity}", "update", auth);
   }
@@ -1102,7 +1156,8 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
 
   const sets: string[] = [];
   const vals: unknown[] = [];
-  ${inputCols.map(c => `if (input.${c} !== undefined) { sets.push("${c} = ?"); vals.push(input.${c}); }`).join("\n  ")}
+  ${updateCols.map(c => `if (input.${c} !== undefined) { sets.push("${c} = ?"); vals.push(input.${c}); }`).join("\n  ")}
+  ${touchUpdatedAt}
 
   if (sets.length > 0) {
     vals.push(id);
@@ -1112,9 +1167,12 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
   return { ok: true, data: { id } };
 }
 
-export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): Result<{ deleted: true }> {
+export function delete${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): Result<{ deleted: true }> {
   const existing = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!existing) return { ok: false, error: "not found", code: "not_found" };
+  if (!matchesIfMatch("${entity}", existing as Record<string, unknown>, ifMatch)) {
+    return concurrencyConflict();
+  }
   if (!can("${entity}", "delete", auth, existing as Record<string, unknown>)) {
     return authorizationError("${entity}", "delete", auth);
   }
@@ -1132,6 +1190,7 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
 
   const relations = extractRelations(op.guard);
   const guardCode = op.guard ? compileExpr(op.guard, entity) : "true";
+  const hasUpdatedAt = !!tables[entity]?.updated_at;
 
   // Generate relation loading
   const relLoads = relations.map(rel => {
@@ -1143,8 +1202,12 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
 
   // Generate set clause
   const setEntries = Object.entries(op.set);
-  const setCode = setEntries.length > 0
-    ? `db.query("UPDATE ${tableName} SET ${setEntries.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?").run(${setEntries.map(([_, v]) => JSON.stringify(v)).join(", ")}, id);`
+  const setFragments = setEntries.map(([k]) => `${k} = ?`);
+  if (setEntries.length > 0 && hasUpdatedAt && !setEntries.some(([k]) => k === "updated_at")) {
+    setFragments.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");
+  }
+  const setCode = setFragments.length > 0
+    ? `db.query("UPDATE ${tableName} SET ${setFragments.join(", ")} WHERE id = ?").run(${setEntries.map(([_, v]) => JSON.stringify(v)).join(", ")}${setEntries.length > 0 ? ", " : ""}id);`
     : "// No fields to set";
 
   // Generate cascade updates
@@ -1176,9 +1239,12 @@ function genOperationService(entity: string, opName: string, op: Operation, tabl
   }).filter(Boolean).join(",\n");
 
   return `
-export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): OpResult<{ id: number; status: string }> {
+export function ${OpName}${Entity}(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null): OpResult<{ id: number; status: string }> {
   const ${entity} = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!${entity}) return { ok: false, error: "not found", code: "not_found" };
+  if (!matchesIfMatch("${entity}", ${entity} as Record<string, unknown>, ifMatch)) {
+    return concurrencyConflict();
+  }
   if (!can("${entity}", "${opName}", auth, ${entity} as Record<string, unknown>)) {
     return authorizationError("${entity}", "${opName}", auth);
   }

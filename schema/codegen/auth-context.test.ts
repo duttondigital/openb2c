@@ -63,7 +63,7 @@ describe("auth context generation", () => {
     expect(services).toContain("findNoteById(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("findAllNotes(db: Database, opts: ListOptions = {}, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
     expect(services).toContain("createNote(db: Database, input: T.NoteInput, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
-    expect(services).toContain("publishNote(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT)");
+    expect(services).toContain("publishNote(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT, ifMatch?: string | null)");
     expect(services).not.toContain("principals");
     expect(services).not.toContain("roles");
     expect(services).not.toContain("claims");
@@ -83,7 +83,7 @@ describe("auth context generation", () => {
     expect(server).not.toContain("principals:");
     expect(server).not.toContain("roles:");
     expect(server).toContain("S.findAllNotes(db, { limit, offset, sort, order, filter: Object.keys(filter).length ? filter : undefined }, auth)");
-    expect(server).toContain("S.publishNote(db, +p.id, auth)");
+    expect(server).toContain("S.publishNote(db, +p.id, auth, req.headers.get(\"If-Match\"))");
     expect(server).toContain("result.route.handler(req, result.params, authContext, signal)");
 
     expect(mcp).toContain("const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;");

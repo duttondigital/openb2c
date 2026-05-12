@@ -247,7 +247,7 @@ export function genRoutes(schema: Schema): string {
     const authz = S.authorizeCollection("${entity}", "read", auth);
     if (!authz.ok) return corsResponse(authz, { status: S.statusForResult(authz) });
     const r = S.find${Entity}ById(db, +p.id, auth);
-    return r ? corsResponse(redact("${entity}", r)) : corsResponse({ error: "not found", code: "not_found" }, { status: 404 });
+    return r ? corsResponse(redact("${entity}", r), recordResponseInit("${entity}", r as Record<string, unknown>)) : corsResponse({ error: "not found", code: "not_found" }, { status: 404 });
   }},`);
 
     // Special handling for api_key creation - generate and hash key
@@ -274,11 +274,11 @@ export function genRoutes(schema: Schema): string {
     routes.push(`  { method: "PUT", path: "/api/${entity}s/:id", handler: async (req, p, auth, signal) => {
     const input = await readTypedJson<Partial<T.${Entity}Input>>(req, signal, REQUEST_SCHEMAS["${entity}"].update, { partial: true });
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
-    const r = S.update${Entity}(db, +p.id, input.data, auth);
+    const r = S.update${Entity}(db, +p.id, input.data, auth, req.headers.get("If-Match"));
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
-    routes.push(`  { method: "DELETE", path: "/api/${entity}s/:id", handler: (_, p, auth) => {
-    const r = S.delete${Entity}(db, +p.id, auth);
+    routes.push(`  { method: "DELETE", path: "/api/${entity}s/:id", handler: (req, p, auth) => {
+    const r = S.delete${Entity}(db, +p.id, auth, req.headers.get("If-Match"));
     return r.ok ? corsResponse(r.data) : corsResponse(r, { status: S.statusForResult(r) });
   }},`);
 
@@ -286,7 +286,7 @@ export function genRoutes(schema: Schema): string {
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
       routes.push(`  { method: "POST", path: "/api/${entity}s/:id/${opName.replace(/_/g, "-")}", handler: async (req, p, auth) => {
-    const r = S.${OpName}${Entity}(db, +p.id, auth);
+    const r = S.${OpName}${Entity}(db, +p.id, auth, req.headers.get("If-Match"));
     if (r.ok) {
       await FX.dispatchEffects(db, r.effects || [], {
         source: "rest",
@@ -784,10 +784,17 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 }
 
 const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key";
+const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match";
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
   return Response.json(body, init);
+}
+
+function recordResponseInit(entity: string, record: Record<string, unknown>): ResponseInit {
+  const headers = new Headers();
+  const etag = S.entityTagForRecord(entity, record);
+  if (etag) headers.set("ETag", etag);
+  return { headers };
 }
 
 function allowedCorsOrigin(req: Request): string | null {
@@ -807,6 +814,7 @@ function corsHeaders(req: Request): Headers {
   }
   headers.set("Access-Control-Allow-Methods", CORS_ALLOW_METHODS);
   headers.set("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS);
+  headers.set("Access-Control-Expose-Headers", "ETag");
   headers.set("Vary", "Origin");
   return headers;
 }
