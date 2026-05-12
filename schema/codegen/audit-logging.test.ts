@@ -186,4 +186,30 @@ describe("generated audit logging", () => {
       delete process.env.DB_PATH;
     }
   });
+
+  test("audit table setup is scoped to each database handle", async () => {
+    const appSchema = schema();
+    const dir = writeGenerated(appSchema);
+    const { createTicket } = await import(pathToFileURL(join(dir, "services.ts")).href);
+    const { SYSTEM_AUTH_CONTEXT } = await import(pathToFileURL(join(dir, "types.ts")).href);
+    const sql = genSQL(appSchema.tables, appSchema.indexes);
+    const first = new Database(":memory:");
+    const second = new Database(":memory:");
+
+    try {
+      first.exec(sql);
+      second.exec(sql);
+
+      expect(createTicket(first, { status: "first" }, SYSTEM_AUTH_CONTEXT)).toMatchObject({ ok: true });
+      expect(createTicket(second, { status: "second" }, SYSTEM_AUTH_CONTEXT)).toMatchObject({ ok: true });
+
+      const firstAudit = first.query<{ total: number }, []>("SELECT COUNT(*) as total FROM openb2c_audit_log").get();
+      const secondAudit = second.query<{ total: number }, []>("SELECT COUNT(*) as total FROM openb2c_audit_log").get();
+      expect(firstAudit?.total).toBe(1);
+      expect(secondAudit?.total).toBe(1);
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
 });

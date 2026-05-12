@@ -330,14 +330,14 @@ export interface AuditRequirement {
 }
 
 const AUDIT_REQUIREMENTS: Record<string, Record<string, AuditRequirement>> = ${audit};
-let auditLogReady = false;
+const auditLogReady = new WeakSet<Database>();
 
 function json(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
 export function ensureAuditLogTable(db: Database) {
-  if (auditLogReady) return;
+  if (auditLogReady.has(db)) return;
   db.run(\`
     CREATE TABLE IF NOT EXISTS openb2c_audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,7 +354,7 @@ export function ensureAuditLogTable(db: Database) {
   \`);
   db.run("CREATE INDEX IF NOT EXISTS openb2c_audit_log_entity_record ON openb2c_audit_log (entity, record_id, created_at)");
   db.run("CREATE INDEX IF NOT EXISTS openb2c_audit_log_actor ON openb2c_audit_log (actor_user_id, created_at)");
-  auditLogReady = true;
+  auditLogReady.add(db);
 }
 
 export function writeAuditLog(
