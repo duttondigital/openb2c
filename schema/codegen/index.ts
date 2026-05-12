@@ -4,7 +4,7 @@
  * Usage: nix eval --json -f schema/default.nix | bun schema/codegen/index.ts
  */
 
-export type { AppMetadata, OrganizationMetadata, Column, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
+export type { AppMetadata, OrganizationMetadata, Column, DerivedField, DerivedFields, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, Schema } from "./types";
 export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
 export { envVarSpecs, requiredProductionEnvVars, genEnvExample } from "./config";
 export { sqlType, genSQL } from "./sql";
@@ -55,7 +55,7 @@ if (import.meta.main) {
   mkdirSync(outDir, { recursive: true });
 
   writeFileSync(join(outDir, "schema.sql"), genSQL(schema.tables, schema.indexes));
-  writeFileSync(join(outDir, "types.ts"), genTypes(schema.tables, schema.operations));
+  writeFileSync(join(outDir, "types.ts"), genTypes(schema.tables, schema.operations, schema.derived));
   writeFileSync(join(outDir, "services.ts"), genServices(schema));
   writeFileSync(join(outDir, "runtime.ts"), genRuntime(schema));
   writeFileSync(join(outDir, "effects.ts"), genEffectsInterface(schema));

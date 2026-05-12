@@ -35,6 +35,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   const normalized = {
     ...schema,
     tables,
+    derived: schema.derived || {},
     operations: schema.operations || {},
     indexes: schema.indexes || {},
     validations: schema.validations || {},
@@ -45,6 +46,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   if (!schema.operations) add(diagnostics, "operations", "is required");
 
   validateColumns(normalized, diagnostics);
+  validateDerivedFields(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
   validateCrossFieldValidations(normalized, diagnostics);
@@ -127,6 +129,51 @@ function validateColumns(schema: Schema, diagnostics: SchemaDiagnostic[]): void 
       validateColumnRelationship(schema, table, field, col, diagnostics);
     }
   }
+}
+
+function validateDerivedFields(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  for (const [entity, fields] of Object.entries(schema.derived || {})) {
+    if (!tableExists(schema.tables, entity)) {
+      add(diagnostics, `derived.${entity}`, `references unknown entity ${JSON.stringify(entity)}`);
+      continue;
+    }
+    for (const [name, field] of Object.entries(fields)) {
+      const path = `derived.${entity}.${name}`;
+      if (columnExists(schema.tables, entity, name)) {
+        add(diagnostics, path, `conflicts with stored field ${entity}.${name}`);
+      }
+      for (const [index, dependency] of (field.dependencies || []).entries()) {
+        validateFieldRef(schema, dependency, `${path}.dependencies.${index}`, diagnostics, entity);
+      }
+      if (field.template && field.expression) {
+        add(diagnostics, path, "must use either template or expression, not both");
+      }
+      if (!field.template && !field.expression) {
+        add(diagnostics, path, "requires template or expression");
+      }
+      const dependencyFields = new Set((field.dependencies || []).filter(dependency => dependency.table === entity).map(dependency => dependency.field));
+      for (const placeholder of templateFields(field.template)) {
+        if (!columnExists(schema.tables, entity, placeholder)) {
+          add(diagnostics, `${path}.template`, `references unknown field ${entity}.${placeholder}`);
+        } else if (!dependencyFields.has(placeholder)) {
+          add(diagnostics, `${path}.dependencies`, `must include template field ${entity}.${placeholder}`);
+        }
+      }
+      if (field.expression) {
+        validateConstraintExpr(schema, entity, field.expression, `${path}.expression`, diagnostics);
+        for (const expressionField of expressionFields(field.expression)) {
+          if (!dependencyFields.has(expressionField)) {
+            add(diagnostics, `${path}.dependencies`, `must include expression field ${entity}.${expressionField}`);
+          }
+        }
+      }
+    }
+  }
+}
+
+function templateFields(template: string | null | undefined): string[] {
+  if (!template) return [];
+  return [...template.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map(match => match[1]);
 }
 
 function validateColumnMetadata(table: string, field: string, col: Column, diagnostics: SchemaDiagnostic[]): void {

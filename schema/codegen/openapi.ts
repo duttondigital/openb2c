@@ -1,4 +1,4 @@
-import type { AuthConfig, Column, Operation, Schema } from "./types";
+import type { AuthConfig, Column, DerivedField, Operation, Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -361,6 +361,31 @@ function columnValueSchema(col: Column, options: { includeDefault?: boolean } = 
   return schema;
 }
 
+function derivedValueSchema(field: DerivedField): Record<string, unknown> {
+  const schema = columnValueSchema({
+    type: field.type,
+    pk: false,
+    auto: false,
+    required: true,
+    unique: false,
+    default: null,
+    references: null,
+    metadata: field.metadata || {},
+  });
+  schema.readOnly = true;
+  schema["x-openb2c-derived"] = {
+    displayOnly: true,
+    dependencies: field.dependencies.map(dependency => ({
+      table: dependency.table,
+      field: dependency.field,
+      references: dependency.references,
+    })),
+    ...(field.template ? { template: field.template } : {}),
+    ...(field.expression ? { expression: field.expression } : {}),
+  };
+  return schema;
+}
+
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const workflowMetadata = openApiWorkflowMetadata(schema);
@@ -528,6 +553,10 @@ export function genOpenAPI(schema: Schema): string {
     for (const [col, c] of Object.entries(cols)) {
       properties[col] = columnValueSchema(c, { includeDefault: true });
       if (c.required || c.pk) required.push(col);
+    }
+    for (const [field, derived] of Object.entries(schema.derived?.[entity] || {})) {
+      properties[field] = derivedValueSchema(derived);
+      required.push(field);
     }
     schemas[Entity] = { type: "object", properties, required };
 

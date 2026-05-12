@@ -1,4 +1,4 @@
-import type { Column, EcommerceConfig, FieldRef, Operation, Schema, Tables } from "./types";
+import type { Column, DerivedField, EcommerceConfig, FieldRef, Operation, Schema, Tables } from "./types";
 import { pascalCase, camelCase, getEcommerceConfig, hasCommerceWorkflow, hasCommerceBookingAliases } from "./utils";
 import { compileExpr, extractRelations } from "./expr";
 
@@ -194,12 +194,44 @@ function crossFieldValidationCases(schema: Schema): string {
   return cases.join("\n");
 }
 
+function templateExpression(template: string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  const pattern = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+  for (const match of template.matchAll(pattern)) {
+    if (match.index > cursor) parts.push(JSON.stringify(template.slice(cursor, match.index)));
+    parts.push(`String(record[${JSON.stringify(match[1])}] ?? "")`);
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < template.length) parts.push(JSON.stringify(template.slice(cursor)));
+  return parts.length ? parts.join(" + ") : JSON.stringify(template);
+}
+
+function derivedAssignment(field: string, derived: DerivedField): string {
+  if (derived.template) return `      record[${JSON.stringify(field)}] = ${templateExpression(derived.template)};`;
+  if (derived.expression) return `      record[${JSON.stringify(field)}] = ${compileExpr(derived.expression, "record")};`;
+  return `      record[${JSON.stringify(field)}] = null;`;
+}
+
+function derivedFieldCases(schema: Schema): string {
+  const cases: string[] = [];
+  for (const [entity, fields] of Object.entries(schema.derived || {})) {
+    const assignments = Object.entries(fields).map(([field, derived]) => derivedAssignment(field, derived));
+    if (assignments.length > 0) {
+      cases.push(`    case ${JSON.stringify(entity)}:\n${assignments.join("\n")}\n      return record;`);
+    }
+  }
+  return cases.join("\n");
+}
+
 function genServiceImports(schema: Schema): string {
   const policy = JSON.stringify(operationPolicies(schema), null, 2);
   const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
   const validationRules = JSON.stringify(fieldValidationRules(schema), null, 2);
   const crossFieldCases = crossFieldValidationCases(schema);
   const crossFieldSwitchCases = `${crossFieldCases}${crossFieldCases ? "\n" : ""}    default:\n      return null;`;
+  const derivedCases = derivedFieldCases(schema);
+  const derivedSwitchCases = `${derivedCases}${derivedCases ? "\n" : ""}    default:\n      return record;`;
   return `import { Database } from "bun:sqlite";
 import * as T from "./types";
 
@@ -344,6 +376,13 @@ function validateField(field: string, value: unknown, rule: FieldValidationRule)
       }
     default:
       return null;
+  }
+}
+
+function withDerived(entity: string, row: Record<string, unknown>): Record<string, unknown> {
+  const record = { ...row };
+  switch (entity) {
+${derivedSwitchCases}
   }
 }
 
@@ -939,7 +978,7 @@ function genCrudService(entity: string, cols: Record<string, Column>): string {
 export function find${Entity}ById(db: Database, id: number, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): T.${Entity} | null {
   const row = db.query("SELECT * FROM ${tableName} WHERE id = ?").get(id) as T.${Entity} | null;
   if (!row) return null;
-  return can("${entity}", "read", auth, row as Record<string, unknown>) ? row : null;
+  return can("${entity}", "read", auth, row as Record<string, unknown>) ? withDerived("${entity}", row as Record<string, unknown>) as T.${Entity} : null;
 }
 
 const ${entity}Cols = new Set(${JSON.stringify(colNames)});
@@ -975,7 +1014,9 @@ export function findAll${Entity}s(db: Database, opts: ListOptions = {}, auth: T.
 
   params.push(limit, offset);
   const rows = db.query(\`SELECT * FROM ${tableName} \${where} ORDER BY \${sort} \${order} LIMIT ? OFFSET ?\`).all(...params) as T.${Entity}[];
-  return rows.filter(row => can("${entity}", "read", auth, row as Record<string, unknown>));
+  return rows
+    .filter(row => can("${entity}", "read", auth, row as Record<string, unknown>))
+    .map(row => withDerived("${entity}", row as Record<string, unknown>) as T.${Entity});
 }
 
 export function count${Entity}s(db: Database, filter?: Record<string, unknown>, auth: T.AuthContext = T.ANONYMOUS_AUTH_CONTEXT): number {

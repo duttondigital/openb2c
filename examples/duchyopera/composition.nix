@@ -118,6 +118,7 @@ in {
   auth = modules.config.auth;
   workflows = modules.config.workflows;
   tables = modules.config.tables;
+  derived = modules.config.derived;
   indexes = modules.config.indexes;
   refs = modules.config.refs;
   relationships = modules.config.relationships;

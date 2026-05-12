@@ -214,6 +214,36 @@ let
     };
   };
 
+  derivedFieldType = lib.types.submodule {
+    options = {
+      type = lib.mkOption {
+        type = lib.types.str;
+        default = "text";
+        description = "Generated TypeScript/OpenAPI type for the derived value.";
+      };
+      metadata = lib.mkOption {
+        type = fieldMetadataType;
+        default = {};
+        description = "Presentation metadata for the derived display-only value.";
+      };
+      dependencies = lib.mkOption {
+        type = lib.types.listOf fieldRefType;
+        default = [];
+        description = "Structured local fields used to compute this value.";
+      };
+      template = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "String template using {field_name} placeholders.";
+      };
+      expression = lib.mkOption {
+        type = lib.types.nullOr lib.types.attrs;
+        default = null;
+        description = "Expression AST used to compute the value.";
+      };
+    };
+  };
+
   fieldRelationshipType = lib.types.submodule {
     options = {
       label = lib.mkOption {
@@ -707,6 +737,12 @@ in {
       type = lib.types.attrsOf (lib.types.attrsOf columnType);
       default = {};
       description = "Database table definitions";
+    };
+
+    derived = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf derivedFieldType);
+      default = {};
+      description = "Display-only fields derived from stored entity values.";
     };
 
     refs = lib.mkOption {

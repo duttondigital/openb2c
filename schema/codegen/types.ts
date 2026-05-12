@@ -49,6 +49,16 @@ export interface Column {
 
 export type Tables = Record<string, Record<string, Column>>;
 
+export interface DerivedField {
+  type: string;
+  metadata?: ColumnMetadata;
+  dependencies: FieldRef[];
+  template?: string | null;
+  expression?: Expr | null;
+}
+
+export type DerivedFields = Record<string, Record<string, DerivedField>>;
+
 export interface Index {
   columns: string[];
   unique: boolean;
@@ -287,6 +297,7 @@ export interface Schema {
   auth?: AuthConfig;
   workflows?: WorkflowConfig;
   tables: Tables;
+  derived?: DerivedFields;
   indexes?: Indexes;
   refs?: Refs;
   relationships?: Relationships;

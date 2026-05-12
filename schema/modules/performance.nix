@@ -104,6 +104,21 @@ in
     columns = [ "venue_id" "date" ];
   };
 
+  derived.performance.display_title = {
+    type = "text";
+    metadata = {
+      label = "Display title";
+      helpText = "Generated display label combining title, date, and time.";
+      displayPriority = 15;
+    };
+    dependencies = [
+      config.refs.performance.title
+      config.refs.performance.date
+      config.refs.performance.time
+    ];
+    template = "{title} - {date} {time}";
+  };
+
   # Junction table for performance-artist many-to-many
   tables.performance_artist = {
     id = { type = "integer"; pk = true; auto = true; };

@@ -136,7 +136,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add role and policy metadata for users, staff, services, and customer identities.
 - [x] Add workflow metadata for operation groups, allowed transitions, audit text, and confirmation requirements.
 - [x] Add validation metadata for min/max length, numeric ranges, regexes, enum values, and cross-field constraints.
-- [ ] Add derived field support for display-only values.
+- [x] Add derived field support for display-only values.
 - [ ] Add audit metadata for which entities and operations must be logged.
 - [ ] Add seed data support for reference data and example fixtures.
 
