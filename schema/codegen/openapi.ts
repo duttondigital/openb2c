@@ -455,6 +455,30 @@ function operationResultSchema(op: Operation): Record<string, unknown> {
   };
 }
 
+function idResultSchema(description: string): Record<string, unknown> {
+  return {
+    type: "object",
+    description,
+    properties: {
+      id: { type: "integer" },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  };
+}
+
+function deleteResultSchema(entity: string): Record<string, unknown> {
+  return {
+    type: "object",
+    description: `Deletion result for ${entity}.`,
+    properties: {
+      deleted: { type: "boolean", enum: [true] },
+    },
+    required: ["deleted"],
+    additionalProperties: false,
+  };
+}
+
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const auditMetadata = openApiAuditMetadata(schema);
@@ -639,6 +663,9 @@ export function genOpenAPI(schema: Schema): string {
       if (c.required && c.default === null && !createRelationshipFields.has(col)) inputRequired.push(col);
     }
     schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };
+    schemas[`${Entity}CreateResult`] = idResultSchema(`Creation result for ${entity}.`);
+    schemas[`${Entity}UpdateResult`] = idResultSchema(`Update result for ${entity}.`);
+    schemas[`${Entity}DeleteResult`] = deleteResultSchema(entity);
 
     for (const [opName, op] of Object.entries(ops).filter(([name]) => !CRUD_ACTIONS.has(name))) {
       schemas[operationComponentName(Entity, opName, "Input")] = operationRequestSchema();
@@ -673,7 +700,7 @@ export function genOpenAPI(schema: Schema): string {
           content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}Input` } } },
         },
         responses: {
-          "201": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
+          "201": { description: "Created", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}CreateResult` } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }, entity, "create", createOp), createOp), schema, entity, "create", createOp), createOp.public),
@@ -696,7 +723,7 @@ export function genOpenAPI(schema: Schema): string {
           content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}Input` } } },
         },
         responses: {
-          "200": { description: "Updated", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
+          "200": { description: "Updated", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}UpdateResult` } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
@@ -705,7 +732,7 @@ export function genOpenAPI(schema: Schema): string {
         summary: `Delete ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
-          "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", properties: { deleted: { type: "boolean" } } } } } },
+          "200": { description: "Deleted", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}DeleteResult` } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }, entity, "delete", deleteOp), deleteOp), schema, entity, "delete", deleteOp), deleteOp.public),
