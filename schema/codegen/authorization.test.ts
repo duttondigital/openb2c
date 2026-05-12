@@ -309,6 +309,40 @@ describe("generated authorization enforcement", () => {
     expect(denied.content[0].text).toContain("not authorized");
   });
 
+  test("MCP list tools support pagination, sorting, and exact-match filters", async () => {
+    const dir = writeGenerated();
+    const dbPath = join(dir, "mcp-list.sqlite");
+    const db = new Database(dbPath);
+    for (const stmt of genSQL(schema.tables).split(/;\s*\n/).filter(s => s.trim())) {
+      db.run(stmt);
+    }
+    seedDb(db);
+    db.query("UPDATE ticket SET status = ? WHERE id = ?").run("confirmed", 3);
+    db.close();
+
+    process.env.DB_PATH = dbPath;
+    const { callTool } = await import(pathToFileURL(join(dir, "mcp.ts")).href);
+    const result = await callTool("list_tickets", {
+      limit: 1,
+      offset: 0,
+      sort: "id",
+      order: "desc",
+      filter: { status: "reserved" },
+    }, user1);
+
+    expect(result.isError).toBeUndefined();
+    const body = JSON.parse(result.content[0].text) as {
+      items: { id: number }[];
+      total: number;
+      limit: number;
+      offset: number;
+    };
+    expect(body.total).toBe(2);
+    expect(body.limit).toBe(1);
+    expect(body.offset).toBe(0);
+    expect(body.items.map(ticket => ticket.id)).toEqual([2]);
+  });
+
   test("MCP transport auth keeps local stdio trusted and protects HTTP with bearer credentials", async () => {
     const mcpSource = genMcpServer(schema);
     expect(mcpSource).toContain("Stdio transport uses trusted local system auth");
@@ -410,7 +444,9 @@ describe("generated authorization enforcement", () => {
       );
       expect(allowed.status).toBe(200);
       const body = await allowed.json() as { result: { content: { text: string }[] } };
-      expect(JSON.parse(body.result.content[0].text).map((ticket: { id: number }) => ticket.id)).toEqual([1, 2, 3]);
+      const listResult = JSON.parse(body.result.content[0].text) as { items: { id: number }[]; total: number };
+      expect(listResult.items.map(ticket => ticket.id)).toEqual([1, 2, 3]);
+      expect(listResult.total).toBe(3);
     } finally {
       proc.kill();
       await proc.exited.catch(() => null);

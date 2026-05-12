@@ -157,7 +157,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Generate richer tool descriptions from ontology metadata.
 - [x] Generate safer MCP tools that respect permissions and resource scopes.
 - [x] Add tool input schemas with enum values, validation, and helpful descriptions.
-- [ ] Add pagination and filtering to list tools.
+- [x] Add pagination and filtering to list tools.
 - [ ] Add operation tools with confirmation metadata for destructive actions.
 - [ ] Add MCP integration tests that use generated examples, not only static codegen unit tests.
 

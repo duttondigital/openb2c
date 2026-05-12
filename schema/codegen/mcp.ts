@@ -75,6 +75,46 @@ function idInputSchema(entity: string): Record<string, unknown> {
   };
 }
 
+function listInputSchema(cols: Record<string, Column>): Record<string, unknown> {
+  const visibleFields = Object.entries(cols).filter(([, col]) => !isHiddenMcpField(col));
+  const fieldNames = visibleFields.map(([field]) => field);
+  const filterProps = Object.fromEntries(
+    visibleFields.map(([field, col]) => [field, inputFieldSchema(field, col)])
+  );
+  return {
+    type: "object",
+    properties: {
+      limit: {
+        type: "number",
+        description: "Maximum number of records to return.",
+        minimum: 1,
+      },
+      offset: {
+        type: "number",
+        description: "Number of matching records to skip.",
+        minimum: 0,
+      },
+      sort: {
+        type: "string",
+        description: "Field to sort by.",
+        enum: fieldNames,
+      },
+      order: {
+        type: "string",
+        description: "Sort direction.",
+        enum: ["asc", "desc"],
+      },
+      filter: {
+        type: "object",
+        description: "Exact-match filters keyed by field.",
+        properties: filterProps,
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  };
+}
+
 function keyFieldSummary(cols: Record<string, Column>): string | null {
   const fields = Object.entries(cols)
     .map(([name, col], index) => ({ name, col, index, priority: col.metadata?.displayPriority ?? Number.POSITIVE_INFINITY }))
@@ -162,11 +202,19 @@ export function genMcpServer(schema: Schema): string {
     tools.push(`    {
       name: "list_${entity}s",
       description: ${JSON.stringify(listDescription)},
-      inputSchema: { type: "object", properties: {} },
+      inputSchema: ${JSON.stringify(listInputSchema(cols))},
     }`);
     toolAuthz.push(`  "list_${entity}s": { entity: "${entity}", action: "read" }`);
     handlers.push(`      case "list_${entity}s":
-        return { content: [{ type: "text", text: JSON.stringify(S.findAll${Entity}s(db, {}, auth), null, 2) }] };`);
+        const list${Entity}Opts = normalizeListOptions(args);
+        const list${Entity}Items = S.findAll${Entity}s(db, list${Entity}Opts, auth);
+        const list${Entity}Total = S.count${Entity}s(db, list${Entity}Opts.filter, auth);
+        return { content: [{ type: "text", text: JSON.stringify({
+          items: list${Entity}Items,
+          total: list${Entity}Total,
+          limit: list${Entity}Opts.limit,
+          offset: list${Entity}Opts.offset,
+        }, null, 2) }] };`);
 
     // Get tool
     const getDescription = toolDescription("read", ops.read, `Get a ${titleCase(entity)} record by ID`, cols);
@@ -452,6 +500,29 @@ function visibleTools(auth: T.AuthContext): typeof TOOLS {
   return TOOLS.filter(tool => authorizeTool(tool.name, auth).ok) as typeof TOOLS;
 }
 
+function parseIntegerArg(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value !== "string") return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeListOptions(args: Record<string, unknown>): S.ListOptions {
+  const limit = Math.min(Math.max(parseIntegerArg(args.limit, 100), 1), MAX_PAGE_LIMIT);
+  const offset = Math.max(parseIntegerArg(args.offset, 0), 0);
+  const filter = args.filter && typeof args.filter === "object" && !Array.isArray(args.filter)
+    ? args.filter as Record<string, unknown>
+    : undefined;
+
+  return {
+    limit,
+    offset,
+    sort: typeof args.sort === "string" ? args.sort : undefined,
+    order: args.order === "desc" || args.order === "asc" ? args.order : undefined,
+    filter,
+  };
+}
+
 export async function handleRequest(req: McpRequest, auth: T.AuthContext = MCP_AUTH_CONTEXT): Promise<McpResponse> {
   switch (req.method) {
     case "initialize":
@@ -503,6 +574,7 @@ ${handlers.join("\n")}
 }
 
 const MCP_PORT = parseInt(process.env.MCP_PORT || String(APP_CONFIG.defaultPorts.mcp), 10);
+const MAX_PAGE_LIMIT = parseInt(process.env.MAX_PAGE_LIMIT || "1000", 10);
 
 if (import.meta.main) {
 if (process.argv.includes("--http")) {

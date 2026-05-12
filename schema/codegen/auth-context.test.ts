@@ -87,7 +87,8 @@ describe("auth context generation", () => {
     expect(server).toContain("result.route.handler(req, result.params, authContext, signal)");
 
     expect(mcp).toContain("const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;");
-    expect(mcp).toContain("S.findAllNotes(db, {}, auth)");
+    expect(mcp).toContain("S.findAllNotes(db, listNoteOpts, auth)");
+    expect(mcp).toContain("S.countNotes(db, listNoteOpts.filter, auth)");
     expect(mcp).toContain("S.createNote(db, args as T.NoteInput, auth, { source: \"mcp\" })");
     expect(mcp).toContain("S.publishNote(db, args.id as number, auth, null, { source: \"mcp\" })");
   });

@@ -112,5 +112,8 @@ describe("MCP metadata generation", () => {
     expect(mcp).toContain('"status":{"type":"string","title":"Status","description":"Status field.","enum":["reserved","cancelled"]}');
     expect(mcp).toContain('"seat":{"type":"string","title":"Seat","description":"Seat label printed on ticket.","maxLength":24}');
     expect(mcp).toContain('"id":{"type":"number","title":"Ticket ID","description":"Identifier for the Ticket record."}');
+    expect(mcp).toContain('"limit":{"type":"number","description":"Maximum number of records to return.","minimum":1}');
+    expect(mcp).toContain('"sort":{"type":"string","description":"Field to sort by.","enum":["id","performance_id","status","seat"]}');
+    expect(mcp).toContain('"filter":{"type":"object","description":"Exact-match filters keyed by field."');
   });
 });
