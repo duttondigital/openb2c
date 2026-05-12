@@ -2,7 +2,7 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, formatValue, orderedSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
@@ -49,7 +49,7 @@ export class ObEntityList extends HTMLElement {
       return;
     }
 
-    const cols = Object.keys(schema.properties);
+    const cols = orderedSchemaFields(schema);
     const fks = api.getForeignKeys(this.entity);
 
     // Fetch data
@@ -93,13 +93,13 @@ export class ObEntityList extends HTMLElement {
         <table>
           <thead>
             <tr>
-              ${cols.map((c) => {
+              ${cols.map(([c, prop]) => {
                 const arrow = this._sort === c ? (this._order === "asc" ? "up" : "down") : "";
                 const ariaSort = this._sort === c ? (this._order === "asc" ? "ascending" : "descending") : "none";
                 return `
                   <th scope="col" aria-sort="${ariaSort}">
                     <button class="sort-btn" data-col="${escapeAttr(c)}">
-                      ${escapeHtml(fieldLabel(c))}
+                      ${escapeHtml(fieldDisplayLabel(c, prop))}
                       ${arrow ? `<span class="arrow" aria-hidden="true">${arrow === "up" ? "^" : "v"}</span>` : ""}
                     </button>
                   </th>`;
@@ -111,7 +111,7 @@ export class ObEntityList extends HTMLElement {
             ${items.length === 0 ? `<tr><td colspan="${cols.length + 1}"><div class="empty-state">No records yet.</div></td></tr>` : ""}
             ${items.map((row: any) => `
               <tr data-id="${escapeAttr(row.id)}">
-                ${cols.map((c) => this._renderCell(c, row[c], fks)).join("")}
+                ${cols.map(([c, prop]) => this._renderCell(c, row[c], fks, prop)).join("")}
                 <td><a class="row-action" href="#/${this.entity}s/${escapeAttr(row.id)}">Open</a></td>
               </tr>
             `).join("")}
@@ -166,7 +166,7 @@ export class ObEntityList extends HTMLElement {
     });
   }
 
-  private _renderCell(column: string, value: unknown, fks: Record<string, string>): string {
+  private _renderCell(column: string, value: unknown, fks: Record<string, string>, prop: any): string {
     if (value === null || value === undefined || value === "") {
       return `<td><span class="cell-muted">-</span></td>`;
     }
@@ -175,7 +175,7 @@ export class ObEntityList extends HTMLElement {
       return `<td><a href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a></td>`;
     }
 
-    const formatted = formatValue(column, value);
+    const formatted = formatValue(column, value, prop);
     const badgeClass = statusClass(column, value);
     if (column === "status" || ["active", "used", "revoked"].includes(column)) {
       return `<td><span class="badge ${badgeClass}">${escapeHtml(formatted)}</span></td>`;

@@ -2,7 +2,7 @@
  * <ob-account-summary> - Signed-in profile and account activity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, labelFor, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, fieldFormat, fieldHelpText, fieldPlaceholder, formatValue, labelFor, orderedSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 const INTERNAL_PREFIXES = ["identity_", "api_key"];
@@ -116,6 +116,8 @@ export class ObAccountSummary extends HTMLElement {
 
   private _renderProfile(api: ObApi): string {
     const profile = this._profile || {};
+    const schema = api.getInputSchema("user") || api.getSchema("user");
+    const props = schema?.properties || {};
     const fields = this._editableProfileFields(api);
     return `
       <section class="account-section" aria-labelledby="profile-title">
@@ -124,12 +126,26 @@ export class ObAccountSummary extends HTMLElement {
           ${profile.email ? `<span>${escapeHtml(profile.email)}</span>` : ""}
         </div>
         <form data-form="profile">
-          ${fields.length === 0 ? `<p class="empty">No editable profile fields are available.</p>` : fields.map((field) => `
-            <div class="form-group">
-              <label for="account-${escapeAttr(field)}">${escapeHtml(fieldLabel(field))}</label>
-              <input id="account-${escapeAttr(field)}" name="${escapeAttr(field)}" data-field="${escapeAttr(field)}" value="${escapeAttr(profile[field] ?? "")}" autocomplete="${escapeAttr(this._autocomplete(field))}" />
-            </div>
-          `).join("")}
+          ${fields.length === 0 ? `<p class="empty">No editable profile fields are available.</p>` : fields.map((field) => {
+            const prop = props[field];
+            const id = `account-${field}`;
+            const label = fieldDisplayLabel(field, prop);
+            const help = fieldHelpText(prop);
+            const placeholder = fieldPlaceholder(prop);
+            const describedBy = help ? `${id}-help` : "";
+            const common = `id="${escapeAttr(id)}" name="${escapeAttr(field)}" data-field="${escapeAttr(field)}"${describedBy ? ` aria-describedby="${escapeAttr(describedBy)}"` : ""}`;
+            const helpMarkup = help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : "";
+            return `
+              <div class="form-group">
+                <label for="${escapeAttr(id)}">${escapeHtml(label)}</label>
+                ${Array.isArray(prop?.enum) && prop.enum.length > 0
+                  ? `<select ${common}>
+                      ${prop.enum.map((choice: unknown) => `<option value="${escapeAttr(choice)}" ${String(choice) === String(profile[field] ?? "") ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}
+                    </select>`
+                  : `<input ${common} value="${escapeAttr(profile[field] ?? "")}" autocomplete="${escapeAttr(this._autocomplete(field, prop))}"${placeholder ? ` placeholder="${escapeAttr(placeholder)}"` : ""} />`}
+                ${helpMarkup}
+              </div>`;
+          }).join("")}
           ${fields.length > 0 ? `
             <div class="actions">
               <button type="submit" class="primary" ${this._saving ? "disabled" : ""}>${this._saving ? "Saving" : "Save changes"}</button>
@@ -142,10 +158,10 @@ export class ObAccountSummary extends HTMLElement {
 
   private _editableProfileFields(api: ObApi): string[] {
     const schema = api.getInputSchema("user") || api.getSchema("user");
-    const fields = Object.keys(schema?.properties || {});
-    return fields
+    return orderedSchemaFields(schema)
+      .map(([field]) => field)
       .filter((field) => !PROFILE_EXCLUDED_FIELDS.has(field))
-      .sort((a, b) => this._profileFieldRank(a) - this._profileFieldRank(b) || a.localeCompare(b));
+      .sort((a, b) => this._profileFieldRank(a) - this._profileFieldRank(b));
   }
 
   private _renderActivity(): string {
@@ -199,12 +215,14 @@ export class ObAccountSummary extends HTMLElement {
     const body: Record<string, unknown> = {};
     const schema = api.getInputSchema("user") || api.getSchema("user");
     const required = new Set<string>(schema?.required || []);
+    const props = schema?.properties || {};
     for (const field of this._editableProfileFields(api)) {
-      const input = form.querySelector<HTMLInputElement>(`[data-field="${CSS.escape(field)}"]`);
+      const input = form.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-field="${CSS.escape(field)}"]`);
       if (!input) continue;
       const value = input.value.trim();
       if (value === "" && !required.has(field)) continue;
-      body[field] = value;
+      const prop = props[field];
+      body[field] = prop?.type === "integer" || prop?.type === "number" ? Number(value) : value;
     }
 
     this._saving = true;
@@ -232,10 +250,12 @@ export class ObAccountSummary extends HTMLElement {
     }
   }
 
-  private _autocomplete(field: string): string {
+  private _autocomplete(field: string, prop?: any): string {
+    const format = fieldFormat(prop);
     if (field === "name") return "name";
-    if (field === "phone") return "tel";
-    if (field === "avatar_url") return "url";
+    if (format === "phone" || field === "phone") return "tel";
+    if (format === "url" || field === "avatar_url") return "url";
+    if (format === "email" || field.endsWith("_email")) return "email";
     return "off";
   }
 

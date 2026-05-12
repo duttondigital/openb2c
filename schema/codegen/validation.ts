@@ -1,4 +1,4 @@
-import type { Cascade, Expr, FieldRef, Operation, Schema, Tables } from "./types";
+import type { Cascade, Column, Expr, FieldRef, Operation, Schema, Tables } from "./types";
 
 export interface SchemaDiagnostic {
   path: string;
@@ -116,6 +116,73 @@ function validateColumns(tables: Tables, diagnostics: SchemaDiagnostic[]): void 
       }
       if (col.references) {
         validateReference(tables, col.references, `tables.${table}.${field}.references`, diagnostics);
+      }
+      validateColumnMetadata(table, field, col, diagnostics);
+      validateColumnRules(table, field, col, diagnostics);
+    }
+  }
+}
+
+function validateColumnMetadata(table: string, field: string, col: Column, diagnostics: SchemaDiagnostic[]): void {
+  const metadata = col.metadata;
+  if (!metadata) return;
+  if (metadata.privacy && !["public", "internal", "sensitive", "secret"].includes(metadata.privacy)) {
+    add(diagnostics, `tables.${table}.${field}.metadata.privacy`, "must be one of public, internal, sensitive, or secret");
+  }
+}
+
+function validateColumnRules(table: string, field: string, col: Column, diagnostics: SchemaDiagnostic[]): void {
+  const validation = col.validation;
+  if (!validation) return;
+
+  if (
+    validation.minLength !== null &&
+    validation.minLength !== undefined &&
+    validation.minLength < 0
+  ) {
+    add(diagnostics, `tables.${table}.${field}.validation.minLength`, "must be greater than or equal to 0");
+  }
+
+  if (
+    validation.maxLength !== null &&
+    validation.maxLength !== undefined &&
+    validation.maxLength < 0
+  ) {
+    add(diagnostics, `tables.${table}.${field}.validation.maxLength`, "must be greater than or equal to 0");
+  }
+
+  if (
+    validation.minLength !== null &&
+    validation.minLength !== undefined &&
+    validation.maxLength !== null &&
+    validation.maxLength !== undefined &&
+    validation.minLength > validation.maxLength
+  ) {
+    add(diagnostics, `tables.${table}.${field}.validation`, "minLength must be less than or equal to maxLength");
+  }
+
+  if (
+    validation.minimum !== null &&
+    validation.minimum !== undefined &&
+    validation.maximum !== null &&
+    validation.maximum !== undefined &&
+    validation.minimum > validation.maximum
+  ) {
+    add(diagnostics, `tables.${table}.${field}.validation`, "minimum must be less than or equal to maximum");
+  }
+
+  if (validation.pattern) {
+    try {
+      new RegExp(validation.pattern);
+    } catch {
+      add(diagnostics, `tables.${table}.${field}.validation.pattern`, "must be a valid JavaScript regular expression");
+    }
+  }
+
+  if ((col.type === "integer" || col.type === "real" || col.type === "float" || col.type === "number") && validation.enum?.length) {
+    for (const value of validation.enum) {
+      if (!Number.isFinite(Number(value))) {
+        add(diagnostics, `tables.${table}.${field}.validation.enum`, `contains non-numeric value ${JSON.stringify(value)} for numeric field`);
       }
     }
   }

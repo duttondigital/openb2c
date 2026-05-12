@@ -131,7 +131,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 
 ### Ontology Expressiveness
 
-- [ ] Add field metadata: label, help text, placeholder, format, enum values, display priority, privacy level, and redaction policy.
+- [x] Add field metadata: label, help text, placeholder, format, enum values, display priority, privacy level, and redaction policy.
 - [ ] Add relationship metadata beyond raw foreign keys.
 - [ ] Add role and policy metadata for users, staff, services, and customer identities.
 - [ ] Add workflow metadata for operation groups, allowed transitions, audit text, and confirmation requirements.

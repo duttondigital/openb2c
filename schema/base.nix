@@ -37,6 +37,81 @@ let
     };
   };
 
+  fieldMetadataType = lib.types.submodule {
+    options = {
+      label = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Human-readable field label for generated API descriptions and UI.";
+      };
+      helpText = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Short helper text shown beside generated inputs.";
+      };
+      placeholder = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Generated input placeholder.";
+      };
+      format = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Semantic field format such as email, date, time, url, money, or textarea.";
+      };
+      displayPriority = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Lower values appear earlier in generated forms, lists, and detail views.";
+      };
+      privacy = lib.mkOption {
+        type = lib.types.enum [ "public" "internal" "sensitive" "secret" ];
+        default = "public";
+        description = "Field privacy classification for generated clients and API metadata.";
+      };
+      redact = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether generated API responses should omit this field.";
+      };
+    };
+  };
+
+  fieldValidationType = lib.types.submodule {
+    options = {
+      minLength = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Minimum string length.";
+      };
+      maxLength = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Maximum string length.";
+      };
+      minimum = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "Minimum numeric value.";
+      };
+      maximum = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "Maximum numeric value.";
+      };
+      pattern = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "JavaScript-compatible regular expression pattern.";
+      };
+      enum = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Allowed finite string values.";
+      };
+    };
+  };
+
   # Column definition
   columnType = lib.types.submodule {
     options = {
@@ -47,6 +122,16 @@ let
       unique = lib.mkOption { type = lib.types.bool; default = false; };
       default = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
       references = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+      metadata = lib.mkOption {
+        type = fieldMetadataType;
+        default = {};
+        description = "Presentation, ordering, and privacy metadata for generated outputs.";
+      };
+      validation = lib.mkOption {
+        type = fieldValidationType;
+        default = {};
+        description = "Per-field validation constraints for generated API schemas and services.";
+      };
     };
   };
 

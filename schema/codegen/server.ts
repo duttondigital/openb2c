@@ -4,6 +4,28 @@ import { hasCommerceWorkflow, hasCommerceBookingAliases, pascalCase, camelCase }
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
 
+function redactedFieldsForSchema(schema: Schema): Record<string, string[]> {
+  const redacted: Record<string, Set<string>> = {
+    api_key: new Set(["key_hash"]),
+  };
+
+  for (const [entity, columns] of Object.entries(schema.tables)) {
+    for (const [field, column] of Object.entries(columns)) {
+      const metadata = column.metadata || {};
+      if (metadata.redact || metadata.privacy === "secret") {
+        if (!redacted[entity]) redacted[entity] = new Set();
+        redacted[entity].add(field);
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(redacted)
+      .map(([entity, fields]) => [entity, [...fields].sort()])
+      .filter(([, fields]) => (fields as string[]).length > 0),
+  ) as Record<string, string[]>;
+}
+
 function genConfiguredCommerceRoutes(schema: Schema): string[] {
   const compatibilityRoutes = hasCommerceBookingAliases(schema) ? `
   // Compatibility aliases for the original booking-oriented API.
@@ -122,6 +144,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
 
 export function genRoutes(schema: Schema): string {
   const requiredProductionEnv = requiredProductionEnvVars(schema);
+  const redactedFields = redactedFieldsForSchema(schema);
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -232,9 +255,7 @@ const ALLOW_EPHEMERAL_REGISTRY_KEYS = process.env.ALLOW_EPHEMERAL_REGISTRY_KEYS 
 const REQUIRED_PRODUCTION_ENV = ${JSON.stringify(requiredProductionEnv, null, 2)} as const;
 
 // Fields to exclude from API responses (sensitive data)
-const REDACTED_FIELDS: Record<string, string[]> = {
-  api_key: ["key_hash"],
-};
+const REDACTED_FIELDS: Record<string, string[]> = ${JSON.stringify(redactedFields, null, 2)};
 
 function redact<T extends Record<string, unknown>>(entity: string, obj: T): T {
   const fields = REDACTED_FIELDS[entity];

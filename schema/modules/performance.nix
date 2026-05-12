@@ -5,15 +5,94 @@ in
 {
   tables.performance = {
     id = { type = "integer"; pk = true; auto = true; };
-    title = { type = "text"; required = true; };
-    venue_id = { type = "integer"; required = true; references = "venue(id)"; };
-    date = { type = "text"; required = true; };
-    time = { type = "text"; required = true; };
-    duration_mins = { type = "integer"; required = true; };
-    price_pence = { type = "integer"; required = true; };
-    description = { type = "text"; };
-    status = { type = "text"; default = "'scheduled'"; };  # scheduled, cancelled, completed
-    created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
+    title = {
+      type = "text";
+      required = true;
+      metadata = {
+        label = "Performance";
+        placeholder = "The Magic Flute";
+        displayPriority = 10;
+      };
+      validation.maxLength = 160;
+    };
+    venue_id = {
+      type = "integer";
+      required = true;
+      references = "venue(id)";
+      metadata = {
+        label = "Venue";
+        displayPriority = 20;
+      };
+    };
+    date = {
+      type = "text";
+      required = true;
+      metadata = {
+        label = "Date";
+        placeholder = "YYYY-MM-DD";
+        format = "date";
+        displayPriority = 30;
+      };
+    };
+    time = {
+      type = "text";
+      required = true;
+      metadata = {
+        label = "Time";
+        placeholder = "HH:MM";
+        format = "time";
+        displayPriority = 40;
+      };
+    };
+    duration_mins = {
+      type = "integer";
+      required = true;
+      metadata = {
+        label = "Duration";
+        helpText = "Duration in minutes.";
+        displayPriority = 50;
+      };
+      validation = {
+        minimum = 1;
+        maximum = 600;
+      };
+    };
+    price_pence = {
+      type = "integer";
+      required = true;
+      metadata = {
+        label = "Price";
+        format = "money";
+        displayPriority = 60;
+      };
+      validation.minimum = 0;
+    };
+    description = {
+      type = "text";
+      metadata = {
+        label = "Description";
+        format = "textarea";
+        displayPriority = 70;
+      };
+    };
+    status = {
+      type = "text";
+      default = "'scheduled'";
+      metadata = {
+        label = "Status";
+        displayPriority = 80;
+      };
+      validation.enum = [ "scheduled" "cancelled" "completed" ];
+    };
+    created_at = {
+      type = "text";
+      default = "CURRENT_TIMESTAMP";
+      metadata = {
+        label = "Created";
+        format = "date-time";
+        displayPriority = 1000;
+      };
+    };
   };
 
   indexes.performance.by_venue_date = {

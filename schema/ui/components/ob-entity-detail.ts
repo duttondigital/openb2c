@@ -2,7 +2,7 @@
  * <ob-entity-detail entity="issues" record-id="5"> — Detail view for a single record.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldLabel, formatValue, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, formatValue, orderedSchemaFields, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityDetail extends HTMLElement {
@@ -57,7 +57,7 @@ export class ObEntityDetail extends HTMLElement {
       return;
     }
 
-    const cols = Object.keys(schema.properties);
+    const cols = orderedSchemaFields(schema);
     const title = `${displayName(this.entity)} #${this.recordId}`;
 
     this.shadowRoot!.innerHTML = `
@@ -77,9 +77,9 @@ export class ObEntityDetail extends HTMLElement {
         ${this._confirmDelete ? `<div class="delete-confirm" role="alert">Confirm deletion of ${escapeHtml(title)}.</div>` : ""}
         ${this._deleteError ? `<div class="error-msg" role="alert">${escapeHtml(this._deleteError)}</div>` : ""}
         <dl>
-          ${cols.map((c) => {
+          ${cols.map(([c, prop]) => {
             const val = record[c] ?? "";
-            return `<dt>${escapeHtml(fieldLabel(c))}</dt><dd>${this._renderValue(c, val, fks)}</dd>`;
+            return `<dt>${escapeHtml(fieldDisplayLabel(c, prop))}</dt><dd>${this._renderValue(c, val, fks, prop)}</dd>`;
           }).join("")}
         </dl>
         ${ops.length > 0 ? `
@@ -157,7 +157,7 @@ export class ObEntityDetail extends HTMLElement {
     }
   }
 
-  private _renderValue(column: string, value: unknown, fks: Record<string, string>): string {
+  private _renderValue(column: string, value: unknown, fks: Record<string, string>, prop: any): string {
     if (value === null || value === undefined || value === "") {
       return `<span class="muted">-</span>`;
     }
@@ -166,7 +166,7 @@ export class ObEntityDetail extends HTMLElement {
       return `<a href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a>`;
     }
 
-    const formatted = formatValue(column, value);
+    const formatted = formatValue(column, value, prop);
     if (column === "status" || ["active", "used", "revoked"].includes(column)) {
       return `<span class="badge ${statusClass(column, value)}">${escapeHtml(formatted)}</span>`;
     }

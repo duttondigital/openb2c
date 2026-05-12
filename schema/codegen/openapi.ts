@@ -1,4 +1,4 @@
-import type { Schema } from "./types";
+import type { Column, Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -78,6 +78,67 @@ function commerceOptionsSchema(schema: Schema): Record<string, unknown> {
     required,
     additionalProperties: false,
   };
+}
+
+function columnOpenApiType(col: Column): { type: string; format?: string } {
+  switch (col.type) {
+    case "integer":
+      return { type: "integer" };
+    case "real":
+    case "float":
+    case "number":
+      return { type: "number" };
+    case "blob":
+      return { type: "string", format: "binary" };
+    default:
+      return { type: "string" };
+  }
+}
+
+function coerceColumnValue(value: string, col: Column): string | number | boolean {
+  if (col.type === "integer" || col.type === "real" || col.type === "float" || col.type === "number") {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value;
+  }
+  if (col.type === "boolean") return value === "true" || value === "1";
+  return value;
+}
+
+function columnFieldMetadata(col: Column): Record<string, unknown> | null {
+  const metadata = col.metadata || {};
+  const extension: Record<string, unknown> = {};
+  if (metadata.label) extension.label = metadata.label;
+  if (metadata.helpText) extension.helpText = metadata.helpText;
+  if (metadata.placeholder) extension.placeholder = metadata.placeholder;
+  if (metadata.format) extension.format = metadata.format;
+  if (metadata.displayPriority !== null && metadata.displayPriority !== undefined) extension.displayPriority = metadata.displayPriority;
+  if (metadata.privacy && metadata.privacy !== "public") extension.privacy = metadata.privacy;
+  if (metadata.redact) extension.redact = true;
+  return Object.keys(extension).length ? extension : null;
+}
+
+function columnValueSchema(col: Column, options: { includeDefault?: boolean } = {}): Record<string, unknown> {
+  const validation = col.validation || {};
+  const metadata = col.metadata || {};
+  const type = columnOpenApiType(col);
+  const schema: Record<string, unknown> = { ...type };
+  const isString = type.type === "string";
+  const isNumeric = type.type === "integer" || type.type === "number";
+
+  if (metadata.label) schema.title = metadata.label;
+  if (metadata.helpText) schema.description = metadata.helpText;
+  if (metadata.format) schema.format = metadata.format;
+  if (validation.enum?.length) schema.enum = validation.enum.map(value => coerceColumnValue(value, col));
+  if (isString && validation.minLength !== null && validation.minLength !== undefined) schema.minLength = validation.minLength;
+  if (isString && validation.maxLength !== null && validation.maxLength !== undefined) schema.maxLength = validation.maxLength;
+  if (isString && validation.pattern) schema.pattern = validation.pattern;
+  if (isNumeric && validation.minimum !== null && validation.minimum !== undefined) schema.minimum = validation.minimum;
+  if (isNumeric && validation.maximum !== null && validation.maximum !== undefined) schema.maximum = validation.maximum;
+  if (options.includeDefault && col.default !== null) schema.default = col.default;
+
+  const fieldMetadata = columnFieldMetadata(col);
+  if (fieldMetadata) schema["x-openb2c-field"] = fieldMetadata;
+  return schema;
 }
 
 export function genOpenAPI(schema: Schema): string {
@@ -242,10 +303,7 @@ export function genOpenAPI(schema: Schema): string {
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
     for (const [col, c] of Object.entries(cols)) {
-      properties[col] = {
-        type: c.type === "integer" ? "integer" : "string",
-        ...(c.default !== null && { default: c.default }),
-      };
+      properties[col] = columnValueSchema(c, { includeDefault: true });
       if (c.required || c.pk) required.push(col);
     }
     schemas[Entity] = { type: "object", properties, required };
@@ -255,7 +313,7 @@ export function genOpenAPI(schema: Schema): string {
     const inputRequired: string[] = [];
     for (const [col, c] of Object.entries(cols)) {
       if (c.pk && c.auto) continue;
-      inputProps[col] = { type: c.type === "integer" ? "integer" : "string" };
+      inputProps[col] = columnValueSchema(c);
       if (c.required && c.default === null && !createRelationshipFields.has(col)) inputRequired.push(col);
     }
     schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };

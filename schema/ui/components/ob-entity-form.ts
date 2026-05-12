@@ -3,7 +3,7 @@
  * Derives form fields from OpenAPI spec.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldLabel, labelFor } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, fieldFormat, fieldHelpText, fieldPlaceholder, labelFor, orderedSchemaFields } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityForm extends HTMLElement {
@@ -46,7 +46,7 @@ export class ObEntityForm extends HTMLElement {
 
     const fks = api.getForeignKeys(this.entity);
     const required = new Set(inputSchema.required || []);
-    const fields = Object.entries(inputSchema.properties as Record<string, any>);
+    const fields = orderedSchemaFields(inputSchema);
 
     // Load existing record for edit mode
     let record: any = {};
@@ -85,37 +85,59 @@ export class ObEntityForm extends HTMLElement {
             const req = required.has(name);
             const val = record[name] ?? prop.default ?? "";
             const id = `field-${name}`;
-            const label = fieldLabel(name);
-            const full = isWideField(name) ? " full" : "";
+            const label = fieldDisplayLabel(name, prop);
+            const help = fieldHelpText(prop);
+            const describedBy = help ? `${id}-help` : "";
+            const describedByAttr = describedBy ? ` aria-describedby="${escapeAttr(describedBy)}"` : "";
+            const helpMarkup = help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : "";
+            const full = isWideField(name, prop) ? " full" : "";
 
             if (fks[name]) {
               const opts = fkOptions[name] || [];
               return `
                 <div class="form-group${full}">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}" ${req ? "required" : ""}>
+                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""}>
                     <option value="">Select ${escapeHtml(label.toLowerCase())}</option>
                     ${opts.map((o: any) => {
                       const optionLabel = labelFor(o);
                       return `<option value="${escapeAttr(o.id)}" ${String(o.id) === String(val) ? "selected" : ""}>${escapeHtml(optionLabel)} (${escapeHtml(o.id)})</option>`;
                     }).join("")}
                   </select>
+                  ${helpMarkup}
+                </div>`;
+            }
+
+            if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+              return `
+                <div class="form-group${full}">
+                  <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
+                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""}>
+                    <option value="">Select ${escapeHtml(label.toLowerCase())}</option>
+                    ${prop.enum.map((choice: unknown) => `<option value="${escapeAttr(choice)}" ${String(choice) === String(val) ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}
+                  </select>
+                  ${helpMarkup}
                 </div>`;
             }
 
             const inputAttrs = inputAttrsFor(name, prop);
-            if (isWideField(name)) {
+            const validationAttrs = validationAttrsFor(prop);
+            const placeholder = fieldPlaceholder(prop);
+            const placeholderAttr = placeholder ? ` placeholder="${escapeAttr(placeholder)}"` : "";
+            if (isWideField(name, prop)) {
               return `
                 <div class="form-group full">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}" ${req ? "required" : ""}>${escapeHtml(val)}</textarea>
+                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""}>${escapeHtml(val)}</textarea>
+                  ${helpMarkup}
                 </div>`;
             }
 
             return `
               <div class="form-group${full}">
                 <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}" ${req ? "required" : ""} />
+                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} />
+                ${helpMarkup}
               </div>`;
           }).join("")}
           </div>
@@ -153,7 +175,7 @@ export class ObEntityForm extends HTMLElement {
       const v = String(value);
       if (v === "") continue;
       const prop = inputSchema.properties[key];
-      data[key] = prop?.type === "integer" ? Number(v) : v;
+      data[key] = prop?.type === "integer" || prop?.type === "number" ? Number(v) : v;
     }
 
     try {
@@ -185,17 +207,29 @@ export class ObEntityForm extends HTMLElement {
 }
 
 function inputAttrsFor(name: string, prop: any): string {
+  const format = fieldFormat(prop);
   if (prop.type === "integer") return 'type="text" inputmode="numeric"';
-  if (name === "email" || name.endsWith("_email")) return 'type="text" inputmode="email" autocomplete="email"';
-  if (name === "date" || name.endsWith("_date")) return 'type="text" inputmode="numeric" placeholder="YYYY-MM-DD"';
-  if (name === "time" || name.endsWith("_time")) return 'type="text" inputmode="numeric" placeholder="HH:MM"';
-  if (name.includes("phone")) return 'type="text" inputmode="tel" autocomplete="tel"';
-  if (name.includes("url")) return 'type="text" inputmode="url"';
+  if (prop.type === "number") return 'type="text" inputmode="decimal"';
+  if (format === "email" || name === "email" || name.endsWith("_email")) return 'type="text" inputmode="email" autocomplete="email"';
+  if (format === "date" || name === "date" || name.endsWith("_date")) return `type="text" inputmode="numeric"${fieldPlaceholder(prop) ? "" : ' placeholder="YYYY-MM-DD"'}`;
+  if (format === "time" || name === "time" || name.endsWith("_time")) return `type="text" inputmode="numeric"${fieldPlaceholder(prop) ? "" : ' placeholder="HH:MM"'}`;
+  if (format === "phone" || name.includes("phone")) return 'type="text" inputmode="tel" autocomplete="tel"';
+  if (format === "url" || name.includes("url")) return 'type="text" inputmode="url"';
   return 'type="text"';
 }
 
-function isWideField(name: string): boolean {
-  return ["description", "notes", "body", "content"].some((part) => name.includes(part));
+function validationAttrsFor(prop: any): string {
+  const attrs: string[] = [];
+  if (prop.minLength !== undefined) attrs.push(`minlength="${escapeAttr(prop.minLength)}"`);
+  if (prop.maxLength !== undefined) attrs.push(`maxlength="${escapeAttr(prop.maxLength)}"`);
+  if (prop.minimum !== undefined) attrs.push(`min="${escapeAttr(prop.minimum)}"`);
+  if (prop.maximum !== undefined) attrs.push(`max="${escapeAttr(prop.maximum)}"`);
+  if (prop.pattern) attrs.push(`pattern="${escapeAttr(prop.pattern)}"`);
+  return attrs.length ? ` ${attrs.join(" ")}` : "";
+}
+
+function isWideField(name: string, prop?: any): boolean {
+  return fieldFormat(prop) === "textarea" || ["description", "notes", "body", "content"].some((part) => name.includes(part));
 }
 
 customElements.define("ob-entity-form", ObEntityForm);

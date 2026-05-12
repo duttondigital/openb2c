@@ -157,9 +157,33 @@ function selfServiceScopes(schema: Schema): string[] {
   return [...scopes].sort();
 }
 
+function fieldValidationRules(schema: Schema): Record<string, Record<string, unknown>> {
+  const rules: Record<string, Record<string, unknown>> = {};
+  for (const [entity, columns] of Object.entries(schema.tables)) {
+    const entityRules: Record<string, unknown> = {};
+    for (const [field, column] of Object.entries(columns)) {
+      const metadata = column.metadata || {};
+      const validation = column.validation || {};
+      const rule: Record<string, unknown> = {};
+      if (metadata.label) rule.label = metadata.label;
+      if (metadata.format) rule.format = metadata.format;
+      if (validation.minLength !== null && validation.minLength !== undefined) rule.minLength = validation.minLength;
+      if (validation.maxLength !== null && validation.maxLength !== undefined) rule.maxLength = validation.maxLength;
+      if (validation.minimum !== null && validation.minimum !== undefined) rule.minimum = validation.minimum;
+      if (validation.maximum !== null && validation.maximum !== undefined) rule.maximum = validation.maximum;
+      if (validation.pattern) rule.pattern = validation.pattern;
+      if (validation.enum?.length) rule.enum = validation.enum;
+      if (Object.keys(rule).length > 0) entityRules[field] = rule;
+    }
+    if (Object.keys(entityRules).length > 0) rules[entity] = entityRules;
+  }
+  return rules;
+}
+
 function genServiceImports(schema: Schema): string {
   const policy = JSON.stringify(operationPolicies(schema), null, 2);
   const selfScopes = JSON.stringify(selfServiceScopes(schema), null, 2);
+  const validationRules = JSON.stringify(fieldValidationRules(schema), null, 2);
   return `import { Database } from "bun:sqlite";
 import * as T from "./types";
 
@@ -224,7 +248,20 @@ export function validatePhone(v: string): boolean { return UK_PHONE_RE.test(v.re
 export function validateDate(v: string): boolean { return DATE_RE.test(v); }
 export function validateTime(v: string): boolean { return TIME_RE.test(v); }
 
-function validate(input: Record<string, unknown>): string | null {
+type FieldValidationRule = {
+  label?: string;
+  format?: string;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  pattern?: string;
+  enum?: readonly string[];
+};
+
+const FIELD_VALIDATION_RULES: Record<string, Record<string, FieldValidationRule>> = ${validationRules};
+
+function validate(input: Record<string, unknown>, entity?: string): string | null {
   if (input.email !== undefined && typeof input.email === "string" && !validateEmail(input.email)) {
     return "invalid email format";
   }
@@ -240,7 +277,49 @@ function validate(input: Record<string, unknown>): string | null {
   if (input.time !== undefined && typeof input.time === "string" && !validateTime(input.time)) {
     return "invalid time format (HH:MM)";
   }
+  if (entity) {
+    for (const [field, rule] of Object.entries(FIELD_VALIDATION_RULES[entity] || {})) {
+      if (input[field] === undefined || input[field] === null) continue;
+      const error = validateField(field, input[field], rule);
+      if (error) return error;
+    }
+  }
   return null;
+}
+
+function validateField(field: string, value: unknown, rule: FieldValidationRule): string | null {
+  const label = rule.label || field;
+  const text = typeof value === "string" ? value : String(value);
+  if (rule.enum?.length && !rule.enum.includes(text)) return \`\${label} must be one of: \${rule.enum.join(", ")}\`;
+  if (rule.minLength !== undefined && text.length < rule.minLength) return \`\${label} must be at least \${rule.minLength} characters\`;
+  if (rule.maxLength !== undefined && text.length > rule.maxLength) return \`\${label} must be at most \${rule.maxLength} characters\`;
+  if (rule.pattern && !new RegExp(rule.pattern).test(text)) return \`\${label} has an invalid format\`;
+
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (rule.minimum !== undefined && (!Number.isFinite(numeric) || numeric < rule.minimum)) return \`\${label} must be at least \${rule.minimum}\`;
+  if (rule.maximum !== undefined && (!Number.isFinite(numeric) || numeric > rule.maximum)) return \`\${label} must be at most \${rule.maximum}\`;
+
+  switch (rule.format) {
+    case "email":
+      return validateEmail(text) ? null : \`\${label} must be a valid email address\`;
+    case "postcode":
+      return validatePostcode(text) ? null : \`\${label} must be a valid UK postcode\`;
+    case "phone":
+      return validatePhone(text) ? null : \`\${label} must be a valid UK phone number\`;
+    case "date":
+      return validateDate(text) ? null : \`\${label} must use YYYY-MM-DD\`;
+    case "time":
+      return validateTime(text) ? null : \`\${label} must use HH:MM\`;
+    case "url":
+      try {
+        new URL(text);
+        return null;
+      } catch {
+        return \`\${label} must be a valid URL\`;
+      }
+    default:
+      return null;
+  }
 }
 
 // ============================================================================
@@ -916,7 +995,7 @@ export function create${Entity}(db: Database, input: T.${Entity}Input, auth: T.A
   ${requiredCols.map(c => `if (input.${c} === undefined) return { ok: false, error: "${c} is required", code: "invalid" };`).join("\n  ")}` : ""}
 
   // Validate formats
-  const validationError = validate(input as Record<string, unknown>);
+  const validationError = validate(input as Record<string, unknown>, "${entity}");
   if (validationError) return { ok: false, error: validationError, code: "invalid" };
 
   // Build dynamic insert - only include provided fields, let DB handle defaults
@@ -947,7 +1026,7 @@ export function update${Entity}(db: Database, id: number, input: Partial<T.${Ent
   }
 
   // Validate formats
-  const validationError = validate(input as Record<string, unknown>);
+  const validationError = validate(input as Record<string, unknown>, "${entity}");
   if (validationError) return { ok: false, error: validationError, code: "invalid" };
 
   const sets: string[] = [];

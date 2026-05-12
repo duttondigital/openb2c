@@ -5,13 +5,70 @@ in
 {
   tables.ticket = {
     id = { type = "integer"; pk = true; auto = true; };
-    performance_id = { type = "integer"; required = true; references = "performance(id)"; };
-    user_id = { type = "integer"; required = true; references = "user(id)"; };
-    seat = { type = "text"; };
-    price_pence = { type = "integer"; required = true; };
-    ticket_type = { type = "text"; default = "'standard'"; };  # standard, vip, concession
-    status = { type = "text"; default = "'reserved'"; };  # reserved, confirmed, cancelled, used
-    created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
+    performance_id = {
+      type = "integer";
+      required = true;
+      references = "performance(id)";
+      metadata = {
+        label = "Performance";
+        displayPriority = 10;
+      };
+    };
+    user_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      metadata = {
+        label = "Customer";
+        displayPriority = 20;
+      };
+    };
+    seat = {
+      type = "text";
+      metadata = {
+        label = "Seat";
+        placeholder = "A12";
+        displayPriority = 30;
+      };
+      validation.maxLength = 24;
+    };
+    price_pence = {
+      type = "integer";
+      required = true;
+      metadata = {
+        label = "Price";
+        format = "money";
+        displayPriority = 40;
+      };
+      validation.minimum = 0;
+    };
+    ticket_type = {
+      type = "text";
+      default = "'standard'";
+      metadata = {
+        label = "Ticket type";
+        displayPriority = 50;
+      };
+      validation.enum = [ "standard" "vip" "concession" ];
+    };
+    status = {
+      type = "text";
+      default = "'reserved'";
+      metadata = {
+        label = "Status";
+        displayPriority = 60;
+      };
+      validation.enum = [ "reserved" "confirmed" "cancelled" "used" ];
+    };
+    created_at = {
+      type = "text";
+      default = "CURRENT_TIMESTAMP";
+      metadata = {
+        label = "Created";
+        format = "date-time";
+        displayPriority = 1000;
+      };
+    };
   };
 
   indexes.ticket.by_user_status = {

@@ -1,3 +1,24 @@
+export type FieldPrivacy = "public" | "internal" | "sensitive" | "secret";
+
+export interface ColumnMetadata {
+  label?: string | null;
+  helpText?: string | null;
+  placeholder?: string | null;
+  format?: string | null;
+  displayPriority?: number | null;
+  privacy?: FieldPrivacy;
+  redact?: boolean;
+}
+
+export interface ColumnValidation {
+  minLength?: number | null;
+  maxLength?: number | null;
+  minimum?: number | null;
+  maximum?: number | null;
+  pattern?: string | null;
+  enum?: string[];
+}
+
 export interface Column {
   type: string;
   pk: boolean;
@@ -6,6 +27,8 @@ export interface Column {
   unique: boolean;
   default: string | null;
   references: string | null;
+  metadata?: ColumnMetadata;
+  validation?: ColumnValidation;
 }
 
 export type Tables = Record<string, Record<string, Column>>;

@@ -34,14 +34,67 @@ export function fieldLabel(field: string): string {
   return titleCase(field);
 }
 
+export type FieldSchema = {
+  title?: string;
+  description?: string;
+  format?: string;
+  enum?: unknown[];
+  "x-openb2c-field"?: {
+    label?: string;
+    helpText?: string;
+    placeholder?: string;
+    format?: string;
+    displayPriority?: number;
+    privacy?: "public" | "internal" | "sensitive" | "secret";
+    redact?: boolean;
+  };
+};
+
+export function fieldMetadata(prop?: FieldSchema | null): FieldSchema["x-openb2c-field"] {
+  return prop?.["x-openb2c-field"] || {};
+}
+
+export function fieldDisplayLabel(field: string, prop?: FieldSchema | null): string {
+  return fieldMetadata(prop).label || prop?.title || fieldLabel(field);
+}
+
+export function fieldHelpText(prop?: FieldSchema | null): string {
+  return fieldMetadata(prop).helpText || prop?.description || "";
+}
+
+export function fieldPlaceholder(prop?: FieldSchema | null): string {
+  return fieldMetadata(prop).placeholder || "";
+}
+
+export function fieldFormat(prop?: FieldSchema | null): string {
+  return fieldMetadata(prop).format || prop?.format || "";
+}
+
+export function isRedactedField(prop?: FieldSchema | null): boolean {
+  const metadata = fieldMetadata(prop);
+  return Boolean(metadata.redact || metadata.privacy === "secret");
+}
+
+export function orderedSchemaFields(schema: { properties?: Record<string, FieldSchema> } | null | undefined): [string, FieldSchema][] {
+  return Object.entries(schema?.properties || {})
+    .map(([name, prop], index) => ({ name, prop, index, priority: fieldMetadata(prop).displayPriority }))
+    .filter(({ prop }) => !isRedactedField(prop))
+    .sort((a, b) => {
+      const aPriority = a.priority ?? Number.POSITIVE_INFINITY;
+      const bPriority = b.priority ?? Number.POSITIVE_INFINITY;
+      return aPriority - bPriority || a.index - b.index;
+    })
+    .map(({ name, prop }) => [name, prop] as [string, FieldSchema]);
+}
+
 export function labelFor(row: Record<string, unknown>): string {
   return String(row.title || row.name || row.email || row.reference || `#${row.id}`);
 }
 
-export function formatValue(field: string, value: unknown): string {
+export function formatValue(field: string, value: unknown, prop?: FieldSchema | null): string {
   if (value === null || value === undefined || value === "") return "";
 
-  if (field.endsWith("_pence") && typeof value === "number") {
+  if ((field.endsWith("_pence") || fieldFormat(prop) === "money") && typeof value === "number") {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: "GBP",
