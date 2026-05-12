@@ -20,10 +20,65 @@ function fieldLabel(field: string, col: Column): string {
   return titleCase(field);
 }
 
+function fieldDescription(field: string, col: Column): string {
+  if (col.metadata?.helpText) return col.metadata.helpText;
+  if (col.relationship?.description) return col.relationship.description;
+  const label = fieldLabel(field, col);
+  if (col.metadata?.format === "money" || field.endsWith("_pence")) return `${label} amount in minor currency units.`;
+  if (col.references) return `${label} reference.`;
+  return `${label} field.`;
+}
+
+function mcpJsonType(col: Column): string {
+  if (col.type === "integer" || col.type === "real" || col.type === "float" || col.type === "number") return "number";
+  if (col.type === "boolean") return "boolean";
+  return "string";
+}
+
+function coerceSchemaValue(value: string, col: Column): string | number | boolean {
+  const type = mcpJsonType(col);
+  if (type === "number") {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value;
+  }
+  if (type === "boolean") return value === "true" || value === "1";
+  return value;
+}
+
+function inputFieldSchema(field: string, col: Column): Record<string, unknown> {
+  const schema: Record<string, unknown> = {
+    type: mcpJsonType(col),
+    title: fieldLabel(field, col),
+    description: fieldDescription(field, col),
+  };
+  const validation = col.validation || {};
+  if (col.metadata?.format) schema.format = col.metadata.format;
+  if (validation.enum?.length) schema.enum = validation.enum.map(value => coerceSchemaValue(value, col));
+  if (validation.minLength !== null && validation.minLength !== undefined) schema.minLength = validation.minLength;
+  if (validation.maxLength !== null && validation.maxLength !== undefined) schema.maxLength = validation.maxLength;
+  if (validation.minimum !== null && validation.minimum !== undefined) schema.minimum = validation.minimum;
+  if (validation.maximum !== null && validation.maximum !== undefined) schema.maximum = validation.maximum;
+  if (validation.pattern) schema.pattern = validation.pattern;
+  return schema;
+}
+
+function isHiddenMcpField(col: Column): boolean {
+  return Boolean(col.metadata?.redact || col.metadata?.privacy === "secret");
+}
+
+function idInputSchema(entity: string): Record<string, unknown> {
+  const label = `${titleCase(entity)} ID`;
+  return {
+    type: "number",
+    title: label,
+    description: `Identifier for the ${titleCase(entity)} record.`,
+  };
+}
+
 function keyFieldSummary(cols: Record<string, Column>): string | null {
   const fields = Object.entries(cols)
     .map(([name, col], index) => ({ name, col, index, priority: col.metadata?.displayPriority ?? Number.POSITIVE_INFINITY }))
-    .filter(({ col }) => !col.pk && !col.metadata?.redact && col.metadata?.privacy !== "secret")
+    .filter(({ col }) => !col.pk && !isHiddenMcpField(col))
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .slice(0, 5)
     .map(({ name, col }) => fieldLabel(name, col));
@@ -93,14 +148,12 @@ export function genMcpServer(schema: Schema): string {
     );
 
     // Input properties for create/update
-    const inputProps: Record<string, { type: string; description: string }> = {};
+    const inputProps: Record<string, Record<string, unknown>> = {};
     const requiredProps: string[] = [];
     for (const [col, c] of Object.entries(cols)) {
       if (c.pk && c.auto) continue;
-      inputProps[col] = {
-        type: c.type === "integer" ? "number" : "string",
-        description: col.replace(/_/g, " "),
-      };
+      if (isHiddenMcpField(c)) continue;
+      inputProps[col] = inputFieldSchema(col, c);
       if (c.required && c.default === null && !createRelationshipFields.has(col)) requiredProps.push(col);
     }
 
@@ -122,7 +175,7 @@ export function genMcpServer(schema: Schema): string {
       description: ${JSON.stringify(getDescription)},
       inputSchema: {
         type: "object",
-        properties: { id: { type: "number", description: "${entity} ID" } },
+        properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
       },
     }`);
@@ -156,7 +209,7 @@ export function genMcpServer(schema: Schema): string {
       description: ${JSON.stringify(deleteDescription)},
       inputSchema: {
         type: "object",
-        properties: { id: { type: "number", description: "${entity} ID" } },
+        properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
       },
     }`);
@@ -175,7 +228,7 @@ export function genMcpServer(schema: Schema): string {
       description: ${JSON.stringify(operationDescription)},
       inputSchema: {
         type: "object",
-        properties: { id: { type: "number", description: "${entity} ID" } },
+        properties: ${JSON.stringify({ id: idInputSchema(entity) })},
         required: ["id"],
       },
     }`);

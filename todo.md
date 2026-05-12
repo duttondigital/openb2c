@@ -156,7 +156,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add MCP auth story for local stdio and HTTP transports.
 - [x] Generate richer tool descriptions from ontology metadata.
 - [x] Generate safer MCP tools that respect permissions and resource scopes.
-- [ ] Add tool input schemas with enum values, validation, and helpful descriptions.
+- [x] Add tool input schemas with enum values, validation, and helpful descriptions.
 - [ ] Add pagination and filtering to list tools.
 - [ ] Add operation tools with confirmation metadata for destructive actions.
 - [ ] Add MCP integration tests that use generated examples, not only static codegen unit tests.

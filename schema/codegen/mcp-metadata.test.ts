@@ -49,6 +49,14 @@ function metadataSchema(): Schema {
           metadata: { label: "Status", displayPriority: 20 },
           validation: { enum: ["reserved", "cancelled"] },
         }),
+        seat: col({
+          metadata: {
+            label: "Seat",
+            helpText: "Seat label printed on ticket.",
+            displayPriority: 30,
+          },
+          validation: { maxLength: 24 },
+        }),
         secret_token: col({
           metadata: { label: "Secret token", privacy: "secret", redact: true },
         }),
@@ -91,9 +99,18 @@ describe("MCP metadata generation", () => {
   test("uses ontology metadata for generated tool descriptions", () => {
     const mcp = genMcpServer(metadataSchema());
 
-    expect(mcp).toContain(`description: ${JSON.stringify("Browse tickets. Public ticket browsing. Key fields: Performance, Status.")}`);
-    expect(mcp).toContain(`description: ${JSON.stringify("Delete a Ticket record. Key fields: Performance, Status.")}`);
+    expect(mcp).toContain(`description: ${JSON.stringify("Browse tickets. Public ticket browsing. Key fields: Performance, Status, Seat.")}`);
+    expect(mcp).toContain(`description: ${JSON.stringify("Delete a Ticket record. Key fields: Performance, Status, Seat.")}`);
     expect(mcp).toContain(`description: ${JSON.stringify("Cancel ticket. Cancel a reserved ticket. Workflow: Cancelled ticket. Requires confirmation: Cancel ticket.")}`);
     expect(mcp).not.toContain("Secret token");
+  });
+
+  test("threads field metadata and validation into MCP input schemas", () => {
+    const mcp = genMcpServer(metadataSchema());
+
+    expect(mcp).toContain('"performance_id":{"type":"number","title":"Performance","description":"Performance this ticket admits the customer to."}');
+    expect(mcp).toContain('"status":{"type":"string","title":"Status","description":"Status field.","enum":["reserved","cancelled"]}');
+    expect(mcp).toContain('"seat":{"type":"string","title":"Seat","description":"Seat label printed on ticket.","maxLength":24}');
+    expect(mcp).toContain('"id":{"type":"number","title":"Ticket ID","description":"Identifier for the Ticket record."}');
   });
 });
