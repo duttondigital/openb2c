@@ -771,6 +771,32 @@ const entityDetail = `
     font-size: 13px;
     font-weight: 600;
   }
+  :host(ob-entity-detail) .operation-confirm {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid var(--ob-warning);
+    border-radius: var(--ob-radius);
+    background: var(--ob-warning-soft);
+    color: var(--ob-text);
+  }
+  :host(ob-entity-detail) .operation-confirm.danger {
+    border-color: var(--ob-danger);
+    background: var(--ob-danger-soft);
+  }
+  :host(ob-entity-detail) .operation-confirm p {
+    margin: 4px 0 0;
+    color: var(--ob-text-muted);
+  }
+  :host(ob-entity-detail) .confirm-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
   :host(ob-entity-detail) .badge {
     display: inline-flex;
     align-items: center;
@@ -789,7 +815,11 @@ const entityDetail = `
     :host(ob-entity-detail) .card-header { align-items: flex-start; flex-direction: column; }
     :host(ob-entity-detail) .header-actions,
     :host(ob-entity-detail) .header-actions button,
+    :host(ob-entity-detail) .operation-confirm,
+    :host(ob-entity-detail) .confirm-actions,
+    :host(ob-entity-detail) .confirm-actions button,
     :host(ob-entity-detail) .actions button { width: 100%; }
+    :host(ob-entity-detail) .operation-confirm { flex-direction: column; }
   }
 `;
 

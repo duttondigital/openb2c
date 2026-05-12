@@ -37,6 +37,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
     tables,
     operations: schema.operations || {},
     indexes: schema.indexes || {},
+    workflows: schema.workflows || { groups: {} },
   } as Schema;
 
   if (!schema.tables) add(diagnostics, "tables", "is required");
@@ -45,6 +46,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   validateColumns(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
+  validateWorkflows(normalized, diagnostics);
   validateOperations(normalized, diagnostics);
   validateEcommerce(normalized, diagnostics);
 
@@ -239,6 +241,21 @@ function validateRelationships(schema: Schema, diagnostics: SchemaDiagnostic[]):
   }
 }
 
+function validateWorkflows(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  for (const [name, group] of Object.entries(schema.workflows?.groups || {})) {
+    if (!group.label) {
+      add(diagnostics, `workflows.groups.${name}.label`, "is required");
+    }
+    if (
+      group.displayPriority !== null &&
+      group.displayPriority !== undefined &&
+      !Number.isFinite(group.displayPriority)
+    ) {
+      add(diagnostics, `workflows.groups.${name}.displayPriority`, "must be a finite number");
+    }
+  }
+}
+
 function validateOperations(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
   for (const [entity, operations] of Object.entries(schema.operations || {})) {
     if (!tableExists(schema.tables, entity)) {
@@ -254,6 +271,7 @@ function validateOperations(schema: Schema, diagnostics: SchemaDiagnostic[]): vo
 function validateOperation(schema: Schema, entity: string, name: string, operation: Operation, diagnostics: SchemaDiagnostic[]): void {
   const path = `operations.${entity}.${name}`;
   validateOperationPolicy(operation, `${path}.policy`, diagnostics);
+  validateOperationWorkflow(schema, entity, operation, `${path}.workflow`, diagnostics);
   for (const [field] of Object.entries(operation.set || {})) {
     if (!columnExists(schema.tables, entity, field)) {
       add(diagnostics, `${path}.set.${field}`, `references unknown field ${entity}.${field}`);
@@ -266,6 +284,36 @@ function validateOperation(schema: Schema, entity: string, name: string, operati
     validateCascade(schema, entity, cascade, `${path}.cascade.${index}`, diagnostics);
   }
   validateGuard(schema, entity, operation.guard, `${path}.guard`, diagnostics);
+}
+
+function validateOperationWorkflow(schema: Schema, entity: string, operation: Operation, path: string, diagnostics: SchemaDiagnostic[]): void {
+  const workflow = operation.workflow;
+  if (!workflow) return;
+
+  if (workflow.group && !schema.workflows?.groups?.[workflow.group]) {
+    add(diagnostics, `${path}.group`, `references unknown workflow group ${JSON.stringify(workflow.group)}`);
+  }
+
+  for (const [index, transition] of (workflow.transitions || []).entries()) {
+    const transitionPath = `${path}.transitions.${index}`;
+    validateFieldRef(schema, transition.field, `${transitionPath}.field`, diagnostics, entity);
+    if (!transition.from || transition.from.length === 0) {
+      add(diagnostics, `${transitionPath}.from`, "must include at least one source value");
+    }
+    if (!transition.to) {
+      add(diagnostics, `${transitionPath}.to`, "is required");
+    }
+    const fieldName = transition.field?.field;
+    if (fieldName && operation.set && fieldName in operation.set && operation.set[fieldName] !== transition.to) {
+      add(diagnostics, `${transitionPath}.to`, `does not match operation set value ${JSON.stringify(operation.set[fieldName])}`);
+    } else if (fieldName && operation.set && !(fieldName in operation.set)) {
+      add(diagnostics, `${transitionPath}.field`, `must be set by the operation`);
+    }
+  }
+
+  if (workflow.confirmation?.severity && !["info", "warning", "danger"].includes(workflow.confirmation.severity)) {
+    add(diagnostics, `${path}.confirmation.severity`, "must be one of info, warning, or danger");
+  }
 }
 
 function validateOperationPolicy(operation: Operation, path: string, diagnostics: SchemaDiagnostic[]): void {

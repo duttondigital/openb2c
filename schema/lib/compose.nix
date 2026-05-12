@@ -10,6 +10,7 @@ let
     public = false;
     scope = null;
     policy = {};
+    workflow = {};
     set = {};
     cascade = [];
     effects = [];

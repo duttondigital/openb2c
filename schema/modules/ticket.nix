@@ -94,12 +94,27 @@ in
     unique = true;
   };
 
+  workflows.groups.ticketLifecycle = {
+    label = "Ticket lifecycle";
+    description = "Customer and staff operations that move a ticket from reservation through admission or cancellation.";
+    displayPriority = 20;
+  };
+
   operations.ticket = {
     confirm = {
       policy = {
         label = "Confirm ticket";
         description = "Customer or user-bound service confirms a reserved ticket.";
         audiences = [ "customer" "service" ];
+      };
+      workflow = {
+        group = "ticketLifecycle";
+        transitions = [{
+          field = config.refs.ticket.status;
+          from = [ "reserved" ];
+          to = "confirmed";
+        }];
+        audit.summary = "Confirmed ticket";
       };
       guard = E.and
         (E.eq (E.f "status") (E.lit "reserved"))
@@ -116,6 +131,22 @@ in
         label = "Cancel ticket";
         audiences = [ "customer" "service" ];
       };
+      workflow = {
+        group = "ticketLifecycle";
+        transitions = [{
+          field = config.refs.ticket.status;
+          from = [ "reserved" "confirmed" ];
+          to = "cancelled";
+        }];
+        audit.summary = "Cancelled ticket";
+        confirmation = {
+          required = true;
+          title = "Cancel ticket";
+          message = "This will cancel the selected ticket.";
+          confirmLabel = "Cancel ticket";
+          severity = "warning";
+        };
+      };
       guard = E.or
         (E.eq (E.f "status") (E.lit "reserved"))
         (E.eq (E.f "status") (E.lit "confirmed"));
@@ -129,6 +160,15 @@ in
         description = "Staff check-in operation for admitting a confirmed ticket.";
         audiences = [ "staff" "service" ];
       };
+      workflow = {
+        group = "ticketLifecycle";
+        transitions = [{
+          field = config.refs.ticket.status;
+          from = [ "confirmed" ];
+          to = "used";
+        }];
+        audit.summary = "Marked ticket as used";
+      };
       guard = E.and
         (E.eq (E.f "status") (E.lit "confirmed"))
         (E.eq (E.rel "performance" "status") (E.lit "scheduled"));
@@ -139,6 +179,15 @@ in
       policy = {
         label = "Upgrade ticket";
         audiences = [ "customer" "service" ];
+      };
+      workflow = {
+        group = "ticketLifecycle";
+        transitions = [{
+          field = config.refs.ticket.ticket_type;
+          from = [ "standard" ];
+          to = "vip";
+        }];
+        audit.summary = "Upgraded ticket";
       };
       guard = E.and
         (E.eq (E.f "ticket_type") (E.lit "standard"))

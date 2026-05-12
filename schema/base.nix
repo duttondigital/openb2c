@@ -99,6 +99,35 @@ let
     };
   };
 
+  workflowGroupType = lib.types.submodule {
+    options = {
+      label = lib.mkOption {
+        type = lib.types.str;
+        description = "Human-readable workflow group label.";
+      };
+      description = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional workflow group description.";
+      };
+      displayPriority = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Lower values appear earlier in generated workflow displays.";
+      };
+    };
+  };
+
+  workflowsType = lib.types.submodule {
+    options = {
+      groups = lib.mkOption {
+        type = lib.types.attrsOf workflowGroupType;
+        default = {};
+        description = "Reusable operation group metadata for generated workflow clients.";
+      };
+    };
+  };
+
   # Structured reference to a table field. These are generated under
   # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
   # references.
@@ -474,6 +503,93 @@ let
   };
 
   # Operation definition
+  workflowTransitionType = lib.types.submodule {
+    options = {
+      field = lib.mkOption {
+        type = fieldRefType;
+        description = "State field affected by the transition.";
+      };
+      from = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Allowed source values for the transition.";
+      };
+      to = lib.mkOption {
+        type = lib.types.str;
+        description = "Target value after the transition.";
+      };
+    };
+  };
+
+  workflowAuditType = lib.types.submodule {
+    options = {
+      summary = lib.mkOption {
+        type = lib.types.str;
+        description = "Short audit text for this operation.";
+      };
+      detail = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional longer audit detail template.";
+      };
+    };
+  };
+
+  workflowConfirmationType = lib.types.submodule {
+    options = {
+      required = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether generated clients should require explicit confirmation.";
+      };
+      title = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Confirmation dialog title.";
+      };
+      message = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Confirmation dialog message.";
+      };
+      confirmLabel = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Confirmation action label.";
+      };
+      severity = lib.mkOption {
+        type = lib.types.enum [ "info" "warning" "danger" ];
+        default = "warning";
+        description = "Confirmation severity hint.";
+      };
+    };
+  };
+
+  operationWorkflowType = lib.types.submodule {
+    options = {
+      group = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Workflow group key from workflows.groups.";
+      };
+      transitions = lib.mkOption {
+        type = lib.types.listOf workflowTransitionType;
+        default = [];
+        description = "Allowed record state transitions performed by this operation.";
+      };
+      audit = lib.mkOption {
+        type = lib.types.nullOr workflowAuditType;
+        default = null;
+        description = "Audit text metadata for this operation.";
+      };
+      confirmation = lib.mkOption {
+        type = workflowConfirmationType;
+        default = {};
+        description = "Generated client confirmation requirements.";
+      };
+    };
+  };
+
   operationPolicyType = lib.types.submodule {
     options = {
       label = lib.mkOption {
@@ -526,6 +642,11 @@ let
         default = {};
         description = "Policy metadata for generated API descriptions and clients.";
       };
+      workflow = lib.mkOption {
+        type = operationWorkflowType;
+        default = {};
+        description = "Workflow metadata for generated API descriptions and clients.";
+      };
       set = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
         default = {};
@@ -556,6 +677,12 @@ in {
       type = authType;
       default = {};
       description = "Authentication role and policy metadata.";
+    };
+
+    workflows = lib.mkOption {
+      type = workflowsType;
+      default = {};
+      description = "Workflow group metadata for generated clients.";
     };
 
     tables = lib.mkOption {

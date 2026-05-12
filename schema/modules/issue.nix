@@ -49,12 +49,27 @@ in
     columns = [ "assignee_id" "status" ];
   };
 
+  workflows.groups.issueWorkflow = {
+    label = "Issue workflow";
+    description = "Issue progress, review, completion, and escalation operations.";
+    displayPriority = 40;
+  };
+
   operations.issue = {
     read.relationships = [ "creator" "assignee" ];
     create.relationships = [ "creator" ];
     update.relationships = [ "creator" "assignee" ];
 
     start = {
+      workflow = {
+        group = "issueWorkflow";
+        transitions = [{
+          field = config.refs.issue.status;
+          from = [ "todo" ];
+          to = "in_progress";
+        }];
+        audit.summary = "Started issue";
+      };
       guard = E.and
         (E.and
           (E.eq (E.f "status") (E.lit "todo"))
@@ -67,6 +82,15 @@ in
     };
 
     submit_for_review = {
+      workflow = {
+        group = "issueWorkflow";
+        transitions = [{
+          field = config.refs.issue.status;
+          from = [ "in_progress" ];
+          to = "in_review";
+        }];
+        audit.summary = "Submitted issue for review";
+      };
       guard = E.eq (E.f "status") (E.lit "in_progress");
       set = { status = "in_review"; };
       effects = [
@@ -75,6 +99,15 @@ in
     };
 
     complete = {
+      workflow = {
+        group = "issueWorkflow";
+        transitions = [{
+          field = config.refs.issue.status;
+          from = [ "in_review" "in_progress" ];
+          to = "done";
+        }];
+        audit.summary = "Completed issue";
+      };
       guard = E.or
         (E.eq (E.f "status") (E.lit "in_review"))
         (E.eq (E.f "status") (E.lit "in_progress"));
@@ -85,6 +118,22 @@ in
     };
 
     cancel = {
+      workflow = {
+        group = "issueWorkflow";
+        transitions = [{
+          field = config.refs.issue.status;
+          from = [ "todo" "in_progress" "in_review" ];
+          to = "cancelled";
+        }];
+        audit.summary = "Cancelled issue";
+        confirmation = {
+          required = true;
+          title = "Cancel issue";
+          message = "This will stop active work on the issue.";
+          confirmLabel = "Cancel issue";
+          severity = "warning";
+        };
+      };
       guard = E.and
         (E.ne (E.f "status") (E.lit "done"))
         (E.ne (E.f "status") (E.lit "cancelled"));
@@ -92,6 +141,15 @@ in
     };
 
     reopen = {
+      workflow = {
+        group = "issueWorkflow";
+        transitions = [{
+          field = config.refs.issue.status;
+          from = [ "done" "cancelled" ];
+          to = "todo";
+        }];
+        audit.summary = "Reopened issue";
+      };
       guard = E.or
         (E.eq (E.f "status") (E.lit "done"))
         (E.eq (E.f "status") (E.lit "cancelled"));
@@ -104,6 +162,10 @@ in
         label = "Assign issue";
         description = "Staff workflow operation for changing issue ownership.";
         audiences = [ "staff" ];
+      };
+      workflow = {
+        group = "issueWorkflow";
+        audit.summary = "Assigned issue";
       };
       guard = E.and
         (E.ne (E.f "status") (E.lit "done"))
@@ -120,6 +182,17 @@ in
         label = "Escalate issue";
         audiences = [ "staff" ];
         risk = "high";
+      };
+      workflow = {
+        group = "issueWorkflow";
+        audit.summary = "Escalated issue";
+        confirmation = {
+          required = true;
+          title = "Escalate issue";
+          message = "This will mark the issue as urgent.";
+          confirmLabel = "Escalate";
+          severity = "warning";
+        };
       };
       guard = E.and
         (E.ne (E.f "priority") (E.lit "urgent"))

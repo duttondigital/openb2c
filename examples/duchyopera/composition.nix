@@ -116,6 +116,7 @@ let
 in {
   organization = modules.config.organization;
   auth = modules.config.auth;
+  workflows = modules.config.workflows;
   tables = modules.config.tables;
   indexes = modules.config.indexes;
   refs = modules.config.refs;

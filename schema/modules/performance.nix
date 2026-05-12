@@ -133,6 +133,12 @@ in
     unique = true;
   };
 
+  workflows.groups.performanceLifecycle = {
+    label = "Performance lifecycle";
+    description = "Administrative operations for scheduled performances.";
+    displayPriority = 10;
+  };
+
   operations.performance = {
     read = {
       public = true;
@@ -151,6 +157,23 @@ in
         audiences = [ "staff" ];
         risk = "high";
       };
+      workflow = {
+        group = "performanceLifecycle";
+        transitions = [{
+          field = config.refs.performance.status;
+          from = [ "scheduled" ];
+          to = "cancelled";
+        }];
+        audit.summary = "Cancelled performance";
+        audit.detail = "Cancelled the performance and cascaded cancellation to related tickets.";
+        confirmation = {
+          required = true;
+          title = "Cancel performance";
+          message = "This will cancel the performance and notify ticket holders.";
+          confirmLabel = "Cancel performance";
+          severity = "danger";
+        };
+      };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "cancelled"; };
       cascade = [{
@@ -168,6 +191,15 @@ in
         label = "Complete performance";
         audiences = [ "staff" ];
       };
+      workflow = {
+        group = "performanceLifecycle";
+        transitions = [{
+          field = config.refs.performance.status;
+          from = [ "scheduled" ];
+          to = "completed";
+        }];
+        audit.summary = "Completed performance";
+      };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "completed"; };
     };
@@ -177,6 +209,17 @@ in
         label = "Reschedule performance";
         audiences = [ "staff" ];
         risk = "high";
+      };
+      workflow = {
+        group = "performanceLifecycle";
+        audit.summary = "Rescheduled performance";
+        confirmation = {
+          required = true;
+          title = "Reschedule performance";
+          message = "This may notify ticket holders about the changed date or time.";
+          confirmLabel = "Reschedule";
+          severity = "warning";
+        };
       };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       # Note: actual date/time comes from input, not hardcoded

@@ -51,6 +51,12 @@ in
     unique = true;
   };
 
+  workflows.groups.paymentLifecycle = {
+    label = "Payment lifecycle";
+    description = "Payment settlement and refund operations.";
+    displayPriority = 30;
+  };
+
   operations.transaction = {
     complete = {
       relationships = [];
@@ -59,6 +65,15 @@ in
         description = "Payment settlement operation usually performed by a payment service or staff operator.";
         audiences = [ "staff" "service" ];
         risk = "high";
+      };
+      workflow = {
+        group = "paymentLifecycle";
+        transitions = [{
+          field = config.refs.transaction.status;
+          from = [ "pending" ];
+          to = "completed";
+        }];
+        audit.summary = "Completed transaction";
       };
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "completed"; };
@@ -80,6 +95,15 @@ in
         audiences = [ "staff" "service" ];
         risk = "high";
       };
+      workflow = {
+        group = "paymentLifecycle";
+        transitions = [{
+          field = config.refs.transaction.status;
+          from = [ "pending" ];
+          to = "failed";
+        }];
+        audit.summary = "Failed transaction";
+      };
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "failed"; };
       cascade = [{
@@ -95,6 +119,22 @@ in
         label = "Refund transaction";
         audiences = [ "staff" "service" ];
         risk = "high";
+      };
+      workflow = {
+        group = "paymentLifecycle";
+        transitions = [{
+          field = config.refs.transaction.status;
+          from = [ "completed" ];
+          to = "refunded";
+        }];
+        audit.summary = "Refunded transaction";
+        confirmation = {
+          required = true;
+          title = "Refund transaction";
+          message = "This will start a payment refund and cancel linked tickets.";
+          confirmLabel = "Refund";
+          severity = "danger";
+        };
       };
       guard = E.eq (E.f "status") (E.lit "completed");
       set = { status = "refunded"; };

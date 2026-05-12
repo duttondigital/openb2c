@@ -7,6 +7,7 @@ import { stylesheetLink } from "../style-link";
 
 export class ObEntityDetail extends HTMLElement {
   private _confirmDelete = false;
+  private _confirmOperation = "";
   private _deleteError = "";
 
   constructor() {
@@ -43,6 +44,19 @@ export class ObEntityDetail extends HTMLElement {
 
     const fks = api.getForeignKeys(this.entity);
     const ops = api.getOperations(this.entity);
+    const operationViews = ops.map((op) => {
+      const policy = api.getOperationPolicy(this.entity, op) || {};
+      const workflow = api.getOperationWorkflow(this.entity, op) || {};
+      const groups = api.spec?.["x-openb2c-workflows"]?.groups || {};
+      const group = workflow.group ? groups[workflow.group] : null;
+      return {
+        op,
+        label: policy.label || displayOperation(op),
+        groupLabel: group?.label || "",
+        workflow,
+      };
+    });
+    const pendingOperation = operationViews.find((operation) => operation.op === this._confirmOperation);
 
     let record: any;
     try {
@@ -82,12 +96,13 @@ export class ObEntityDetail extends HTMLElement {
             return `<dt>${escapeHtml(fieldDisplayLabel(c, prop))}</dt><dd>${this._renderValue(c, val, fks, prop)}</dd>`;
           }).join("")}
         </dl>
-        ${ops.length > 0 ? `
+        ${operationViews.length > 0 ? `
           <div class="actions">
-            ${ops.map((op) => `
-              <button class="secondary op-btn" type="button" data-op="${escapeAttr(op)}">${escapeHtml(displayOperation(op))}</button>
+            ${operationViews.map((operation) => `
+              <button class="secondary op-btn" type="button" data-op="${escapeAttr(operation.op)}" title="${escapeAttr(operation.groupLabel)}">${escapeHtml(operation.label)}</button>
             `).join("")}
           </div>
+          ${pendingOperation ? this._renderOperationConfirmation(pendingOperation) : ""}
           <div class="status-line" data-role="operation-status" role="status" aria-live="polite"></div>
         ` : ""}
       </div>
@@ -128,15 +143,52 @@ export class ObEntityDetail extends HTMLElement {
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>(".op-btn").forEach((btn) => {
       btn.addEventListener("click", () => this._runOperation(btn.dataset.op || ""));
     });
+
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="confirm-operation"]')?.addEventListener("click", () => {
+      this._runOperation(this._confirmOperation, true);
+    });
+
+    this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="cancel-operation"]')?.addEventListener("click", async () => {
+      this._confirmOperation = "";
+      await this._render();
+    });
   }
 
-  private async _runOperation(op: string) {
+  private _renderOperationConfirmation(operation: { op: string; label: string; workflow: any }): string {
+    const confirmation = operation.workflow?.confirmation || {};
+    const severity = confirmation.severity || "warning";
+    const title = confirmation.title || `Confirm ${operation.label}`;
+    const message = confirmation.message || `Run ${operation.label}?`;
+    const confirmLabel = confirmation.confirmLabel || operation.label;
+    return `
+      <div class="operation-confirm ${escapeAttr(severity)}" role="alert">
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${escapeHtml(message)}</p>
+        </div>
+        <div class="confirm-actions">
+          <button class="primary" type="button" data-action="confirm-operation">${escapeHtml(confirmLabel)}</button>
+          <button type="button" data-action="cancel-operation">Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private async _runOperation(op: string, confirmed = false) {
     if (!op) return;
+    const workflow = ObApi.instance?.getOperationWorkflow(this.entity, op);
+    if (workflow?.confirmation?.required && !confirmed) {
+      this._confirmOperation = op;
+      await this._render();
+      return;
+    }
+
     const msg = this.shadowRoot!.querySelector<HTMLElement>('[data-role="operation-status"]');
     const btn = this.shadowRoot!.querySelector<HTMLButtonElement>(`.op-btn[data-op="${op}"]`);
     if (!btn || !msg) return;
 
     btn.disabled = true;
+    this._confirmOperation = "";
     msg.textContent = "";
     msg.style.color = "var(--ob-text-muted)";
 

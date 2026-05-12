@@ -97,6 +97,7 @@ export interface Operation {
   public: boolean;
   scope: string | null;
   policy?: OperationPolicyMetadata;
+  workflow?: OperationWorkflowMetadata;
   set: Record<string, string>;
   cascade: Cascade[];
   effects: Effect[];
@@ -235,9 +236,48 @@ export interface AuthConfig {
   roles: Record<string, AuthRoleMetadata>;
 }
 
+export type WorkflowConfirmationSeverity = "info" | "warning" | "danger";
+
+export interface WorkflowGroupMetadata {
+  label: string;
+  description?: string | null;
+  displayPriority?: number | null;
+}
+
+export interface WorkflowConfig {
+  groups: Record<string, WorkflowGroupMetadata>;
+}
+
+export interface WorkflowTransitionMetadata {
+  field: FieldRef;
+  from: string[];
+  to: string;
+}
+
+export interface WorkflowAuditMetadata {
+  summary: string;
+  detail?: string | null;
+}
+
+export interface WorkflowConfirmationMetadata {
+  required: boolean;
+  title?: string | null;
+  message?: string | null;
+  confirmLabel?: string | null;
+  severity?: WorkflowConfirmationSeverity;
+}
+
+export interface OperationWorkflowMetadata {
+  group?: string | null;
+  transitions?: WorkflowTransitionMetadata[];
+  audit?: WorkflowAuditMetadata | null;
+  confirmation?: WorkflowConfirmationMetadata;
+}
+
 export interface Schema {
   organization: OrganizationMetadata;
   auth?: AuthConfig;
+  workflows?: WorkflowConfig;
   tables: Tables;
   indexes?: Indexes;
   refs?: Refs;

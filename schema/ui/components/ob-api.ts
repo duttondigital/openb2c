@@ -464,6 +464,18 @@ export class ObApi extends HTMLElement {
     return this.spec?.["x-openb2c-ecommerce"] || null;
   }
 
+  getOperationSpec(entity: string, operation: string): any | null {
+    return this.spec?.paths?.[`/api/${entity}s/{id}/${operation}`]?.post || null;
+  }
+
+  getOperationWorkflow(entity: string, operation: string): any | null {
+    return this.getOperationSpec(entity, operation)?.["x-openb2c-workflow"] || null;
+  }
+
+  getOperationPolicy(entity: string, operation: string): any | null {
+    return this.getOperationSpec(entity, operation)?.["x-openb2c-policy"] || null;
+  }
+
   /** Get operations for an entity from OpenAPI paths */
   getOperations(entity: string): string[] {
     if (!this.spec) return [];

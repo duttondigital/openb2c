@@ -113,7 +113,7 @@ function normalizeEcommerceConfig(ecommerce: EcommerceConfig): Record<string, un
 }
 
 function defaultOperation(): Operation {
-  return { guard: null, relationships: [], public: false, scope: null, policy: {}, set: {}, cascade: [], effects: [] };
+  return { guard: null, relationships: [], public: false, scope: null, policy: {}, workflow: {}, set: {}, cascade: [], effects: [] };
 }
 
 function operationsForEntity(schema: Schema, entity: string): Record<string, Operation> {
