@@ -192,7 +192,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add startup diagnostics that report config, migrations, and integration status.
 - [x] Add graceful shutdown handling.
 - [x] Add database vacuum/checkpoint/backup maintenance guidance.
-- [ ] Add deployment examples for a single-server Bun + SQLite setup.
+- [x] Add deployment examples for a single-server Bun + SQLite setup.
 - [ ] Add restore drill instructions.
 
 ## P2 - Framework Quality And Scale
