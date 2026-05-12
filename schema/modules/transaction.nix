@@ -5,7 +5,16 @@ in
 {
   tables.transaction = {
     id = { type = "integer"; pk = true; auto = true; };
-    user_id = { type = "integer"; required = true; references = "user(id)"; };
+    user_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      relationship = {
+        label = "Customer";
+        description = "Customer who owns this transaction.";
+        targetLabel = config.refs.user.email;
+      };
+    };
     amount_pence = { type = "integer"; required = true; };
     type = { type = "text"; required = true; };  # purchase, refund, donation
     status = { type = "text"; default = "'pending'"; };  # pending, completed, failed, refunded
@@ -17,8 +26,24 @@ in
   # Link tickets to transactions
   tables.transaction_ticket = {
     id = { type = "integer"; pk = true; auto = true; };
-    transaction_id = { type = "integer"; required = true; references = "transaction(id)"; };
-    ticket_id = { type = "integer"; required = true; references = "ticket(id)"; };
+    transaction_id = {
+      type = "integer";
+      required = true;
+      references = "transaction(id)";
+      relationship = {
+        label = "Transaction";
+        targetLabel = config.refs.transaction.reference;
+      };
+    };
+    ticket_id = {
+      type = "integer";
+      required = true;
+      references = "ticket(id)";
+      relationship = {
+        label = "Ticket";
+        targetLabel = config.refs.ticket.seat;
+      };
+    };
   };
 
   indexes.transaction_ticket.unique_pair = {

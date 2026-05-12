@@ -95,6 +95,15 @@ function columnOpenApiType(col: Column): { type: string; format?: string } {
   }
 }
 
+function parseColumnReference(reference: string | null): { table: string; field: string } | null {
+  if (!reference) return null;
+  const fk = reference.match(/^([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)$/);
+  if (fk) return { table: fk[1], field: fk[2] };
+  const dotted = reference.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (dotted) return { table: dotted[1], field: dotted[2] };
+  return null;
+}
+
 function coerceColumnValue(value: string, col: Column): string | number | boolean {
   if (col.type === "integer" || col.type === "real" || col.type === "float" || col.type === "number") {
     const numeric = Number(value);
@@ -115,6 +124,28 @@ function columnFieldMetadata(col: Column): Record<string, unknown> | null {
   if (metadata.privacy && metadata.privacy !== "public") extension.privacy = metadata.privacy;
   if (metadata.redact) extension.redact = true;
   return Object.keys(extension).length ? extension : null;
+}
+
+function columnRelationshipMetadata(col: Column): Record<string, unknown> | null {
+  const reference = parseColumnReference(col.references);
+  if (!reference) return null;
+
+  const relationship = col.relationship || {};
+  const metadata = col.metadata || {};
+  const extension: Record<string, unknown> = {
+    targetEntity: reference.table,
+    targetField: reference.field,
+    cardinality: relationship.cardinality || "one",
+  };
+  if (relationship.label || metadata.label) extension.label = relationship.label || metadata.label;
+  if (relationship.description) extension.description = relationship.description;
+  if (relationship.targetLabel) {
+    extension.targetLabel = {
+      entity: relationship.targetLabel.table,
+      field: relationship.targetLabel.field,
+    };
+  }
+  return extension;
 }
 
 function columnValueSchema(col: Column, options: { includeDefault?: boolean } = {}): Record<string, unknown> {
@@ -138,6 +169,8 @@ function columnValueSchema(col: Column, options: { includeDefault?: boolean } = 
 
   const fieldMetadata = columnFieldMetadata(col);
   if (fieldMetadata) schema["x-openb2c-field"] = fieldMetadata;
+  const relationshipMetadata = columnRelationshipMetadata(col);
+  if (relationshipMetadata) schema["x-openb2c-relationship"] = relationshipMetadata;
   return schema;
 }
 

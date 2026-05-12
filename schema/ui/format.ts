@@ -39,6 +39,17 @@ export type FieldSchema = {
   description?: string;
   format?: string;
   enum?: unknown[];
+  "x-openb2c-relationship"?: {
+    targetEntity?: string;
+    targetField?: string;
+    label?: string;
+    description?: string;
+    cardinality?: "one" | "many";
+    targetLabel?: {
+      entity?: string;
+      field?: string;
+    };
+  };
   "x-openb2c-field"?: {
     label?: string;
     helpText?: string;
@@ -68,6 +79,10 @@ export function fieldPlaceholder(prop?: FieldSchema | null): string {
 
 export function fieldFormat(prop?: FieldSchema | null): string {
   return fieldMetadata(prop).format || prop?.format || "";
+}
+
+export function fieldRelationship(prop?: FieldSchema | null): FieldSchema["x-openb2c-relationship"] {
+  return prop?.["x-openb2c-relationship"] || {};
 }
 
 export function isRedactedField(prop?: FieldSchema | null): boolean {

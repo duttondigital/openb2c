@@ -479,6 +479,12 @@ export class ObApi extends HTMLElement {
 
   /** Get FK info: which columns reference other entities */
   getForeignKeys(entity: string): Record<string, string> {
+    const relationships = this.getForeignKeyRelationships(entity);
+    const explicit = Object.fromEntries(
+      Object.entries(relationships).map(([field, relationship]) => [field, relationship.targetEntity]),
+    ) as Record<string, string>;
+    if (Object.keys(explicit).length > 0) return explicit;
+
     // OpenAPI doesn't carry FK info directly, but column names ending in _id
     // that match another entity are likely FKs. We check against known entities.
     const schema = this.getSchema(entity);
@@ -492,6 +498,21 @@ export class ObApi extends HTMLElement {
       }
     }
     return fks;
+  }
+
+  getForeignKeyRelationships(entity: string): Record<string, any> {
+    const schema = this.getSchema(entity);
+    if (!schema) return {};
+    const relationships: Record<string, any> = {};
+    for (const [field, prop] of Object.entries(schema.properties || {}) as [string, any][]) {
+      const relationship = prop["x-openb2c-relationship"];
+      if (relationship?.targetEntity) relationships[field] = relationship;
+    }
+    return relationships;
+  }
+
+  getFieldRelationship(entity: string, field: string): any | null {
+    return this.getForeignKeyRelationships(entity)[field] || null;
   }
 }
 

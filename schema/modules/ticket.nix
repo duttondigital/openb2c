@@ -13,6 +13,11 @@ in
         label = "Performance";
         displayPriority = 10;
       };
+      relationship = {
+        label = "Performance";
+        description = "Performance this ticket admits the customer to.";
+        targetLabel = config.refs.performance.title;
+      };
     };
     user_id = {
       type = "integer";
@@ -21,6 +26,11 @@ in
       metadata = {
         label = "Customer";
         displayPriority = 20;
+      };
+      relationship = {
+        label = "Customer";
+        description = "Customer who owns this ticket.";
+        targetLabel = config.refs.user.email;
       };
     };
     seat = {

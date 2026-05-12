@@ -5,7 +5,15 @@ in
 {
   tables.label = {
     id = { type = "integer"; pk = true; auto = true; };
-    project_id = { type = "integer"; required = true; references = "project(id)"; };
+    project_id = {
+      type = "integer";
+      required = true;
+      references = "project(id)";
+      relationship = {
+        label = "Project";
+        targetLabel = config.refs.project.name;
+      };
+    };
     name = { type = "text"; required = true; };
     color = { type = "text"; default = "'#808080'"; };  # Hex color
     description = { type = "text"; };
@@ -15,8 +23,24 @@ in
   # Junction table for many-to-many relationship
   tables.issue_label = {
     id = { type = "integer"; pk = true; auto = true; };
-    issue_id = { type = "integer"; required = true; references = "issue(id)"; };
-    label_id = { type = "integer"; required = true; references = "label(id)"; };
+    issue_id = {
+      type = "integer";
+      required = true;
+      references = "issue(id)";
+      relationship = {
+        label = "Issue";
+        targetLabel = config.refs.issue.title;
+      };
+    };
+    label_id = {
+      type = "integer";
+      required = true;
+      references = "label(id)";
+      relationship = {
+        label = "Label";
+        targetLabel = config.refs.label.name;
+      };
+    };
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 

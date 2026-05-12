@@ -5,7 +5,16 @@ in
 {
   tables.booking = {
     id = { type = "integer"; pk = true; auto = true; };
-    user_id = { type = "integer"; required = true; references = "user(id)"; };
+    user_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      relationship = {
+        label = "Customer";
+        description = "Customer who owns this checkout.";
+        targetLabel = config.refs.user.email;
+      };
+    };
     status = { type = "text"; default = "'checkout_pending'"; };  # checkout_pending, paid, expired, cancelled
     amount_pence = { type = "integer"; required = true; };
     currency = { type = "text"; default = "'GBP'"; };
@@ -18,8 +27,24 @@ in
 
   tables.booking_ticket = {
     id = { type = "integer"; pk = true; auto = true; };
-    booking_id = { type = "integer"; required = true; references = "booking(id)"; };
-    ticket_id = { type = "integer"; required = true; references = "ticket(id)"; };
+    booking_id = {
+      type = "integer";
+      required = true;
+      references = "booking(id)";
+      relationship = {
+        label = "Booking";
+        targetLabel = config.refs.booking.id;
+      };
+    };
+    ticket_id = {
+      type = "integer";
+      required = true;
+      references = "ticket(id)";
+      relationship = {
+        label = "Ticket";
+        targetLabel = config.refs.ticket.seat;
+      };
+    };
   };
 
   indexes.booking.by_user_status = {

@@ -8,7 +8,16 @@ in
     key = { type = "text"; required = true; unique = true; };  # e.g., "PROJ", "ENG"
     name = { type = "text"; required = true; };
     description = { type = "text"; };
-    owner_id = { type = "integer"; required = true; references = "user(id)"; };
+    owner_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      relationship = {
+        label = "Owner";
+        description = "User accountable for this project.";
+        targetLabel = config.refs.user.email;
+      };
+    };
     status = { type = "text"; default = "'active'"; };  # active, archived
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };

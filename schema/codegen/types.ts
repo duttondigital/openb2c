@@ -19,6 +19,21 @@ export interface ColumnValidation {
   enum?: string[];
 }
 
+export type RelationshipCardinality = "one" | "many";
+
+export interface FieldRef {
+  table: string;
+  field: string;
+  references: string | null;
+}
+
+export interface ColumnRelationshipMetadata {
+  label?: string | null;
+  description?: string | null;
+  cardinality?: RelationshipCardinality;
+  targetLabel?: FieldRef | null;
+}
+
 export interface Column {
   type: string;
   pk: boolean;
@@ -29,6 +44,7 @@ export interface Column {
   references: string | null;
   metadata?: ColumnMetadata;
   validation?: ColumnValidation;
+  relationship?: ColumnRelationshipMetadata | null;
 }
 
 export type Tables = Record<string, Record<string, Column>>;
@@ -39,12 +55,6 @@ export interface Index {
 }
 
 export type Indexes = Record<string, Record<string, Index>>;
-
-export interface FieldRef {
-  table: string;
-  field: string;
-  references: string | null;
-}
 
 export type Refs = Record<string, Record<string, FieldRef>>;
 

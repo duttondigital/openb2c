@@ -42,7 +42,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   if (!schema.tables) add(diagnostics, "tables", "is required");
   if (!schema.operations) add(diagnostics, "operations", "is required");
 
-  validateColumns(tables, diagnostics);
+  validateColumns(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
   validateOperations(normalized, diagnostics);
@@ -108,7 +108,8 @@ function validateOptionalFieldRef(schema: Schema, ref: FieldRef | null | undefin
   if (ref) validateFieldRef(schema, ref, path, diagnostics, expectedTable);
 }
 
-function validateColumns(tables: Tables, diagnostics: SchemaDiagnostic[]): void {
+function validateColumns(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  const tables = schema.tables;
   for (const [table, cols] of Object.entries(tables)) {
     for (const [field, col] of Object.entries(cols)) {
       if (col.auto && !col.pk) {
@@ -119,6 +120,7 @@ function validateColumns(tables: Tables, diagnostics: SchemaDiagnostic[]): void 
       }
       validateColumnMetadata(table, field, col, diagnostics);
       validateColumnRules(table, field, col, diagnostics);
+      validateColumnRelationship(schema, table, field, col, diagnostics);
     }
   }
 }
@@ -185,6 +187,24 @@ function validateColumnRules(table: string, field: string, col: Column, diagnost
         add(diagnostics, `tables.${table}.${field}.validation.enum`, `contains non-numeric value ${JSON.stringify(value)} for numeric field`);
       }
     }
+  }
+}
+
+function validateColumnRelationship(schema: Schema, table: string, field: string, col: Column, diagnostics: SchemaDiagnostic[]): void {
+  const relationship = col.relationship;
+  if (!relationship) return;
+  if (!col.references) {
+    add(diagnostics, `tables.${table}.${field}.relationship`, "requires a foreign-key references value");
+    return;
+  }
+
+  const parsed = parseReference(col.references);
+  if (!parsed) return;
+  if (relationship.cardinality && !["one", "many"].includes(relationship.cardinality)) {
+    add(diagnostics, `tables.${table}.${field}.relationship.cardinality`, "must be one of one or many");
+  }
+  if (relationship.targetLabel) {
+    validateFieldRef(schema, relationship.targetLabel, `tables.${table}.${field}.relationship.targetLabel`, diagnostics, parsed.table);
   }
 }
 

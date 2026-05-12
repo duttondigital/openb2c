@@ -5,15 +5,38 @@ in
 {
   tables.issue = {
     id = { type = "integer"; pk = true; auto = true; };
-    project_id = { type = "integer"; required = true; references = "project(id)"; };
+    project_id = {
+      type = "integer";
+      required = true;
+      references = "project(id)";
+      relationship = {
+        label = "Project";
+        targetLabel = config.refs.project.name;
+      };
+    };
     number = { type = "integer"; required = true; };  # Project-scoped issue number
     title = { type = "text"; required = true; };
     description = { type = "text"; };
     type = { type = "text"; default = "'task'"; };  # task, bug, feature, epic
     status = { type = "text"; default = "'todo'"; };  # todo, in_progress, in_review, done, cancelled
     priority = { type = "text"; default = "'medium'"; };  # low, medium, high, urgent
-    creator_id = { type = "integer"; required = true; references = "user(id)"; };
-    assignee_id = { type = "integer"; references = "user(id)"; };
+    creator_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      relationship = {
+        label = "Creator";
+        targetLabel = config.refs.user.email;
+      };
+    };
+    assignee_id = {
+      type = "integer";
+      references = "user(id)";
+      relationship = {
+        label = "Assignee";
+        targetLabel = config.refs.user.email;
+      };
+    };
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };

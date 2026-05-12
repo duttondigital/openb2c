@@ -12,6 +12,11 @@ in {
         label = "User";
         displayPriority = 10;
       };
+      relationship = {
+        label = "User";
+        description = "User the API key acts on behalf of.";
+        targetLabel = config.refs.user.email;
+      };
     };
     key_hash = {
       type = "text";

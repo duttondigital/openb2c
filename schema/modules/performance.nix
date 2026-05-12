@@ -23,6 +23,11 @@ in
         label = "Venue";
         displayPriority = 20;
       };
+      relationship = {
+        label = "Venue";
+        description = "Venue hosting this performance.";
+        targetLabel = config.refs.venue.name;
+      };
     };
     date = {
       type = "text";
@@ -102,8 +107,24 @@ in
   # Junction table for performance-artist many-to-many
   tables.performance_artist = {
     id = { type = "integer"; pk = true; auto = true; };
-    performance_id = { type = "integer"; required = true; references = "performance(id)"; };
-    artist_id = { type = "integer"; required = true; references = "artist(id)"; };
+    performance_id = {
+      type = "integer";
+      required = true;
+      references = "performance(id)";
+      relationship = {
+        label = "Performance";
+        targetLabel = config.refs.performance.title;
+      };
+    };
+    artist_id = {
+      type = "integer";
+      required = true;
+      references = "artist(id)";
+      relationship = {
+        label = "Artist";
+        targetLabel = config.refs.artist.name;
+      };
+    };
     role_in_performance = { type = "text"; };  # Character name or role
   };
 

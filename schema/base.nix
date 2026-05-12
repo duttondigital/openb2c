@@ -37,6 +37,17 @@ let
     };
   };
 
+  # Structured reference to a table field. These are generated under
+  # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
+  # references.
+  fieldRefType = lib.types.submodule {
+    options = {
+      table = lib.mkOption { type = lib.types.str; };
+      field = lib.mkOption { type = lib.types.str; };
+      references = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+    };
+  };
+
   fieldMetadataType = lib.types.submodule {
     options = {
       label = lib.mkOption {
@@ -112,6 +123,31 @@ let
     };
   };
 
+  fieldRelationshipType = lib.types.submodule {
+    options = {
+      label = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Human-readable relationship label for generated API descriptions and UI.";
+      };
+      description = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Short explanation of the relationship.";
+      };
+      cardinality = lib.mkOption {
+        type = lib.types.enum [ "one" "many" ];
+        default = "one";
+        description = "Relationship cardinality from the source row to the target entity.";
+      };
+      targetLabel = lib.mkOption {
+        type = lib.types.nullOr fieldRefType;
+        default = null;
+        description = "Target entity field used to label choices and related records.";
+      };
+    };
+  };
+
   # Column definition
   columnType = lib.types.submodule {
     options = {
@@ -132,16 +168,11 @@ let
         default = {};
         description = "Per-field validation constraints for generated API schemas and services.";
       };
-    };
-  };
-
-  # Structured reference to a table field. These are generated under
-  # `config.refs.<table>.<field>` so policy can avoid stringly references.
-  fieldRefType = lib.types.submodule {
-    options = {
-      table = lib.mkOption { type = lib.types.str; };
-      field = lib.mkOption { type = lib.types.str; };
-      references = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
+      relationship = lib.mkOption {
+        type = lib.types.nullOr fieldRelationshipType;
+        default = null;
+        description = "Optional metadata for a foreign-key relationship represented by this column.";
+      };
     };
   };
 

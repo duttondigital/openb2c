@@ -45,6 +45,7 @@ export class ObEntityForm extends HTMLElement {
     if (!inputSchema) return;
 
     const fks = api.getForeignKeys(this.entity);
+    const relationships = api.getForeignKeyRelationships(this.entity);
     const required = new Set(inputSchema.required || []);
     const fields = orderedSchemaFields(inputSchema);
 
@@ -94,13 +95,14 @@ export class ObEntityForm extends HTMLElement {
 
             if (fks[name]) {
               const opts = fkOptions[name] || [];
+              const relationship = relationships[name];
               return `
                 <div class="form-group${full}">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
                   <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""}>
                     <option value="">Select ${escapeHtml(label.toLowerCase())}</option>
                     ${opts.map((o: any) => {
-                      const optionLabel = labelFor(o);
+                      const optionLabel = relationshipLabelFor(o, relationship);
                       return `<option value="${escapeAttr(o.id)}" ${String(o.id) === String(val) ? "selected" : ""}>${escapeHtml(optionLabel)} (${escapeHtml(o.id)})</option>`;
                     }).join("")}
                   </select>
@@ -230,6 +232,14 @@ function validationAttrsFor(prop: any): string {
 
 function isWideField(name: string, prop?: any): boolean {
   return fieldFormat(prop) === "textarea" || ["description", "notes", "body", "content"].some((part) => name.includes(part));
+}
+
+function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
+  const targetField = relationship?.targetLabel?.field;
+  if (targetField && row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== "") {
+    return String(row[targetField]);
+  }
+  return labelFor(row);
 }
 
 customElements.define("ob-entity-form", ObEntityForm);

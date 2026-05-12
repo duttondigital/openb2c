@@ -5,8 +5,24 @@ in
 {
   tables.comment = {
     id = { type = "integer"; pk = true; auto = true; };
-    issue_id = { type = "integer"; required = true; references = "issue(id)"; };
-    author_id = { type = "integer"; required = true; references = "user(id)"; };
+    issue_id = {
+      type = "integer";
+      required = true;
+      references = "issue(id)";
+      relationship = {
+        label = "Issue";
+        targetLabel = config.refs.issue.title;
+      };
+    };
+    author_id = {
+      type = "integer";
+      required = true;
+      references = "user(id)";
+      relationship = {
+        label = "Author";
+        targetLabel = config.refs.user.email;
+      };
+    };
     body = { type = "text"; required = true; };
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
