@@ -63,6 +63,13 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: page };
     }
 
+    if ((match = hash.match(/^\/workflows\/([A-Za-z0-9_-]+)$/))) {
+      await import("./ob-workflow-board");
+      const board = document.createElement("ob-workflow-board");
+      board.setAttribute("workflow", match[1]);
+      return { node: board };
+    }
+
     if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
       await import("./ob-entity-form");
       return { node: entityElement("ob-entity-form", match[1], { mode: "create" }) };

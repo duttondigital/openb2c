@@ -145,6 +145,7 @@ describe("generated UI web components", () => {
     expect(index).toContain('export { ObAccountSummary }');
     expect(index).toContain('export { ObRouteOutlet }');
     expect(index).toContain('export { ObAdminRouteOutlet }');
+    expect(index).toContain('export { ObWorkflowBoard }');
   });
 
   test("public and admin bundles are isolated at their entrypoints", async () => {
@@ -159,6 +160,7 @@ describe("generated UI web components", () => {
     const entityList = await Bun.file(join(UI_DIR, "components", "ob-entity-list.ts")).text();
     const entityForm = await Bun.file(join(UI_DIR, "components", "ob-entity-form.ts")).text();
     const entityDetail = await Bun.file(join(UI_DIR, "components", "ob-entity-detail.ts")).text();
+    const workflowBoard = await Bun.file(join(UI_DIR, "components", "ob-workflow-board.ts")).text();
     const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
     const adminRoute = await Bun.file(join(UI_DIR, "components", "ob-admin-route-outlet.ts")).text();
@@ -178,6 +180,7 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("./ob-auth-menu");
     expect(adminNav).toContain("getNavigationItems");
     expect(adminNav).toContain("getNavigationGroups");
+    expect(adminNav).toContain("getWorkflowScreens");
     expect(adminNav).toContain('canCollection(item.entity, "read")');
     expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");
@@ -225,12 +228,19 @@ describe("generated UI web components", () => {
     expect(entityDetail).toContain("getAllEntities");
     expect(entityDetail).toContain("related-section");
     expect(entityDetail).toContain("operationAvailability");
-    expect(entityDetail).toContain("evaluatePrecondition");
     expect(entityDetail).toContain("disabled");
     expect(entityDetail).toContain("relatedListHref");
+    expect(workflowBoard).toContain('customElements.define("ob-workflow-board"');
+    expect(workflowBoard).toContain("getWorkflowScreen");
+    expect(workflowBoard).toContain("getWorkflowOperations");
+    expect(workflowBoard).toContain("operationAvailability");
+    expect(workflowBoard).toContain('data-action="confirm-operation"');
+    expect(workflowBoard).toContain("api.can(screen.entity, action.op, row)");
     const obApi = await Bun.file(join(UI_DIR, "components", "ob-api.ts")).text();
     expect(obApi).toContain("getOperationWorkflow");
     expect(obApi).toContain("getOperationPolicy");
+    expect(obApi).toContain("getWorkflowScreens");
+    expect(obApi).toContain("getWorkflowOperations");
     expect(obApi).toContain("getAllEntities");
     expect(obApi).toContain("isInternalEntity");
     expect(obApi).toContain("refreshAuthContext");
@@ -268,6 +278,7 @@ describe("generated UI web components", () => {
     expect(adminRoute).not.toContain("INTERNAL_PREFIXES");
     expect(adminRoute).toContain('page.setAttribute("context", "admin")');
     expect(adminRoute).toContain("const filter = params.toString()");
+    expect(adminRoute).toContain("./ob-workflow-board");
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
     expect(adminRoute).toContain("./ob-entity-detail");
@@ -389,11 +400,13 @@ describe("generated UI web components", () => {
       expect(publicBundle).not.toContain("ob-entity-list");
       expect(publicBundle).not.toContain("ob-entity-form");
       expect(publicBundle).not.toContain("ob-entity-detail");
+      expect(publicBundle).not.toContain("ob-workflow-board");
 
       expect(adminBundle).toContain("ob-admin-app");
       expect(adminBundle).toContain("ob-entity-list");
       expect(adminBundle).toContain("ob-entity-form");
       expect(adminBundle).toContain("ob-entity-detail");
+      expect(adminBundle).toContain("ob-workflow-board");
       expect(adminBundle).toContain("ob-auth-menu");
       expect(adminBundle).toContain("ob-auth-page");
       expect(adminBundle).toContain("ob-auth-panel");

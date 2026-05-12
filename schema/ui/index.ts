@@ -14,5 +14,6 @@ export { ObAdminRouteOutlet } from "./components/ob-admin-route-outlet";
 export { ObEntityList } from "./components/ob-entity-list";
 export { ObEntityForm } from "./components/ob-entity-form";
 export { ObEntityDetail } from "./components/ob-entity-detail";
+export { ObWorkflowBoard } from "./components/ob-workflow-board";
 export { ObOperationBtn } from "./components/ob-operation-btn";
 export { ObCommerce } from "./components/ob-commerce";

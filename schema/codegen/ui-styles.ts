@@ -937,6 +937,151 @@ const operationButton = `
   :host(ob-operation-btn) .msg.success { color: var(--ob-success, #16a34a); }
 `;
 
+const workflowBoard = `
+  :host(ob-workflow-board) { display: block; }
+  :host(ob-workflow-board) .workflow-page {
+    display: grid;
+    gap: 16px;
+  }
+  :host(ob-workflow-board) .workflow-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  :host(ob-workflow-board) .eyebrow {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  :host(ob-workflow-board) h1 {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 800;
+  }
+  :host(ob-workflow-board) .workflow-header p {
+    color: var(--ob-text-muted);
+    font-size: 14px;
+    line-height: 1.45;
+    margin-top: 6px;
+  }
+  :host(ob-workflow-board) .workflow-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  :host(ob-workflow-board) .workflow-lane {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+  :host(ob-workflow-board) .lane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+  }
+  :host(ob-workflow-board) .lane-header h2 {
+    font-size: 14px;
+    line-height: 1.3;
+    font-weight: 800;
+  }
+  :host(ob-workflow-board) .lane-header span {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  :host(ob-workflow-board) .lane-cards {
+    display: grid;
+    gap: 10px;
+  }
+  :host(ob-workflow-board) .workflow-card {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-workflow-board) .card-title {
+    color: var(--ob-text);
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 800;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  :host(ob-workflow-board) .card-title:hover {
+    text-decoration: underline;
+  }
+  :host(ob-workflow-board) .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  :host(ob-workflow-board) .card-meta span {
+    padding: 3px 7px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    color: var(--ob-text-muted);
+    background: var(--ob-bg-subtle);
+    font-size: 12px;
+    line-height: 1.3;
+    font-weight: 700;
+  }
+  :host(ob-workflow-board) .card-actions,
+  :host(ob-workflow-board) .confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  :host(ob-workflow-board) .operation-confirm {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--ob-warning);
+    border-radius: var(--ob-radius);
+    background: var(--ob-warning-soft);
+  }
+  :host(ob-workflow-board) .operation-confirm.danger {
+    border-color: var(--ob-danger);
+    background: var(--ob-danger-soft);
+  }
+  :host(ob-workflow-board) .operation-confirm p {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  :host(ob-workflow-board) .workflow-empty {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+    padding: 14px;
+    border: 1px dashed var(--ob-border-strong);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
+  @media (max-width: 780px) {
+    :host(ob-workflow-board) .workflow-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    :host(ob-workflow-board) .workflow-header a,
+    :host(ob-workflow-board) .card-actions button,
+    :host(ob-workflow-board) .confirm-actions button {
+      width: 100%;
+    }
+  }
+`;
+
 function minifyCss(css: string): string {
   return css
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -986,6 +1131,7 @@ export function genAdminStylesheet(): string {
     entityList,
     entityForm,
     entityDetail,
+    workflowBoard,
     operationButton,
   ]);
 }

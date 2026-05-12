@@ -17,6 +17,10 @@ export interface OpenAPISpec {
     groups?: NavigationGroup[];
     items?: NavigationItem[];
   };
+  "x-openb2c-workflows"?: {
+    groups?: Record<string, WorkflowGroup>;
+    operationWorkflows?: Record<string, Record<string, any>>;
+  };
 }
 
 export interface NavigationGroup {
@@ -33,6 +37,22 @@ export interface NavigationItem {
   group?: string;
   displayPriority?: number;
   internal?: boolean;
+}
+
+export interface WorkflowGroup {
+  label?: string;
+  description?: string;
+  displayPriority?: number;
+}
+
+export interface WorkflowScreen {
+  id: string;
+  label: string;
+  description: string;
+  displayPriority?: number;
+  entity: string;
+  statusField: string;
+  path: string;
 }
 
 export interface Certificate {
@@ -583,8 +603,53 @@ export class ObApi extends HTMLElement {
     return this.spec?.["x-openb2c-ecommerce"] || null;
   }
 
+  getWorkflowScreens(): WorkflowScreen[] {
+    const metadata = this.spec?.["x-openb2c-workflows"];
+    if (!metadata) return [];
+    const groups = metadata.groups || {};
+    const operationWorkflows = metadata.operationWorkflows || {};
+    const screens = new Map<string, WorkflowScreen>();
+
+    for (const [entity, operations] of Object.entries(operationWorkflows)) {
+      for (const workflow of Object.values(operations || {})) {
+        const groupId = String(workflow?.group || "");
+        if (!groupId || screens.has(groupId)) continue;
+        const transition = (workflow?.transitions || []).find((candidate: any) => candidate?.field?.field);
+        const statusField = transition?.field?.field || (this.getSchema(entity)?.properties?.status ? "status" : "");
+        if (!statusField) continue;
+        const group = groups[groupId] || {};
+        screens.set(groupId, {
+          id: groupId,
+          label: group.label || titleCase(groupId),
+          description: group.description || "",
+          displayPriority: group.displayPriority,
+          entity,
+          statusField,
+          path: `#/workflows/${groupId}`,
+        });
+      }
+    }
+
+    return [...screens.values()].sort((a, b) =>
+      (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label)
+    );
+  }
+
+  getWorkflowScreen(id: string): WorkflowScreen | null {
+    return this.getWorkflowScreens().find((screen) => screen.id === id) || null;
+  }
+
+  getWorkflowOperations(entity: string, groupId: string): string[] {
+    const operations = this.spec?.["x-openb2c-workflows"]?.operationWorkflows?.[entity] || {};
+    return Object.entries(operations)
+      .filter(([, workflow]) => workflow?.group === groupId)
+      .map(([operation]) => operationPathAction(operation));
+  }
+
   getOperationSpec(entity: string, operation: string): any | null {
-    return this.spec?.paths?.[`/api/${entity}s/{id}/${operation}`]?.post || null;
+    return this.spec?.paths?.[`/api/${entity}s/{id}/${operation}`]?.post
+      || this.spec?.paths?.[`/api/${entity}s/{id}/${operationPathAction(operation)}`]?.post
+      || null;
   }
 
   getOperationWorkflow(entity: string, operation: string): any | null {
@@ -711,6 +776,10 @@ function sortNavigationGroups(a: NavigationGroup, b: NavigationGroup): number {
 
 function sortNavigationItems(a: NavigationItem, b: NavigationItem): number {
   return (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label);
+}
+
+function operationPathAction(operation: string): string {
+  return operation.replace(/_/g, "-");
 }
 
 function bytesToHex(bytes: Uint8Array): string {

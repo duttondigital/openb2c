@@ -171,7 +171,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Generate forms from field metadata, including enum controls, dates, times, money, textarea, and relationship selectors.
 - [x] Add role-aware and permission-aware UI hiding and disabling.
 - [x] Add end-user flows for the public ticketing example, not only admin CRUD.
-- [ ] Add internal workflow screens for the ticketing/issue-tracking example.
+- [x] Add internal workflow screens for the ticketing/issue-tracking example.
 - [ ] Add UI tests with browser automation for generated apps.
 - [x] Make generated UI API base configurable instead of hard-coded to localhost.
 
