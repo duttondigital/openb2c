@@ -1,7 +1,79 @@
-import type { Schema } from "./types";
+import type { Column, Operation, Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, pascalCase, camelCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\bId\b/g, "ID")
+    .replace(/\bApi\b/g, "API");
+}
+
+function fieldLabel(field: string, col: Column): string {
+  if (col.relationship?.label) return col.relationship.label;
+  if (col.metadata?.label) return col.metadata.label;
+  if (field === "id") return "ID";
+  if (field.endsWith("_id")) return titleCase(field.slice(0, -3));
+  if (field.endsWith("_pence")) return `${titleCase(field.slice(0, -6))} GBP`;
+  return titleCase(field);
+}
+
+function keyFieldSummary(cols: Record<string, Column>): string | null {
+  const fields = Object.entries(cols)
+    .map(([name, col], index) => ({ name, col, index, priority: col.metadata?.displayPriority ?? Number.POSITIVE_INFINITY }))
+    .filter(({ col }) => !col.pk && !col.metadata?.redact && col.metadata?.privacy !== "secret")
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .slice(0, 5)
+    .map(({ name, col }) => fieldLabel(name, col));
+
+  return fields.length ? `Key fields: ${fields.join(", ")}` : null;
+}
+
+function sentence(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function toolDescription(
+  action: string,
+  op: Operation | undefined,
+  fallback: string,
+  cols?: Record<string, Column>,
+): string {
+  const label = op?.policy?.label;
+  const description = op?.policy?.description;
+  const workflowSummary = op?.workflow?.audit?.summary;
+  const confirmation = op?.workflow?.confirmation;
+  const parts: string[] = [];
+
+  if (label && description) {
+    parts.push(`${label}. ${description}`);
+  } else if (description) {
+    parts.push(description);
+  } else if (label) {
+    parts.push(label);
+  } else {
+    parts.push(fallback);
+  }
+
+  if (workflowSummary && !parts.some(part => part.includes(workflowSummary))) {
+    parts.push(`Workflow: ${workflowSummary}`);
+  }
+
+  if (confirmation?.required) {
+    parts.push(`Requires confirmation: ${confirmation.confirmLabel || confirmation.title || label || action}`);
+  }
+
+  if (cols) {
+    const summary = keyFieldSummary(cols);
+    if (summary) parts.push(summary);
+  }
+
+  return parts.map(part => sentence(part)).filter(Boolean).join(" ");
+}
 
 export function genMcpServer(schema: Schema): string {
   const app = getAppMetadata(schema);
@@ -32,9 +104,10 @@ export function genMcpServer(schema: Schema): string {
     }
 
     // List tool
+    const listDescription = toolDescription("read", ops.read, `List ${titleCase(entity)} records`, cols);
     tools.push(`    {
       name: "list_${entity}s",
-      description: "List all ${entity}s",
+      description: ${JSON.stringify(listDescription)},
       inputSchema: { type: "object", properties: {} },
     }`);
     handlers.push(`      case "list_${entity}s":
@@ -43,9 +116,10 @@ export function genMcpServer(schema: Schema): string {
         return { content: [{ type: "text", text: JSON.stringify(S.findAll${Entity}s(db, {}, auth), null, 2) }] };`);
 
     // Get tool
+    const getDescription = toolDescription("read", ops.read, `Get a ${titleCase(entity)} record by ID`, cols);
     tools.push(`    {
       name: "get_${entity}",
-      description: "Get a ${entity} by ID",
+      description: ${JSON.stringify(getDescription)},
       inputSchema: {
         type: "object",
         properties: { id: { type: "number", description: "${entity} ID" } },
@@ -60,9 +134,10 @@ export function genMcpServer(schema: Schema): string {
         return { content: [{ type: "text", text: JSON.stringify(${entity}, null, 2) }] };`);
 
     // Create tool
+    const createDescription = toolDescription("create", ops.create, `Create a ${titleCase(entity)} record`, cols);
     tools.push(`    {
       name: "create_${entity}",
-      description: "Create a new ${entity}",
+      description: ${JSON.stringify(createDescription)},
       inputSchema: {
         type: "object",
         properties: ${JSON.stringify(inputProps)},
@@ -75,9 +150,10 @@ export function genMcpServer(schema: Schema): string {
         return { content: [{ type: "text", text: JSON.stringify(create${Entity}Result.data) }] };`);
 
     // Delete tool
+    const deleteDescription = toolDescription("delete", ops.delete, `Delete a ${titleCase(entity)} record`, cols);
     tools.push(`    {
       name: "delete_${entity}",
-      description: "Delete a ${entity}",
+      description: ${JSON.stringify(deleteDescription)},
       inputSchema: {
         type: "object",
         properties: { id: { type: "number", description: "${entity} ID" } },
@@ -92,9 +168,10 @@ export function genMcpServer(schema: Schema): string {
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       const OpName = camelCase(opName);
+      const operationDescription = toolDescription(opName, ops[opName], `${titleCase(opName)} ${titleCase(entity)} record`);
       tools.push(`    {
       name: "${opName}_${entity}",
-      description: "${opName.replace(/_/g, " ")} a ${entity}",
+      description: ${JSON.stringify(operationDescription)},
       inputSchema: {
         type: "object",
         properties: { id: { type: "number", description: "${entity} ID" } },

@@ -154,7 +154,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 ### Generated MCP Server
 
 - [x] Add MCP auth story for local stdio and HTTP transports.
-- [ ] Generate richer tool descriptions from ontology metadata.
+- [x] Generate richer tool descriptions from ontology metadata.
 - [ ] Generate safer MCP tools that respect permissions and resource scopes.
 - [ ] Add tool input schemas with enum values, validation, and helpful descriptions.
 - [ ] Add pagination and filtering to list tools.
