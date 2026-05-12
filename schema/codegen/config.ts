@@ -1,4 +1,4 @@
-import type { Schema } from "./types";
+import type { IntegrationMetadata, IntegrationsConfig, Schema, WebhookIntegrationMetadata } from "./types";
 import { hasSeedRows } from "./seed";
 import { hasCommerceWorkflow } from "./utils";
 
@@ -38,6 +38,74 @@ function hasIdentityChallenge(schema: Schema): boolean {
   return Boolean(schema.tables.identity_challenge && schema.tables.identity_registry);
 }
 
+const FALLBACK_INTEGRATIONS: IntegrationsConfig = {
+  identityEmail: {
+    provider: "resend",
+    description: "Production identity OTP email delivery.",
+    env: {
+      EMAIL_PROVIDER: { description: "Email provider used for production identity OTP delivery. The first supported provider is Resend.", requiredInProduction: false, secret: false, example: "resend" },
+      RESEND_API_KEY: { description: "Resend API key used to send production identity OTP emails.", requiredInProduction: true, secret: true },
+      EMAIL_FROM: { description: "Verified sender address for production identity OTP emails.", requiredInProduction: true, secret: false, example: "OpenB2C <login@example.com>" },
+      IDENTITY_OTP_SUBJECT: { description: "Optional subject line override for identity OTP emails.", requiredInProduction: false, secret: false },
+      RESEND_EMAILS_URL: { description: "Optional Resend emails API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.resend.com/emails" },
+    },
+  },
+  emailEffects: {
+    provider: "webhook",
+    description: "Generated email effect dispatch endpoint.",
+    env: {
+      EMAIL_WEBHOOK_URL: { description: "Email provider dispatch endpoint used by generated email effects.", requiredInProduction: true, secret: true },
+    },
+  },
+  payment: {
+    provider: "stripe",
+    description: "Generated payment-intent provider.",
+    env: {
+      PAYMENT_PROVIDER: { description: "Payment provider identifier.", requiredInProduction: true, secret: false, example: "stripe" },
+      PAYMENT_API_KEY: { description: "Payment provider API key. For Stripe, use a Stripe secret key.", requiredInProduction: true, secret: true },
+      STRIPE_API_BASE: { description: "Optional Stripe API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.stripe.com" },
+    },
+  },
+  paymentWebhook: {
+    provider: "openb2c",
+    description: "Inbound payment provider webhook verification.",
+    env: {
+      PAYMENT_WEBHOOK_SECRET: { description: "Shared secret used to verify payment provider webhook signatures.", requiredInProduction: true, secret: true },
+    },
+  },
+  webhookEffects: {
+    provider: "openb2c",
+    description: "Generated outbound webhook effect dispatch.",
+    env: {
+      WEBHOOK_URL: { description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true },
+      WEBHOOK_SIGNING_SECRET: { description: "Shared secret used to sign outbound OpenB2C webhook effects.", requiredInProduction: true, secret: true },
+      WEBHOOK_SIGNATURE_TOLERANCE_SECONDS: { description: "Maximum accepted age for OpenB2C webhook signatures when using the generated verifier.", requiredInProduction: false, secret: false, example: "300" },
+    },
+    signing: {
+      enabled: true,
+      algorithm: "sha256",
+      payload: "timestamp.body",
+      signatureHeader: "X-OpenB2C-Signature",
+      timestampHeader: "X-OpenB2C-Timestamp",
+      toleranceSeconds: 300,
+    },
+  },
+};
+
+function integration(schema: Schema, key: keyof IntegrationsConfig): IntegrationMetadata | WebhookIntegrationMetadata {
+  return schema.integrations?.[key] || FALLBACK_INTEGRATIONS[key];
+}
+
+function integrationEnvSpecs(schema: Schema, key: keyof IntegrationsConfig): EnvVarSpec[] {
+  return Object.entries(integration(schema, key).env || {}).map(([name, spec]) => ({
+    name,
+    description: spec.description,
+    requiredInProduction: spec.requiredInProduction,
+    secret: spec.secret,
+    example: spec.example ?? undefined,
+  }));
+}
+
 export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   const specs: EnvVarSpec[] = [
     { name: "NODE_ENV", description: "Set to production for production startup validation.", requiredInProduction: false, secret: false, example: "development" },
@@ -57,33 +125,19 @@ export function envVarSpecs(schema: Schema): EnvVarSpec[] {
   ];
 
   if (hasEmailEffects(schema)) {
-    specs.push({ name: "EMAIL_WEBHOOK_URL", description: "Email provider dispatch endpoint used by generated email effects.", requiredInProduction: true, secret: true });
+    specs.push(...integrationEnvSpecs(schema, "emailEffects"));
   }
   if (hasIdentityChallenge(schema)) {
-    specs.push(
-      { name: "EMAIL_PROVIDER", description: "Email provider used for production identity OTP delivery. The first supported provider is Resend.", requiredInProduction: false, secret: false, example: "resend" },
-      { name: "RESEND_API_KEY", description: "Resend API key used to send production identity OTP emails.", requiredInProduction: true, secret: true },
-      { name: "EMAIL_FROM", description: "Verified sender address for production identity OTP emails.", requiredInProduction: true, secret: false, example: "OpenB2C <login@example.com>" },
-      { name: "IDENTITY_OTP_SUBJECT", description: "Optional subject line override for identity OTP emails.", requiredInProduction: false, secret: false },
-      { name: "RESEND_EMAILS_URL", description: "Optional Resend emails API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.resend.com/emails" },
-    );
+    specs.push(...integrationEnvSpecs(schema, "identityEmail"));
   }
   if (hasWebhookEffects(schema)) {
-    specs.push(
-      { name: "WEBHOOK_URL", description: "Webhook dispatch endpoint used by generated webhook effects.", requiredInProduction: true, secret: true },
-      { name: "WEBHOOK_SIGNING_SECRET", description: "Shared secret used to sign outbound OpenB2C webhook effects.", requiredInProduction: true, secret: true },
-      { name: "WEBHOOK_SIGNATURE_TOLERANCE_SECONDS", description: "Maximum accepted age for OpenB2C webhook signatures when using the generated verifier.", requiredInProduction: false, secret: false, example: "300" },
-    );
+    specs.push(...integrationEnvSpecs(schema, "webhookEffects"));
   }
   if (hasPaymentEffects(schema) || hasCommerceWorkflow(schema)) {
-    specs.push(
-      { name: "PAYMENT_PROVIDER", description: "Payment provider identifier.", requiredInProduction: true, secret: false, example: "stripe" },
-      { name: "PAYMENT_API_KEY", description: "Payment provider API key. For Stripe, use a Stripe secret key.", requiredInProduction: true, secret: true },
-      { name: "STRIPE_API_BASE", description: "Optional Stripe API endpoint override for tests or proxies.", requiredInProduction: false, secret: false, example: "https://api.stripe.com" }
-    );
+    specs.push(...integrationEnvSpecs(schema, "payment"));
   }
   if (hasCommerceWorkflow(schema)) {
-    specs.push({ name: "PAYMENT_WEBHOOK_SECRET", description: "Shared secret used to verify payment provider webhook signatures.", requiredInProduction: true, secret: true });
+    specs.push(...integrationEnvSpecs(schema, "paymentWebhook"));
   }
   if (hasSeedRows(schema, "fixtures")) {
     specs.push({ name: "OPENB2C_APPLY_FIXTURES", description: "Apply generated fixture seed data at startup. Set false to disable non-production defaults.", requiredInProduction: false, secret: false, example: "false" });

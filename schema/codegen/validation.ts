@@ -38,6 +38,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
     derived: schema.derived || {},
     audit: schema.audit || { entities: {} },
     seed: schema.seed || { reference: {}, fixtures: {}, applyFixturesByDefault: false },
+    integrations: schema.integrations,
     operations: schema.operations || {},
     indexes: schema.indexes || {},
     validations: schema.validations || {},
@@ -51,6 +52,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
   validateDerivedFields(normalized, diagnostics);
   validateAudit(normalized, diagnostics);
   validateSeed(normalized, diagnostics);
+  validateIntegrations(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
   validateCrossFieldValidations(normalized, diagnostics);
@@ -415,6 +417,41 @@ function validateSeedValue(column: Column, value: SeedValue, path: string, diagn
   }
   if (type === "blob" && typeof value !== "string") {
     add(diagnostics, path, "must be a string");
+  }
+}
+
+function validateIntegrations(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  for (const [name, integration] of Object.entries(schema.integrations || {})) {
+    const path = `integrations.${name}`;
+    if (!integration.provider) {
+      add(diagnostics, `${path}.provider`, "is required");
+    }
+    for (const [envName, env] of Object.entries(integration.env || {})) {
+      if (!/^[A-Z][A-Z0-9_]*$/.test(envName)) {
+        add(diagnostics, `${path}.env.${envName}`, "must be an uppercase environment variable name");
+      }
+      if (!env.description) {
+        add(diagnostics, `${path}.env.${envName}.description`, "is required");
+      }
+    }
+  }
+
+  const signing = schema.integrations?.webhookEffects?.signing;
+  if (!signing) return;
+  if (signing.enabled && signing.algorithm !== "sha256") {
+    add(diagnostics, "integrations.webhookEffects.signing.algorithm", "must be sha256");
+  }
+  if (signing.enabled && signing.payload !== "timestamp.body") {
+    add(diagnostics, "integrations.webhookEffects.signing.payload", "must be timestamp.body");
+  }
+  if (!signing.signatureHeader) {
+    add(diagnostics, "integrations.webhookEffects.signing.signatureHeader", "is required");
+  }
+  if (!signing.timestampHeader) {
+    add(diagnostics, "integrations.webhookEffects.signing.timestampHeader", "is required");
+  }
+  if (signing.toleranceSeconds < 1) {
+    add(diagnostics, "integrations.webhookEffects.signing.toleranceSeconds", "must be at least 1");
   }
 }
 

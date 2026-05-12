@@ -182,6 +182,7 @@ in {
   auth = modules.config.auth;
   audit = modules.config.audit;
   seed = modules.config.seed;
+  integrations = modules.config.integrations;
   workflows = modules.config.workflows;
   tables = modules.config.tables;
   derived = modules.config.derived;

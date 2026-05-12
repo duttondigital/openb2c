@@ -281,6 +281,40 @@ export interface SeedConfig {
   applyFixturesByDefault?: boolean;
 }
 
+export interface IntegrationEnvVarMetadata {
+  description: string;
+  requiredInProduction: boolean;
+  secret: boolean;
+  example?: string | null;
+}
+
+export interface IntegrationMetadata {
+  provider: string;
+  description?: string | null;
+  env: Record<string, IntegrationEnvVarMetadata>;
+}
+
+export interface WebhookSigningMetadata {
+  enabled: boolean;
+  algorithm: string;
+  payload: string;
+  signatureHeader: string;
+  timestampHeader: string;
+  toleranceSeconds: number;
+}
+
+export interface WebhookIntegrationMetadata extends IntegrationMetadata {
+  signing: WebhookSigningMetadata;
+}
+
+export interface IntegrationsConfig {
+  identityEmail: IntegrationMetadata;
+  emailEffects: IntegrationMetadata;
+  payment: IntegrationMetadata;
+  paymentWebhook: IntegrationMetadata;
+  webhookEffects: WebhookIntegrationMetadata;
+}
+
 export type WorkflowConfirmationSeverity = "info" | "warning" | "danger";
 
 export interface WorkflowGroupMetadata {
@@ -324,6 +358,7 @@ export interface Schema {
   auth?: AuthConfig;
   audit?: AuditConfig;
   seed?: SeedConfig;
+  integrations?: IntegrationsConfig;
   workflows?: WorkflowConfig;
   tables: Tables;
   derived?: DerivedFields;

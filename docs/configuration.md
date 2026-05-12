@@ -2,6 +2,8 @@
 
 Generated apps are configured through environment variables. Secrets must be supplied by the deployment environment, not committed into generated source.
 
+The environment contract is derived from top-level Nix integration metadata. `integrations.identityEmail`, `integrations.emailEffects`, `integrations.payment`, `integrations.paymentWebhook`, and `integrations.webhookEffects` provide system defaults for provider names, required variables, secret classification, examples, and webhook signing headers. Application compositions normally do not need to restate this metadata unless they deliberately override a provider contract.
+
 ## Local
 
 Use the example `.env.example` as a starting point:
@@ -49,6 +51,7 @@ Declared outbound webhook effects require `WEBHOOK_URL` and `WEBHOOK_SIGNING_SEC
 ## Generated Templates
 
 Codegen writes `.env.example` beside generated artifacts. These templates list required and optional variables, but secret values are intentionally blank.
+OpenAPI also includes `x-openb2c-integrations` so generated clients and operators can inspect provider and environment metadata without exposing secret values.
 
 Example projects also include:
 

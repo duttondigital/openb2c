@@ -1,10 +1,22 @@
-import type { Schema } from "./types";
+import type { Schema, WebhookSigningMetadata } from "./types";
 import { hasCommerceBookingAliases, hasCommerceWorkflow } from "./utils";
+
+function webhookSigningConfig(schema: Schema): WebhookSigningMetadata {
+  return schema.integrations?.webhookEffects?.signing || {
+    enabled: true,
+    algorithm: "sha256",
+    payload: "timestamp.body",
+    signatureHeader: "X-OpenB2C-Signature",
+    timestampHeader: "X-OpenB2C-Timestamp",
+    toleranceSeconds: 300,
+  };
+}
 
 export function genEffectsInterface(schema: Schema): string {
   const events = new Set<string>();
   const notifyTemplates = new Set<string>();
   const calls = new Set<string>();
+  const webhookSigning = webhookSigningConfig(schema);
 
   for (const ops of Object.values(schema.operations)) {
     for (const op of Object.values(ops)) {
@@ -94,6 +106,11 @@ export interface RuntimeEffectHandlers {
 const DEFAULT_MAX_ATTEMPTS = Math.max(parseInt(process.env.EFFECT_MAX_ATTEMPTS || "3", 10) || 3, 1);
 const BASE_RETRY_DELAY_MS = Math.max(parseInt(process.env.EFFECT_RETRY_DELAY_MS || "1000", 10) || 1000, 1);
 const MAX_RETRY_DELAY_MS = Math.max(parseInt(process.env.EFFECT_MAX_RETRY_DELAY_MS || "300000", 10) || 300000, BASE_RETRY_DELAY_MS);
+const WEBHOOK_SIGNATURE_ENABLED = ${webhookSigning.enabled ? "true" : "false"};
+const WEBHOOK_SIGNATURE_ALGORITHM = ${JSON.stringify(webhookSigning.algorithm)};
+const WEBHOOK_SIGNATURE_HEADER = ${JSON.stringify(webhookSigning.signatureHeader)};
+const WEBHOOK_TIMESTAMP_HEADER = ${JSON.stringify(webhookSigning.timestampHeader)};
+const DEFAULT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = ${Number.isFinite(webhookSigning.toleranceSeconds) ? webhookSigning.toleranceSeconds : 300};
 
 function hashString(value: string): string {
   let hash = 2166136261;
@@ -144,10 +161,11 @@ function signatureHeaderValue(headers: WebhookSignatureHeaders, name: string): s
 }
 
 function webhookSignatureToleranceSeconds(): number {
-  return Math.max(parseInt(process.env.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS || "300", 10) || 300, 1);
+  return Math.max(parseInt(process.env.WEBHOOK_SIGNATURE_TOLERANCE_SECONDS || String(DEFAULT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS), 10) || DEFAULT_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS, 1);
 }
 
 export async function webhookSigningHeaders(body: string): Promise<Record<string, string>> {
+  if (!WEBHOOK_SIGNATURE_ENABLED) return {};
   const secret = process.env.WEBHOOK_SIGNING_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === "production") {
@@ -158,8 +176,8 @@ export async function webhookSigningHeaders(body: string): Promise<Record<string
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signature = await hmacSha256Hex(secret, timestamp + "." + body);
   return {
-    "X-OpenB2C-Timestamp": timestamp,
-    "X-OpenB2C-Signature": "sha256=" + signature,
+    [WEBHOOK_TIMESTAMP_HEADER]: timestamp,
+    [WEBHOOK_SIGNATURE_HEADER]: WEBHOOK_SIGNATURE_ALGORITHM + "=" + signature,
   };
 }
 
@@ -169,9 +187,14 @@ export async function verifyOpenB2CWebhookSignature(
   secret = process.env.WEBHOOK_SIGNING_SECRET || "",
   toleranceSeconds = webhookSignatureToleranceSeconds(),
 ): Promise<boolean> {
+  if (!WEBHOOK_SIGNATURE_ENABLED) return false;
   if (!secret) return false;
-  const timestamp = signatureHeaderValue(headers, "X-OpenB2C-Timestamp");
-  const signature = signatureHeaderValue(headers, "X-OpenB2C-Signature").trim().replace(/^sha256=/, "");
+  const timestamp = signatureHeaderValue(headers, WEBHOOK_TIMESTAMP_HEADER);
+  const signatureHeader = signatureHeaderValue(headers, WEBHOOK_SIGNATURE_HEADER).trim();
+  const signaturePrefix = WEBHOOK_SIGNATURE_ALGORITHM + "=";
+  const signature = signatureHeader.startsWith(signaturePrefix)
+    ? signatureHeader.slice(signaturePrefix.length)
+    : signatureHeader.replace(/^sha256=/, "");
   if (!timestamp || !signature) return false;
   const timestampMs = Number(timestamp) * 1000;
   if (!Number.isFinite(timestampMs)) return false;

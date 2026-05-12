@@ -4,7 +4,7 @@
  * Usage: nix eval --json -f schema/default.nix | bun schema/codegen/index.ts
  */
 
-export type { AppMetadata, OrganizationMetadata, Column, DerivedField, DerivedFields, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, SeedConfig, SeedRows, SeedValue, Schema } from "./types";
+export type { AppMetadata, OrganizationMetadata, Column, DerivedField, DerivedFields, Tables, Index, Indexes, Expr, Cascade, Effect, Operation, Operations, SeedConfig, SeedRows, SeedValue, IntegrationEnvVarMetadata, IntegrationMetadata, IntegrationsConfig, WebhookIntegrationMetadata, WebhookSigningMetadata, Schema } from "./types";
 export { DEFAULT_ORGANIZATION_METADATA, SYSTEM_DEFAULT_PORTS, SYSTEM_DEFAULT_VERSION, getAppMetadata, getDefaultDatabasePath, hasCommerceWorkflow, pascalCase, camelCase, quoteReserved, TS_TYPE_MAP } from "./utils";
 export { envVarSpecs, requiredProductionEnvVars, genEnvExample } from "./config";
 export { sqlType, genSQL } from "./sql";

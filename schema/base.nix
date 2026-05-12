@@ -189,6 +189,226 @@ let
     };
   };
 
+  integrationEnvVarType = lib.types.submodule {
+    options = {
+      description = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Human-readable environment variable purpose.";
+      };
+      requiredInProduction = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether production startup must require this variable when the integration is used.";
+      };
+      secret = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether this variable must be supplied through deployment secrets.";
+      };
+      example = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Non-secret example value for generated environment templates.";
+      };
+    };
+  };
+
+  integrationEndpointType = lib.types.submodule {
+    options = {
+      provider = lib.mkOption {
+        type = lib.types.str;
+        default = "custom";
+        description = "Provider implementation used by the generated integration handler.";
+      };
+      description = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Short generated-operator description for this integration.";
+      };
+      env = lib.mkOption {
+        type = lib.types.attrsOf integrationEnvVarType;
+        default = {};
+        description = "Environment variable contract for this integration.";
+      };
+    };
+  };
+
+  webhookSigningType = lib.types.submodule {
+    options = {
+      enabled = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether generated outbound webhook effects include signatures.";
+      };
+      algorithm = lib.mkOption {
+        type = lib.types.str;
+        default = "sha256";
+        description = "Signature algorithm label used in webhook signature headers.";
+      };
+      payload = lib.mkOption {
+        type = lib.types.str;
+        default = "timestamp.body";
+        description = "Canonical signing payload shape.";
+      };
+      signatureHeader = lib.mkOption {
+        type = lib.types.str;
+        default = "X-OpenB2C-Signature";
+        description = "HTTP header carrying the outbound webhook signature.";
+      };
+      timestampHeader = lib.mkOption {
+        type = lib.types.str;
+        default = "X-OpenB2C-Timestamp";
+        description = "HTTP header carrying the outbound webhook timestamp.";
+      };
+      toleranceSeconds = lib.mkOption {
+        type = lib.types.int;
+        default = 300;
+        description = "Default maximum age accepted by the generated webhook verifier.";
+      };
+    };
+  };
+
+  webhookIntegrationType = lib.types.submodule {
+    options = {
+      provider = lib.mkOption {
+        type = lib.types.str;
+        default = "openb2c";
+        description = "Provider implementation used by the generated webhook handler.";
+      };
+      description = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Short generated-operator description for this integration.";
+      };
+      env = lib.mkOption {
+        type = lib.types.attrsOf integrationEnvVarType;
+        default = {};
+        description = "Environment variable contract for this integration.";
+      };
+      signing = lib.mkOption {
+        type = webhookSigningType;
+        default = {};
+        description = "Outbound webhook signature contract.";
+      };
+    };
+  };
+
+  integrationsType = lib.types.submodule {
+    options = {
+      identityEmail = lib.mkOption {
+        type = integrationEndpointType;
+        default = {
+          provider = "resend";
+          description = "Production identity OTP email delivery.";
+          env = {
+            EMAIL_PROVIDER = {
+              description = "Email provider used for production identity OTP delivery. The first supported provider is Resend.";
+              requiredInProduction = false;
+              example = "resend";
+            };
+            RESEND_API_KEY = {
+              description = "Resend API key used to send production identity OTP emails.";
+              secret = true;
+            };
+            EMAIL_FROM = {
+              description = "Verified sender address for production identity OTP emails.";
+              example = "OpenB2C <login@example.com>";
+            };
+            IDENTITY_OTP_SUBJECT = {
+              description = "Optional subject line override for identity OTP emails.";
+              requiredInProduction = false;
+            };
+            RESEND_EMAILS_URL = {
+              description = "Optional Resend emails API endpoint override for tests or proxies.";
+              requiredInProduction = false;
+              example = "https://api.resend.com/emails";
+            };
+          };
+        };
+        description = "Identity challenge email integration metadata.";
+      };
+      emailEffects = lib.mkOption {
+        type = integrationEndpointType;
+        default = {
+          provider = "webhook";
+          description = "Generated email effect dispatch endpoint.";
+          env.EMAIL_WEBHOOK_URL = {
+            description = "Email provider dispatch endpoint used by generated email effects.";
+            secret = true;
+          };
+        };
+        description = "Email effect integration metadata.";
+      };
+      payment = lib.mkOption {
+        type = integrationEndpointType;
+        default = {
+          provider = "stripe";
+          description = "Generated payment-intent provider.";
+          env = {
+            PAYMENT_PROVIDER = {
+              description = "Payment provider identifier.";
+              example = "stripe";
+            };
+            PAYMENT_API_KEY = {
+              description = "Payment provider API key. For Stripe, use a Stripe secret key.";
+              secret = true;
+            };
+            STRIPE_API_BASE = {
+              description = "Optional Stripe API endpoint override for tests or proxies.";
+              requiredInProduction = false;
+              example = "https://api.stripe.com";
+            };
+          };
+        };
+        description = "Payment provider integration metadata.";
+      };
+      paymentWebhook = lib.mkOption {
+        type = integrationEndpointType;
+        default = {
+          provider = "openb2c";
+          description = "Inbound payment provider webhook verification.";
+          env.PAYMENT_WEBHOOK_SECRET = {
+            description = "Shared secret used to verify payment provider webhook signatures.";
+            secret = true;
+          };
+        };
+        description = "Payment webhook integration metadata.";
+      };
+      webhookEffects = lib.mkOption {
+        type = webhookIntegrationType;
+        default = {
+          provider = "openb2c";
+          description = "Generated outbound webhook effect dispatch.";
+          env = {
+            WEBHOOK_URL = {
+              description = "Webhook dispatch endpoint used by generated webhook effects.";
+              secret = true;
+            };
+            WEBHOOK_SIGNING_SECRET = {
+              description = "Shared secret used to sign outbound OpenB2C webhook effects.";
+              secret = true;
+            };
+            WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = {
+              description = "Maximum accepted age for OpenB2C webhook signatures when using the generated verifier.";
+              requiredInProduction = false;
+              example = "300";
+            };
+          };
+          signing = {
+            enabled = true;
+            algorithm = "sha256";
+            payload = "timestamp.body";
+            signatureHeader = "X-OpenB2C-Signature";
+            timestampHeader = "X-OpenB2C-Timestamp";
+            toleranceSeconds = 300;
+          };
+        };
+        description = "Outbound webhook effect integration metadata.";
+      };
+    };
+  };
+
   # Structured reference to a table field. These are generated under
   # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
   # references.
@@ -829,6 +1049,12 @@ in {
       type = seedType;
       default = {};
       description = "Reference and fixture seed data.";
+    };
+
+    integrations = lib.mkOption {
+      type = integrationsType;
+      default = {};
+      description = "System-level external integration configuration metadata.";
     };
 
     tables = lib.mkOption {

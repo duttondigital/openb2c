@@ -17,6 +17,7 @@ let
 
 in {
   organization = modules.config.organization;
+  integrations = modules.config.integrations;
   tables = modules.config.tables;
   indexes = modules.config.indexes;
   refs = modules.config.refs;

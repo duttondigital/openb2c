@@ -215,6 +215,19 @@ export function genRoutes(schema: Schema): string {
   const redactedFields = redactedFieldsForSchema(schema);
   const requestSchemas = requestSchemasForSchema(schema);
   const supportsApiKeys = Boolean(schema.tables.api_key);
+  const webhookSigning = schema.integrations?.webhookEffects?.signing;
+  const corsAllowHeaders = [...new Set([
+    "Content-Type",
+    "Authorization",
+    "X-Certificate",
+    "X-Signature",
+    "X-Timestamp",
+    webhookSigning?.timestampHeader || "X-OpenB2C-Timestamp",
+    webhookSigning?.signatureHeader || "X-OpenB2C-Signature",
+    "Idempotency-Key",
+    "If-Match",
+    "X-OpenB2C-API-Version",
+  ])].join(", ");
   const entities = Object.keys(schema.tables);
   const routes: string[] = [];
 
@@ -876,7 +889,7 @@ function matchRoute(method: string, path: string): { route: Route; params: Recor
 }
 
 const CORS_ALLOW_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
-const CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-Certificate, X-Signature, X-Timestamp, X-OpenB2C-Timestamp, X-OpenB2C-Signature, Idempotency-Key, If-Match, X-OpenB2C-API-Version";
+const CORS_ALLOW_HEADERS = ${JSON.stringify(corsAllowHeaders)};
 
 function corsResponse(body: unknown, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers);

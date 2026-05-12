@@ -331,6 +331,26 @@ function openApiAuditMetadata(schema: Schema): Record<string, unknown> | null {
   };
 }
 
+function openApiIntegrationMetadata(schema: Schema): Record<string, unknown> | null {
+  if (!schema.integrations) return null;
+  return Object.fromEntries(Object.entries(schema.integrations).map(([name, integration]) => {
+    const metadata: Record<string, unknown> = {
+      provider: integration.provider,
+      description: integration.description || null,
+      env: Object.fromEntries(Object.entries(integration.env || {}).map(([envName, env]) => [envName, {
+        description: env.description,
+        requiredInProduction: env.requiredInProduction,
+        secret: env.secret,
+        ...(env.example ? { example: env.example } : {}),
+      }])),
+    };
+    if ("signing" in integration) {
+      metadata.signing = integration.signing;
+    }
+    return [name, metadata];
+  }));
+}
+
 function openApiWorkflowMetadata(schema: Schema): Record<string, unknown> | null {
   const groups = schema.workflows?.groups || {};
   const operationWorkflows: Record<string, Record<string, unknown>> = {};
@@ -653,6 +673,7 @@ export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
   const auditMetadata = openApiAuditMetadata(schema);
   const workflowMetadata = openApiWorkflowMetadata(schema);
+  const integrationMetadata = openApiIntegrationMetadata(schema);
   const validationMetadata = openApiValidationMetadata(schema);
   const ecommerceMetadata = openApiEcommerceMetadata(schema);
   const navigationMetadata = openApiNavigationMetadata(schema);
@@ -1201,6 +1222,7 @@ export function genOpenAPI(schema: Schema): string {
     "x-openb2c-auth": openApiAuthMetadata(schema),
     ...(auditMetadata ? { "x-openb2c-audit": auditMetadata } : {}),
     ...(workflowMetadata ? { "x-openb2c-workflows": workflowMetadata } : {}),
+    ...(integrationMetadata ? { "x-openb2c-integrations": integrationMetadata } : {}),
     ...(validationMetadata ? { "x-openb2c-validation": validationMetadata } : {}),
     ...(ecommerceMetadata ? { "x-openb2c-ecommerce": ecommerceMetadata } : {}),
     "x-openb2c-navigation": navigationMetadata,
