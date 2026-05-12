@@ -253,6 +253,7 @@ function validateOperations(schema: Schema, diagnostics: SchemaDiagnostic[]): vo
 
 function validateOperation(schema: Schema, entity: string, name: string, operation: Operation, diagnostics: SchemaDiagnostic[]): void {
   const path = `operations.${entity}.${name}`;
+  validateOperationPolicy(operation, `${path}.policy`, diagnostics);
   for (const [field] of Object.entries(operation.set || {})) {
     if (!columnExists(schema.tables, entity, field)) {
       add(diagnostics, `${path}.set.${field}`, `references unknown field ${entity}.${field}`);
@@ -265,6 +266,22 @@ function validateOperation(schema: Schema, entity: string, name: string, operati
     validateCascade(schema, entity, cascade, `${path}.cascade.${index}`, diagnostics);
   }
   validateGuard(schema, entity, operation.guard, `${path}.guard`, diagnostics);
+}
+
+function validateOperationPolicy(operation: Operation, path: string, diagnostics: SchemaDiagnostic[]): void {
+  const policy = operation.policy;
+  if (!policy) return;
+  for (const [index, audience] of (policy.audiences || []).entries()) {
+    if (!["anonymous", "customer", "staff", "service", "system"].includes(audience)) {
+      add(diagnostics, `${path}.audiences.${index}`, "must be one of anonymous, customer, staff, service, or system");
+    }
+  }
+  if (policy.risk && !["low", "medium", "high"].includes(policy.risk)) {
+    add(diagnostics, `${path}.risk`, "must be one of low, medium, or high");
+  }
+  if (operation.public && policy.audiences?.length && !policy.audiences.includes("anonymous")) {
+    add(diagnostics, `${path}.audiences`, "public operations should include anonymous when audiences are set explicitly");
+  }
 }
 
 function validateCascade(schema: Schema, sourceEntity: string, cascade: Cascade, path: string, diagnostics: SchemaDiagnostic[]): void {

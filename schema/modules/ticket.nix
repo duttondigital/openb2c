@@ -96,6 +96,11 @@ in
 
   operations.ticket = {
     confirm = {
+      policy = {
+        label = "Confirm ticket";
+        description = "Customer or user-bound service confirms a reserved ticket.";
+        audiences = [ "customer" "service" ];
+      };
       guard = E.and
         (E.eq (E.f "status") (E.lit "reserved"))
         # Can't confirm if performance is cancelled
@@ -107,6 +112,10 @@ in
     };
 
     cancel = {
+      policy = {
+        label = "Cancel ticket";
+        audiences = [ "customer" "service" ];
+      };
       guard = E.or
         (E.eq (E.f "status") (E.lit "reserved"))
         (E.eq (E.f "status") (E.lit "confirmed"));
@@ -115,6 +124,11 @@ in
 
     use = {
       relationships = [];
+      policy = {
+        label = "Use ticket";
+        description = "Staff check-in operation for admitting a confirmed ticket.";
+        audiences = [ "staff" "service" ];
+      };
       guard = E.and
         (E.eq (E.f "status") (E.lit "confirmed"))
         (E.eq (E.rel "performance" "status") (E.lit "scheduled"));
@@ -122,6 +136,10 @@ in
     };
 
     upgrade = {
+      policy = {
+        label = "Upgrade ticket";
+        audiences = [ "customer" "service" ];
+      };
       guard = E.and
         (E.eq (E.f "ticket_type") (E.lit "standard"))
         (E.eq (E.f "status") (E.lit "confirmed"));

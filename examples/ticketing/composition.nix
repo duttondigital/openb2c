@@ -25,6 +25,7 @@ let
 
 in {
   organization = modules.config.organization;
+  auth = modules.config.auth;
   tables = modules.config.tables;
   indexes = modules.config.indexes;
   refs = modules.config.refs;

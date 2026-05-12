@@ -74,6 +74,8 @@ An operation may set `scope` to override the derived value, but this should be r
 
 Federated identity receives generated self-service scopes for non-public operations that are constrained by relationships. API keys store explicit comma-separated scopes. The `*` scope is an explicit system escape hatch.
 
+Role and policy metadata can describe whether an operation is intended for customers, staff, services, anonymous users, or system execution, but that metadata is descriptive. Generated enforcement still consumes scopes and relationships only. See [Role And Policy Metadata](./policy-metadata.md).
+
 ## Relationships
 
 Scopes answer whether a caller can perform an operation type. Relationships answer whether the caller can perform it on this record.

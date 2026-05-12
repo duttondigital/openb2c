@@ -37,6 +37,68 @@ let
     };
   };
 
+  audienceType = lib.types.enum [ "anonymous" "customer" "staff" "service" "system" ];
+
+  authRoleType = lib.types.submodule {
+    options = {
+      label = lib.mkOption { type = lib.types.str; };
+      description = lib.mkOption { type = lib.types.str; default = ""; };
+      audience = lib.mkOption {
+        type = lib.types.enum [ "customer" "staff" "service" "system" ];
+        description = "Identity audience this role belongs to.";
+      };
+      defaultScopes = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Scopes normally issued for this role. Enforcement still consumes normalized scopes.";
+      };
+      internal = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether this role is intended for generated system/runtime use rather than end users.";
+      };
+    };
+  };
+
+  authType = lib.types.submodule {
+    options = {
+      roles = lib.mkOption {
+        type = lib.types.attrsOf authRoleType;
+        default = {
+          customer = {
+            label = "Customer";
+            description = "Authenticated customer identity for self-service account and owned-resource access.";
+            audience = "customer";
+            defaultScopes = [];
+            internal = false;
+          };
+          staff = {
+            label = "Staff";
+            description = "Authenticated staff/operator identity for administrative workflows.";
+            audience = "staff";
+            defaultScopes = [];
+            internal = false;
+          };
+          service = {
+            label = "Service";
+            description = "User-bound API key or integration identity for service-to-service access.";
+            audience = "service";
+            defaultScopes = [];
+            internal = false;
+          };
+          system = {
+            label = "System";
+            description = "Trusted local system execution with the explicit wildcard scope.";
+            audience = "system";
+            defaultScopes = [ "*" ];
+            internal = true;
+          };
+        };
+        description = "Role metadata for generated documentation and clients. Runtime authorization still uses scopes.";
+      };
+    };
+  };
+
   # Structured reference to a table field. These are generated under
   # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
   # references.
@@ -412,6 +474,31 @@ let
   };
 
   # Operation definition
+  operationPolicyType = lib.types.submodule {
+    options = {
+      label = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Human-readable operation policy label.";
+      };
+      description = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Short policy description for generated clients and API docs.";
+      };
+      audiences = lib.mkOption {
+        type = lib.types.listOf audienceType;
+        default = [];
+        description = "Intended identity audiences. Empty means codegen derives audiences from public and relationship policy.";
+      };
+      risk = lib.mkOption {
+        type = lib.types.enum [ "low" "medium" "high" ];
+        default = "medium";
+        description = "Operational risk hint for generated clients.";
+      };
+    };
+  };
+
   operationType = lib.types.submodule {
     options = {
       guard = lib.mkOption {
@@ -433,6 +520,11 @@ let
         type = lib.types.nullOr lib.types.str;
         default = null;
         description = "Optional permission scope override. Defaults to <entity>.<operation>.";
+      };
+      policy = lib.mkOption {
+        type = operationPolicyType;
+        default = {};
+        description = "Policy metadata for generated API descriptions and clients.";
       };
       set = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
@@ -458,6 +550,12 @@ in {
       type = organizationType;
       default = {};
       description = "Top-level organization or product metadata.";
+    };
+
+    auth = lib.mkOption {
+      type = authType;
+      default = {};
+      description = "Authentication role and policy metadata.";
     };
 
     tables = lib.mkOption {

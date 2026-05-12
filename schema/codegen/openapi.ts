@@ -1,4 +1,4 @@
-import type { Column, Schema } from "./types";
+import type { AuthConfig, Column, Operation, Schema } from "./types";
 import { getAppMetadata, hasCommerceWorkflow, hasCommerceBookingAliases, openApiEcommerceMetadata, pascalCase } from "./utils";
 
 const CRUD_ACTIONS = new Set(["read", "create", "update", "delete"]);
@@ -7,6 +7,103 @@ const AUTH_SECURITY = [
   { certificateAuth: [], certificateSignature: [], certificateTimestamp: [] },
 ];
 const WEBHOOK_SECURITY = [{ paymentWebhookSignature: [] }];
+const DEFAULT_AUTH: AuthConfig = {
+  roles: {
+    customer: {
+      label: "Customer",
+      description: "Authenticated customer identity for self-service account and owned-resource access.",
+      audience: "customer",
+      defaultScopes: [],
+      internal: false,
+    },
+    staff: {
+      label: "Staff",
+      description: "Authenticated staff/operator identity for administrative workflows.",
+      audience: "staff",
+      defaultScopes: [],
+      internal: false,
+    },
+    service: {
+      label: "Service",
+      description: "User-bound API key or integration identity for service-to-service access.",
+      audience: "service",
+      defaultScopes: [],
+      internal: false,
+    },
+    system: {
+      label: "System",
+      description: "Trusted local system execution with the explicit wildcard scope.",
+      audience: "system",
+      defaultScopes: ["*"],
+      internal: true,
+    },
+  },
+};
+
+function defaultOperation(): Operation {
+  return { guard: null, relationships: [], public: false, scope: null, policy: {}, set: {}, cascade: [], effects: [] };
+}
+
+function operationFor(ops: Record<string, Operation>, action: string): Operation {
+  return ops[action] || defaultOperation();
+}
+
+function operationScope(entity: string, action: string, op: Operation): string {
+  return op.scope ?? `${entity}.${action}`;
+}
+
+function operationAudiences(op: Operation): string[] {
+  if (op.policy?.audiences?.length) return op.policy.audiences;
+  if (op.public) return ["anonymous", "customer", "staff", "service"];
+  if (op.relationships.length > 0) return ["customer"];
+  return ["staff", "service"];
+}
+
+function operationPolicy(entity: string, action: string, op: Operation): Record<string, unknown> {
+  const policy = op.policy || {};
+  return {
+    scope: operationScope(entity, action, op),
+    public: op.public,
+    audiences: operationAudiences(op),
+    risk: policy.risk || "medium",
+    relationships: op.relationships.map(rel => ({
+      table: rel.field.table,
+      field: rel.field.field,
+      references: rel.field.references,
+    })),
+    ...(policy.label ? { label: policy.label } : {}),
+    ...(policy.description ? { description: policy.description } : {}),
+  };
+}
+
+function withPolicy(operation: Record<string, unknown>, entity: string, action: string, op: Operation): Record<string, unknown> {
+  return {
+    ...operation,
+    "x-openb2c-policy": operationPolicy(entity, action, op),
+  };
+}
+
+function openApiAuthMetadata(schema: Schema): Record<string, unknown> {
+  const auth = {
+    roles: {
+      ...DEFAULT_AUTH.roles,
+      ...(schema.auth?.roles || {}),
+    },
+  };
+  const operationPolicies: Record<string, Record<string, unknown>> = {};
+  for (const entity of Object.keys(schema.tables || {})) {
+    const ops = schema.operations?.[entity] || {};
+    operationPolicies[entity] = {};
+    const actions = new Set([...CRUD_ACTIONS, ...Object.keys(ops)]);
+    for (const action of actions) {
+      operationPolicies[entity][action] = operationPolicy(entity, action, operationFor(ops, action));
+    }
+  }
+  return {
+    roles: auth.roles,
+    operationPolicies,
+  };
+}
 
 function errorResponse(description: string): unknown {
   return {
@@ -352,8 +449,12 @@ export function genOpenAPI(schema: Schema): string {
     schemas[`${Entity}Input`] = { type: "object", properties: inputProps, required: inputRequired };
 
     // List endpoint
+    const readOp = operationFor(ops, "read");
+    const createOp = operationFor(ops, "create");
+    const updateOp = operationFor(ops, "update");
+    const deleteOp = operationFor(ops, "delete");
     paths[`/api/${entity}s`] = {
-      get: withAuth({
+      get: withAuth(withPolicy({
         summary: `List ${entity}s`,
         parameters: [
           { name: "limit", in: "query", schema: { type: "integer", default: 100 } },
@@ -367,8 +468,8 @@ export function genOpenAPI(schema: Schema): string {
             content: { "application/json": { schema: { $ref: "#/components/schemas/PaginatedResponse" } } },
           },
         },
-      }, ops.read?.public),
-      post: withAuth({
+      }, entity, "read", readOp), readOp.public),
+      post: withAuth(withPolicy({
         summary: `Create ${entity}`,
         requestBody: {
           required: true,
@@ -378,20 +479,20 @@ export function genOpenAPI(schema: Schema): string {
           "201": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, ops.create?.public),
+      }, entity, "create", createOp), createOp.public),
     };
 
     // Single entity endpoints
     paths[`/api/${entity}s/{id}`] = {
-      get: withAuth({
+      get: withAuth(withPolicy({
         summary: `Get ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Found", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}` } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, ops.read?.public),
-      put: withAuth({
+      }, entity, "read", readOp), readOp.public),
+      put: withAuth(withPolicy({
         summary: `Update ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         requestBody: {
@@ -402,28 +503,28 @@ export function genOpenAPI(schema: Schema): string {
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, ops.update?.public),
-      delete: withAuth({
+      }, entity, "update", updateOp), updateOp.public),
+      delete: withAuth(withPolicy({
         summary: `Delete ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", properties: { deleted: { type: "boolean" } } } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, ops.delete?.public),
+      }, entity, "delete", deleteOp), deleteOp.public),
     };
 
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
-        post: withAuth({
+        post: withAuth(withPolicy({
           summary: `${opName.replace(/_/g, " ")} ${entity}`,
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
           responses: {
             "200": { description: "Success", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" }, status: { type: "string" } } } } } },
             "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
-        }, ops[opName]?.public),
+        }, entity, opName, ops[opName]), ops[opName]?.public),
       };
     }
   }
@@ -692,6 +793,7 @@ export function genOpenAPI(schema: Schema): string {
       description: app.description,
       logo: app.logo,
     },
+    "x-openb2c-auth": openApiAuthMetadata(schema),
     ...(openApiEcommerceMetadata(schema) ? { "x-openb2c-ecommerce": openApiEcommerceMetadata(schema) } : {}),
   };
 

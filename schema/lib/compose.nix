@@ -9,6 +9,7 @@ let
     relationships = null;
     public = false;
     scope = null;
+    policy = {};
     set = {};
     cascade = [];
     effects = [];

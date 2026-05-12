@@ -100,6 +100,11 @@ in
 
     assign = {
       relationships = [];
+      policy = {
+        label = "Assign issue";
+        description = "Staff workflow operation for changing issue ownership.";
+        audiences = [ "staff" ];
+      };
       guard = E.and
         (E.ne (E.f "status") (E.lit "done"))
         (E.ne (E.f "status") (E.lit "cancelled"));
@@ -111,6 +116,11 @@ in
 
     escalate = {
       relationships = [];
+      policy = {
+        label = "Escalate issue";
+        audiences = [ "staff" ];
+        risk = "high";
+      };
       guard = E.and
         (E.ne (E.f "priority") (E.lit "urgent"))
         (E.ne (E.f "status") (E.lit "done"));

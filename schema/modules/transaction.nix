@@ -54,6 +54,12 @@ in
   operations.transaction = {
     complete = {
       relationships = [];
+      policy = {
+        label = "Complete transaction";
+        description = "Payment settlement operation usually performed by a payment service or staff operator.";
+        audiences = [ "staff" "service" ];
+        risk = "high";
+      };
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "completed"; };
       cascade = [{
@@ -69,6 +75,11 @@ in
 
     fail = {
       relationships = [];
+      policy = {
+        label = "Fail transaction";
+        audiences = [ "staff" "service" ];
+        risk = "high";
+      };
       guard = E.eq (E.f "status") (E.lit "pending");
       set = { status = "failed"; };
       cascade = [{
@@ -80,6 +91,11 @@ in
 
     refund = {
       relationships = [];
+      policy = {
+        label = "Refund transaction";
+        audiences = [ "staff" "service" ];
+        risk = "high";
+      };
       guard = E.eq (E.f "status") (E.lit "completed");
       set = { status = "refunded"; };
       cascade = [{

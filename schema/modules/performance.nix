@@ -134,9 +134,23 @@ in
   };
 
   operations.performance = {
-    read.public = true;
+    read = {
+      public = true;
+      policy = {
+        label = "Browse performances";
+        description = "Public catalog access to scheduled performances.";
+        audiences = [ "anonymous" "customer" ];
+        risk = "low";
+      };
+    };
 
     cancel = {
+      policy = {
+        label = "Cancel performance";
+        description = "Administrative operation that cancels a scheduled performance and cascades ticket cancellation.";
+        audiences = [ "staff" ];
+        risk = "high";
+      };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "cancelled"; };
       cascade = [{
@@ -150,11 +164,20 @@ in
     };
 
     complete = {
+      policy = {
+        label = "Complete performance";
+        audiences = [ "staff" ];
+      };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       set = { status = "completed"; };
     };
 
     reschedule = {
+      policy = {
+        label = "Reschedule performance";
+        audiences = [ "staff" ];
+        risk = "high";
+      };
       guard = E.eq (E.f "status") (E.lit "scheduled");
       # Note: actual date/time comes from input, not hardcoded
       set = {};  # Fields set from input

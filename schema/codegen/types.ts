@@ -81,11 +81,22 @@ export interface Effect {
   call: { service: string; action: string } | null;
 }
 
+export type AuthAudience = "anonymous" | "customer" | "staff" | "service" | "system";
+export type PolicyRisk = "low" | "medium" | "high";
+
+export interface OperationPolicyMetadata {
+  label?: string | null;
+  description?: string | null;
+  audiences?: AuthAudience[];
+  risk?: PolicyRisk;
+}
+
 export interface Operation {
   guard: Expr | null;
   relationships: Relationship[];
   public: boolean;
   scope: string | null;
+  policy?: OperationPolicyMetadata;
   set: Record<string, string>;
   cascade: Cascade[];
   effects: Effect[];
@@ -212,8 +223,21 @@ export interface AppMetadata {
   logo: OrganizationLogoMetadata | null;
 }
 
+export interface AuthRoleMetadata {
+  label: string;
+  description: string;
+  audience: Exclude<AuthAudience, "anonymous">;
+  defaultScopes: string[];
+  internal: boolean;
+}
+
+export interface AuthConfig {
+  roles: Record<string, AuthRoleMetadata>;
+}
+
 export interface Schema {
   organization: OrganizationMetadata;
+  auth?: AuthConfig;
   tables: Tables;
   indexes?: Indexes;
   refs?: Refs;
