@@ -143,7 +143,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 ### Generated REST API
 
 - [ ] Generate typed request parsing and validation per endpoint.
-- [ ] Generate OpenAPI security schemes for API keys and certificate auth.
+- [x] Generate OpenAPI security schemes for API keys and certificate auth.
 - [ ] Generate OpenAPI request and response schemas for operation endpoints.
 - [ ] Generate proper response schemas for create, update, delete, and custom operations.
 - [ ] Add consistent `404`, `409`, `422`, and `500` response handling.
@@ -173,7 +173,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [ ] Add end-user flows for the public ticketing example, not only admin CRUD.
 - [ ] Add internal workflow screens for the ticketing/issue-tracking example.
 - [ ] Add UI tests with browser automation for generated apps.
-- [ ] Make generated UI API base configurable instead of hard-coded to localhost.
+- [x] Make generated UI API base configurable instead of hard-coded to localhost.
 
 ### External Integrations
 
@@ -206,8 +206,8 @@ These make the framework easier to maintain and extend after the first productio
 - [ ] Add generated-example smoke tests that run the generated servers.
 - [ ] Add linting and formatting commands.
 - [ ] Add CI workflow for tests and generation checks.
-- [ ] Add codegen diagnostics with clear errors for invalid schemas.
-- [ ] Add schema validation before generation.
+- [x] Add codegen diagnostics with clear errors for invalid schemas.
+- [x] Add schema validation before generation.
 
 ### Module System
 
