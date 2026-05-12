@@ -159,7 +159,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add tool input schemas with enum values, validation, and helpful descriptions.
 - [x] Add pagination and filtering to list tools.
 - [x] Add operation tools with confirmation metadata for destructive actions.
-- [ ] Add MCP integration tests that use generated examples, not only static codegen unit tests.
+- [x] Add MCP integration tests that use generated examples, not only static codegen unit tests.
 
 ### Generated Web Client
 
