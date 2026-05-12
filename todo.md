@@ -182,7 +182,7 @@ These are needed for a credible first production deployment, even if P0 is enoug
 - [x] Add webhook signing and verification.
 - [x] Add integration configuration metadata to Nix.
 - [x] Add local fake providers for tests and development.
-- [ ] Add integration contract tests.
+- [x] Add integration contract tests.
 
 ### Observability And Operations
 
