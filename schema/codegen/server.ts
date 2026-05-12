@@ -117,7 +117,7 @@ function genConfiguredCommerceRoutes(schema: Schema): string[] {
     try {
       payload = JSON.parse(raw.data);
     } catch {
-      return corsResponse({ ok: false, error: "malformed JSON", code: "invalid" }, { status: 400 });
+      return corsResponse({ ok: false, error: "malformed JSON", code: "malformed" }, { status: 400 });
     }
     const input = parsePaymentWebhookInput(payload);
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
@@ -247,7 +247,7 @@ export function genRoutes(schema: Schema): string {
     const authz = S.authorizeCollection("${entity}", "read", auth);
     if (!authz.ok) return corsResponse(authz, { status: S.statusForResult(authz) });
     const r = S.find${Entity}ById(db, +p.id, auth);
-    return r ? corsResponse(redact("${entity}", r)) : corsResponse({ error: "not found" }, { status: 404 });
+    return r ? corsResponse(redact("${entity}", r)) : corsResponse({ error: "not found", code: "not_found" }, { status: 404 });
   }},`);
 
     // Special handling for api_key creation - generate and hash key
@@ -426,7 +426,7 @@ async function readJson<T>(req: Request, signal: AbortSignal): Promise<S.Result<
   try {
     return { ok: true, data: JSON.parse(body.data) as T };
   } catch {
-    return { ok: false, error: "malformed JSON", code: "invalid" };
+    return { ok: false, error: "malformed JSON", code: "malformed" };
   }
 }
 
@@ -712,7 +712,7 @@ const routes: Route[] = [
       const result = S.revokeCertificate(db, cert);
       return result.ok ? corsResponse(result.data) : corsResponse(result, { status: S.statusForResult(result) });
     } catch {
-      return corsResponse({ error: "invalid certificate format", code: "invalid" }, { status: 400 });
+      return corsResponse({ error: "invalid certificate format", code: "malformed" }, { status: 400 });
     }
   }},
 
@@ -725,7 +725,7 @@ const routes: Route[] = [
     if (!input.ok) return corsResponse(input, { status: S.statusForResult(input) });
     const { email, publicKey } = input.data;
     if (!email || !publicKey) {
-      return corsResponse({ error: "email and publicKey required", code: "invalid" }, { status: 400 });
+      return corsResponse({ error: "email and publicKey required", code: "invalid" }, { status: 422 });
     }
     const result = await S.createChallenge(db, email, publicKey, clientIp(req));
     if (!result.ok) {
@@ -908,7 +908,7 @@ export const server = Bun.serve({
     const result = matchRoute(req.method, url.pathname);
     if (!result) {
       log("info", "not found", { method: req.method, path: url.pathname });
-      return response(req, { error: "not found" }, { status: 404 });
+      return response(req, { error: "not found", code: "not_found" }, { status: 404 });
     }
 
     try {
@@ -919,7 +919,7 @@ export const server = Bun.serve({
     } catch (err) {
       const ms = (performance.now() - start).toFixed(1);
       log("error", "request failed", { method: req.method, path: url.pathname, error: String(err), ms });
-      return response(req, { error: "internal error" }, { status: 500 });
+      return response(req, { error: "internal error", code: "internal_error" }, { status: 500 });
     }
   },
 });

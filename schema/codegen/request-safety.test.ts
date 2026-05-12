@@ -98,7 +98,7 @@ describe("generated request safety", () => {
       });
       expect(malformed.status).toBe(400);
       expect(await malformed.json()).toMatchObject({
-        code: "invalid",
+        code: "malformed",
         error: "malformed JSON",
       });
     } finally {

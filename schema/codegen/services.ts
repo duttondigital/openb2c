@@ -237,9 +237,11 @@ import * as T from "./types";
 
 export type ErrorCode =
   | "not_found"
+  | "malformed"
   | "invalid"
   | "bad_state"
   | "conflict"
+  | "internal_error"
   | "unauthorized"
   | "forbidden"
   | "rate_limited"
@@ -573,9 +575,12 @@ export function statusForResult(result: Result<unknown>): number {
     case "not_found": return 404;
     case "conflict": return 409;
     case "bad_state": return 409;
+    case "malformed": return 400;
+    case "internal_error": return 500;
     case "invalid":
+      return 422;
     default:
-      return 400;
+      return 500;
   }
 }
 

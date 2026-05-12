@@ -493,7 +493,7 @@ export function genOpenAPI(schema: Schema): string {
     type: "object",
     properties: {
       error: { type: "string" },
-      code: { type: "string", enum: ["not_found", "invalid", "bad_state", "conflict", "unauthorized", "forbidden", "rate_limited", "payload_too_large", "unsupported_media_type", "timeout"] },
+      code: { type: "string", enum: ["not_found", "malformed", "invalid", "bad_state", "conflict", "internal_error", "unauthorized", "forbidden", "rate_limited", "payload_too_large", "unsupported_media_type", "timeout"] },
       details: { type: "object", additionalProperties: { type: "string" } },
     },
     required: ["error", "code"],
@@ -612,7 +612,7 @@ export function genOpenAPI(schema: Schema): string {
       },
       responses: {
         "200": { description: "Challenge created", content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityChallengeResult" } } } },
-        "400": errorResponse("Validation error"),
+        "422": errorResponse("Validation error"),
         "429": errorResponse("Rate limited"),
       },
     },
@@ -626,7 +626,7 @@ export function genOpenAPI(schema: Schema): string {
       },
       responses: {
         "200": { description: "Identity verified", content: { "application/json": { schema: { $ref: "#/components/schemas/IdentityVerifyResult" } } } },
-        "400": errorResponse("Verification failed"),
+        "422": errorResponse("Verification failed"),
         "429": errorResponse("Rate limited"),
       },
     },
@@ -701,7 +701,7 @@ export function genOpenAPI(schema: Schema): string {
         },
         responses: {
           "201": { description: "Created", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}CreateResult` } } } },
-          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }, entity, "create", createOp), createOp), schema, entity, "create", createOp), createOp.public),
     };
@@ -724,7 +724,7 @@ export function genOpenAPI(schema: Schema): string {
         },
         responses: {
           "200": { description: "Updated", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}UpdateResult` } } } },
-          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }, entity, "update", updateOp), updateOp), schema, entity, "update", updateOp), updateOp.public),
@@ -752,7 +752,8 @@ export function genOpenAPI(schema: Schema): string {
           },
           responses: {
             "200": { description: "Success", content: { "application/json": { schema: { $ref: `#/components/schemas/${resultSchema}` } } } },
-            "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "409": { description: "Operation precondition failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         }, entity, opName, ops[opName]), ops[opName]), schema, entity, opName, ops[opName]), ops[opName]?.public),
       };
@@ -841,7 +842,7 @@ export function genOpenAPI(schema: Schema): string {
         },
         responses: {
           "201": { description: "Order created", content: { "application/json": { schema: { $ref: "#/components/schemas/CommerceCheckoutResult" } } } },
-          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }),
     };
@@ -859,7 +860,7 @@ export function genOpenAPI(schema: Schema): string {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/CommercePaymentIntentResult" } } } },
-          "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "409": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }),
     };
@@ -949,7 +950,7 @@ export function genOpenAPI(schema: Schema): string {
         },
         responses: {
           "201": { description: "Reserved", content: { "application/json": { schema: { $ref: "#/components/schemas/ReserveBookingResult" } } } },
-          "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }),
     };
@@ -959,7 +960,7 @@ export function genOpenAPI(schema: Schema): string {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "201": { description: "Payment intent", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentIntentResult" } } } },
-          "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "409": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       }),
     };

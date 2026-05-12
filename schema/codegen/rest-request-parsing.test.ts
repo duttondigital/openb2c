@@ -84,7 +84,7 @@ describe("generated REST request parsing", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: 123, priority: 2, status: "todo" }),
       });
-      expect(wrongType.status).toBe(400);
+      expect(wrongType.status).toBe(422);
       await expect(wrongType.json()).resolves.toMatchObject({
         code: "invalid",
         details: { title: "title must be a string" },
@@ -95,7 +95,7 @@ describe("generated REST request parsing", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: "Typed note", priority: 2, status: "todo", extra: true }),
       });
-      expect(unknownField.status).toBe(400);
+      expect(unknownField.status).toBe(422);
       await expect(unknownField.json()).resolves.toMatchObject({
         details: { extra: "field is not allowed" },
       });
@@ -105,7 +105,7 @@ describe("generated REST request parsing", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: "No", priority: 9, status: "blocked" }),
       });
-      expect(invalidRule.status).toBe(400);
+      expect(invalidRule.status).toBe(422);
       await expect(invalidRule.json()).resolves.toMatchObject({
         details: {
           title: "title must be at least 3 characters",
