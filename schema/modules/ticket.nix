@@ -105,6 +105,12 @@ in
     message = "VIP tickets must cost at least GBP 25.00.";
   };
 
+  audit.entities.ticket = {
+    operations = [ "create" "update" "delete" "confirm" "cancel" "use" "upgrade" ];
+    category = "workflow";
+    reason = "Tickets represent customer entitlements and admission state.";
+  };
+
   workflows.groups.ticketLifecycle = {
     label = "Ticket lifecycle";
     description = "Customer and staff operations that move a ticket from reservation through admission or cancellation.";
@@ -166,6 +172,11 @@ in
 
     use = {
       relationships = [];
+      audit = {
+        required = true;
+        category = "workflow";
+        reason = "Ticket admission must be traceable for venue operations.";
+      };
       policy = {
         label = "Use ticket";
         description = "Staff check-in operation for admitting a confirmed ticket.";
@@ -187,6 +198,11 @@ in
     };
 
     upgrade = {
+      audit = {
+        required = true;
+        category = "payment";
+        reason = "Ticket upgrades can affect customer entitlement and price.";
+      };
       policy = {
         label = "Upgrade ticket";
         audiences = [ "customer" "service" ];

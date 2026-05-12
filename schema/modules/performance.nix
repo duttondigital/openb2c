@@ -119,6 +119,12 @@ in
     template = "{title} - {date} {time}";
   };
 
+  audit.entities.performance = {
+    operations = [ "create" "update" "delete" "cancel" "complete" "reschedule" ];
+    category = "workflow";
+    reason = "Performance changes affect public catalog state and ticket holder communications.";
+  };
+
   # Junction table for performance-artist many-to-many
   tables.performance_artist = {
     id = { type = "integer"; pk = true; auto = true; };
@@ -166,6 +172,11 @@ in
     };
 
     cancel = {
+      audit = {
+        required = true;
+        category = "workflow";
+        reason = "Performance cancellation cascades to ticket state and customer notifications.";
+      };
       policy = {
         label = "Cancel performance";
         description = "Administrative operation that cancels a scheduled performance and cascades ticket cancellation.";
@@ -220,6 +231,11 @@ in
     };
 
     reschedule = {
+      audit = {
+        required = true;
+        category = "workflow";
+        reason = "Performance rescheduling may notify ticket holders.";
+      };
       policy = {
         label = "Reschedule performance";
         audiences = [ "staff" ];

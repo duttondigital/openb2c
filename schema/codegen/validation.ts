@@ -36,6 +36,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
     ...schema,
     tables,
     derived: schema.derived || {},
+    audit: schema.audit || { entities: {} },
     operations: schema.operations || {},
     indexes: schema.indexes || {},
     validations: schema.validations || {},
@@ -47,6 +48,7 @@ export function validateSchema(schema: Schema): SchemaDiagnostic[] {
 
   validateColumns(normalized, diagnostics);
   validateDerivedFields(normalized, diagnostics);
+  validateAudit(normalized, diagnostics);
   validateIndexes(normalized, diagnostics);
   validateRelationships(normalized, diagnostics);
   validateCrossFieldValidations(normalized, diagnostics);
@@ -318,6 +320,24 @@ function validateCrossFieldValidations(schema: Schema, diagnostics: SchemaDiagno
   }
 }
 
+function validateAudit(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
+  const crud = new Set(["read", "create", "update", "delete"]);
+  for (const [entity, audit] of Object.entries(schema.audit?.entities || {})) {
+    if (!tableExists(schema.tables, entity)) {
+      add(diagnostics, `audit.entities.${entity}`, `references unknown entity ${JSON.stringify(entity)}`);
+      continue;
+    }
+    if (audit.category && !["data", "workflow", "security", "payment", "system"].includes(audit.category)) {
+      add(diagnostics, `audit.entities.${entity}.category`, "must be one of data, workflow, security, payment, or system");
+    }
+    for (const [index, operation] of (audit.operations || []).entries()) {
+      if (!crud.has(operation) && !schema.operations?.[entity]?.[operation]) {
+        add(diagnostics, `audit.entities.${entity}.operations.${index}`, `references unknown operation ${entity}.${operation}`);
+      }
+    }
+  }
+}
+
 function validateWorkflows(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
   for (const [name, group] of Object.entries(schema.workflows?.groups || {})) {
     if (!group.label) {
@@ -405,6 +425,7 @@ function validateOperation(schema: Schema, entity: string, name: string, operati
   const path = `operations.${entity}.${name}`;
   validateOperationPolicy(operation, `${path}.policy`, diagnostics);
   validateOperationWorkflow(schema, entity, operation, `${path}.workflow`, diagnostics);
+  validateOperationAudit(operation, `${path}.audit`, diagnostics);
   for (const [field] of Object.entries(operation.set || {})) {
     if (!columnExists(schema.tables, entity, field)) {
       add(diagnostics, `${path}.set.${field}`, `references unknown field ${entity}.${field}`);
@@ -417,6 +438,14 @@ function validateOperation(schema: Schema, entity: string, name: string, operati
     validateCascade(schema, entity, cascade, `${path}.cascade.${index}`, diagnostics);
   }
   validateGuard(schema, entity, operation.guard, `${path}.guard`, diagnostics);
+}
+
+function validateOperationAudit(operation: Operation, path: string, diagnostics: SchemaDiagnostic[]): void {
+  const audit = operation.audit;
+  if (!audit) return;
+  if (audit.category && !["data", "workflow", "security", "payment", "system"].includes(audit.category)) {
+    add(diagnostics, `${path}.category`, "must be one of data, workflow, security, payment, or system");
+  }
 }
 
 function validateOperationWorkflow(schema: Schema, entity: string, operation: Operation, path: string, diagnostics: SchemaDiagnostic[]): void {

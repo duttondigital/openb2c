@@ -41,7 +41,7 @@ const DEFAULT_AUTH: AuthConfig = {
 };
 
 function defaultOperation(): Operation {
-  return { guard: null, relationships: [], public: false, scope: null, policy: {}, workflow: {}, set: {}, cascade: [], effects: [] };
+  return { guard: null, relationships: [], public: false, scope: null, policy: {}, workflow: {}, audit: {}, set: {}, cascade: [], effects: [] };
 }
 
 function operationFor(ops: Record<string, Operation>, action: string): Operation {
@@ -133,6 +133,27 @@ function withWorkflow(operation: Record<string, unknown>, op: Operation): Record
   };
 }
 
+function operationAudit(schema: Schema, entity: string, action: string, op: Operation): Record<string, unknown> | null {
+  const entityAudit = schema.audit?.entities?.[entity];
+  const explicit = op.audit || {};
+  const required = Boolean(explicit.required || entityAudit?.operations?.includes(action));
+  if (!required) return null;
+  return {
+    required: true,
+    category: explicit.category || entityAudit?.category || "data",
+    ...(explicit.reason || entityAudit?.reason ? { reason: explicit.reason || entityAudit?.reason } : {}),
+  };
+}
+
+function withAudit(operation: Record<string, unknown>, schema: Schema, entity: string, action: string, op: Operation): Record<string, unknown> {
+  const audit = operationAudit(schema, entity, action, op);
+  if (!audit) return operation;
+  return {
+    ...operation,
+    "x-openb2c-audit": audit,
+  };
+}
+
 function openApiAuthMetadata(schema: Schema): Record<string, unknown> {
   const auth = {
     roles: {
@@ -152,6 +173,26 @@ function openApiAuthMetadata(schema: Schema): Record<string, unknown> {
   return {
     roles: auth.roles,
     operationPolicies,
+  };
+}
+
+function openApiAuditMetadata(schema: Schema): Record<string, unknown> | null {
+  const entities = schema.audit?.entities || {};
+  const operationAuditRequirements: Record<string, Record<string, unknown>> = {};
+  for (const entity of Object.keys(schema.tables || {})) {
+    const ops = schema.operations?.[entity] || {};
+    const actions = new Set([...CRUD_ACTIONS, ...Object.keys(ops)]);
+    for (const action of actions) {
+      const audit = operationAudit(schema, entity, action, operationFor(ops, action));
+      if (!audit) continue;
+      operationAuditRequirements[entity] ||= {};
+      operationAuditRequirements[entity][action] = audit;
+    }
+  }
+  if (Object.keys(entities).length === 0 && Object.keys(operationAuditRequirements).length === 0) return null;
+  return {
+    entities,
+    operationAuditRequirements,
   };
 }
 
@@ -388,6 +429,7 @@ function derivedValueSchema(field: DerivedField): Record<string, unknown> {
 
 export function genOpenAPI(schema: Schema): string {
   const app = getAppMetadata(schema);
+  const auditMetadata = openApiAuditMetadata(schema);
   const workflowMetadata = openApiWorkflowMetadata(schema);
   const validationMetadata = openApiValidationMetadata(schema);
   const ecommerceMetadata = openApiEcommerceMetadata(schema);
@@ -576,7 +618,7 @@ export function genOpenAPI(schema: Schema): string {
     const updateOp = operationFor(ops, "update");
     const deleteOp = operationFor(ops, "delete");
     paths[`/api/${entity}s`] = {
-      get: withAuth(withWorkflow(withPolicy({
+      get: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `List ${entity}s`,
         parameters: [
           { name: "limit", in: "query", schema: { type: "integer", default: 100 } },
@@ -590,8 +632,8 @@ export function genOpenAPI(schema: Schema): string {
             content: { "application/json": { schema: { $ref: "#/components/schemas/PaginatedResponse" } } },
           },
         },
-      }, entity, "read", readOp), readOp), readOp.public),
-      post: withAuth(withWorkflow(withPolicy({
+      }, entity, "read", readOp), readOp), schema, entity, "read", readOp), readOp.public),
+      post: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Create ${entity}`,
         requestBody: {
           required: true,
@@ -601,20 +643,20 @@ export function genOpenAPI(schema: Schema): string {
           "201": { description: "Created", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" } } } } } },
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, entity, "create", createOp), createOp), createOp.public),
+      }, entity, "create", createOp), createOp), schema, entity, "create", createOp), createOp.public),
     };
 
     // Single entity endpoints
     paths[`/api/${entity}s/{id}`] = {
-      get: withAuth(withWorkflow(withPolicy({
+      get: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Get ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Found", content: { "application/json": { schema: { $ref: `#/components/schemas/${Entity}` } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, entity, "read", readOp), readOp), readOp.public),
-      put: withAuth(withWorkflow(withPolicy({
+      }, entity, "read", readOp), readOp), schema, entity, "read", readOp), readOp.public),
+      put: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Update ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         requestBody: {
@@ -625,28 +667,28 @@ export function genOpenAPI(schema: Schema): string {
           "400": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, entity, "update", updateOp), updateOp), updateOp.public),
-      delete: withAuth(withWorkflow(withPolicy({
+      }, entity, "update", updateOp), updateOp), schema, entity, "update", updateOp), updateOp.public),
+      delete: withAuth(withAudit(withWorkflow(withPolicy({
         summary: `Delete ${entity}`,
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
         responses: {
           "200": { description: "Deleted", content: { "application/json": { schema: { type: "object", properties: { deleted: { type: "boolean" } } } } } },
           "404": { description: "Not found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
-      }, entity, "delete", deleteOp), deleteOp), deleteOp.public),
+      }, entity, "delete", deleteOp), deleteOp), schema, entity, "delete", deleteOp), deleteOp.public),
     };
 
     // Custom operations
     for (const opName of Object.keys(ops).filter(op => !CRUD_ACTIONS.has(op))) {
       paths[`/api/${entity}s/{id}/${opName.replace(/_/g, "-")}`] = {
-        post: withAuth(withWorkflow(withPolicy({
+        post: withAuth(withAudit(withWorkflow(withPolicy({
           summary: `${opName.replace(/_/g, " ")} ${entity}`,
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
           responses: {
             "200": { description: "Success", content: { "application/json": { schema: { type: "object", properties: { id: { type: "integer" }, status: { type: "string" } } } } } },
             "400": { description: "Operation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
-        }, entity, opName, ops[opName]), ops[opName]), ops[opName]?.public),
+        }, entity, opName, ops[opName]), ops[opName]), schema, entity, opName, ops[opName]), ops[opName]?.public),
       };
     }
   }
@@ -916,6 +958,7 @@ export function genOpenAPI(schema: Schema): string {
       logo: app.logo,
     },
     "x-openb2c-auth": openApiAuthMetadata(schema),
+    ...(auditMetadata ? { "x-openb2c-audit": auditMetadata } : {}),
     ...(workflowMetadata ? { "x-openb2c-workflows": workflowMetadata } : {}),
     ...(validationMetadata ? { "x-openb2c-validation": validationMetadata } : {}),
     ...(ecommerceMetadata ? { "x-openb2c-ecommerce": ecommerceMetadata } : {}),

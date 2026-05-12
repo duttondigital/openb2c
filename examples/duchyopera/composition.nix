@@ -116,6 +116,7 @@ let
 in {
   organization = modules.config.organization;
   auth = modules.config.auth;
+  audit = modules.config.audit;
   workflows = modules.config.workflows;
   tables = modules.config.tables;
   derived = modules.config.derived;

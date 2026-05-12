@@ -101,12 +101,19 @@ export interface Effect {
 
 export type AuthAudience = "anonymous" | "customer" | "staff" | "service" | "system";
 export type PolicyRisk = "low" | "medium" | "high";
+export type AuditCategory = "data" | "workflow" | "security" | "payment" | "system";
 
 export interface OperationPolicyMetadata {
   label?: string | null;
   description?: string | null;
   audiences?: AuthAudience[];
   risk?: PolicyRisk;
+}
+
+export interface OperationAuditMetadata {
+  required?: boolean;
+  category?: AuditCategory;
+  reason?: string | null;
 }
 
 export interface Operation {
@@ -116,6 +123,7 @@ export interface Operation {
   scope: string | null;
   policy?: OperationPolicyMetadata;
   workflow?: OperationWorkflowMetadata;
+  audit?: OperationAuditMetadata;
   set: Record<string, string>;
   cascade: Cascade[];
   effects: Effect[];
@@ -254,6 +262,16 @@ export interface AuthConfig {
   roles: Record<string, AuthRoleMetadata>;
 }
 
+export interface AuditEntityMetadata {
+  operations: string[];
+  category: AuditCategory;
+  reason?: string | null;
+}
+
+export interface AuditConfig {
+  entities: Record<string, AuditEntityMetadata>;
+}
+
 export type WorkflowConfirmationSeverity = "info" | "warning" | "danger";
 
 export interface WorkflowGroupMetadata {
@@ -295,6 +313,7 @@ export interface OperationWorkflowMetadata {
 export interface Schema {
   organization: OrganizationMetadata;
   auth?: AuthConfig;
+  audit?: AuditConfig;
   workflows?: WorkflowConfig;
   tables: Tables;
   derived?: DerivedFields;

@@ -57,9 +57,20 @@ in
     displayPriority = 30;
   };
 
+  audit.entities.transaction = {
+    operations = [ "create" "update" "delete" "complete" "fail" "refund" ];
+    category = "payment";
+    reason = "Transactions represent payment and refund state.";
+  };
+
   operations.transaction = {
     complete = {
       relationships = [];
+      audit = {
+        required = true;
+        category = "payment";
+        reason = "Payment settlement must be auditable.";
+      };
       policy = {
         label = "Complete transaction";
         description = "Payment settlement operation usually performed by a payment service or staff operator.";
@@ -90,6 +101,11 @@ in
 
     fail = {
       relationships = [];
+      audit = {
+        required = true;
+        category = "payment";
+        reason = "Payment failure affects order and ticket state.";
+      };
       policy = {
         label = "Fail transaction";
         audiences = [ "staff" "service" ];
@@ -115,6 +131,11 @@ in
 
     refund = {
       relationships = [];
+      audit = {
+        required = true;
+        category = "payment";
+        reason = "Refunds must be traceable for finance and support.";
+      };
       policy = {
         label = "Refund transaction";
         audiences = [ "staff" "service" ];

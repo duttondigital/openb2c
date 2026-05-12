@@ -128,6 +128,38 @@ let
     };
   };
 
+  auditCategoryType = lib.types.enum [ "data" "workflow" "security" "payment" "system" ];
+
+  auditEntityType = lib.types.submodule {
+    options = {
+      operations = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "create" "update" "delete" ];
+        description = "Entity operations that must be audit logged.";
+      };
+      category = lib.mkOption {
+        type = auditCategoryType;
+        default = "data";
+        description = "Default audit category for this entity.";
+      };
+      reason = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Why this entity requires audit logging.";
+      };
+    };
+  };
+
+  auditType = lib.types.submodule {
+    options = {
+      entities = lib.mkOption {
+        type = lib.types.attrsOf auditEntityType;
+        default = {};
+        description = "Entity-level audit logging requirements.";
+      };
+    };
+  };
+
   # Structured reference to a table field. These are generated under
   # `config.refs.<table>.<field>` so policy and metadata can avoid stringly
   # references.
@@ -663,6 +695,26 @@ let
     };
   };
 
+  operationAuditType = lib.types.submodule {
+    options = {
+      required = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether this specific operation must be audit logged.";
+      };
+      category = lib.mkOption {
+        type = auditCategoryType;
+        default = "data";
+        description = "Audit category for this operation.";
+      };
+      reason = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Why this operation requires audit logging.";
+      };
+    };
+  };
+
   operationType = lib.types.submodule {
     options = {
       guard = lib.mkOption {
@@ -694,6 +746,11 @@ let
         type = operationWorkflowType;
         default = {};
         description = "Workflow metadata for generated API descriptions and clients.";
+      };
+      audit = lib.mkOption {
+        type = operationAuditType;
+        default = {};
+        description = "Audit logging requirement metadata for this operation.";
       };
       set = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
@@ -731,6 +788,12 @@ in {
       type = workflowsType;
       default = {};
       description = "Workflow group metadata for generated clients.";
+    };
+
+    audit = lib.mkOption {
+      type = auditType;
+      default = {};
+      description = "Audit logging requirement metadata.";
     };
 
     tables = lib.mkOption {
