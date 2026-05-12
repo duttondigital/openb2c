@@ -273,6 +273,7 @@ const SERVER_INFO = {
 };
 
 const MCP_AUTH_CONTEXT = T.SYSTEM_AUTH_CONTEXT;
+const MCP_HTTP_AUTH_ENABLED = process.env.MCP_HTTP_AUTH_ENABLED !== "false";
 
 const TOOLS = [
 ${tools.join(",\n")}
@@ -350,7 +351,7 @@ if (process.argv.includes("--http")) {
   const CORS_ALLOW_CREDENTIALS = process.env.CORS_ALLOW_CREDENTIALS === "true";
   const ALLOW_WILDCARD_CORS = process.env.ALLOW_WILDCARD_CORS === "true";
   const CORS_ALLOW_METHODS = "POST, OPTIONS";
-  const CORS_ALLOW_HEADERS = "Content-Type, Mcp-Session-Id";
+  const CORS_ALLOW_HEADERS = "Content-Type, Mcp-Session-Id, Authorization";
 
   function allowedCorsOrigin(req: Request): string | null {
     const origin = req.headers.get("origin");
@@ -388,6 +389,24 @@ if (process.argv.includes("--http")) {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
   }
 
+  async function authenticateHttpRequest(req: Request): Promise<T.AuthContext | null> {
+    if (!MCP_HTTP_AUTH_ENABLED) return MCP_AUTH_CONTEXT;
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) return null;
+
+    const token = authHeader.slice(7);
+    return (await S.verifyIdentitySession(db, token)) || (await S.verifyApiKey(db, token));
+  }
+
+  function authenticationRequiredResponse(body: McpRequest, headers: Headers): Response {
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      error: { code: -32001, message: "Authentication required" },
+    }), { status: 401, headers });
+  }
+
   if (PRODUCTION && CORS_ORIGINS.includes("*") && !ALLOW_WILDCARD_CORS) {
     throw new Error("CORS_ORIGINS must be explicit in production or ALLOW_WILDCARD_CORS=true must be set");
   }
@@ -413,6 +432,7 @@ if (process.argv.includes("--http")) {
 
         const headers = corsHeaders(req);
         headers.set("Content-Type", "application/json");
+        let auth: T.AuthContext = MCP_AUTH_CONTEXT;
 
         // JSON-RPC notifications have no id — acknowledge with 202
         if (body.id === undefined) {
@@ -421,6 +441,10 @@ if (process.argv.includes("--http")) {
             const sessionId = req.headers.get("Mcp-Session-Id");
             if (!sessionId || !sessions.has(sessionId)) {
               return new Response(null, { status: 400, headers: corsHeaders(req) });
+            }
+            const notificationAuth = await authenticateHttpRequest(req);
+            if (!notificationAuth) {
+              return new Response(null, { status: 401, headers: corsHeaders(req) });
             }
           }
           return new Response(null, { status: 202, headers: corsHeaders(req) });
@@ -439,9 +463,12 @@ if (process.argv.includes("--http")) {
               error: { code: -32600, message: "Invalid or missing session ID" },
             }), { status: 400, headers });
           }
+          const requestAuth = await authenticateHttpRequest(req);
+          if (!requestAuth) return authenticationRequiredResponse(body, headers);
+          auth = requestAuth;
         }
 
-        const res = await handleRequest(body);
+        const res = await handleRequest(body, auth);
         return new Response(JSON.stringify(res), { headers });
       })();
     },
@@ -449,7 +476,7 @@ if (process.argv.includes("--http")) {
 
   console.error(\`MCP HTTP server listening on http://localhost:\${MCP_PORT}/mcp\`);
 } else {
-  // Stdio transport
+  // Stdio transport uses trusted local system auth.
   async function main() {
     const decoder = new TextDecoder();
     let buffer = "";
@@ -464,7 +491,7 @@ if (process.argv.includes("--http")) {
         if (!line.trim()) continue;
         try {
           const req = JSON.parse(line) as McpRequest;
-          const res = await handleRequest(req);
+          const res = await handleRequest(req, MCP_AUTH_CONTEXT);
           console.log(JSON.stringify(res));
         } catch (e) {
           console.log(JSON.stringify({

@@ -13,7 +13,7 @@ Generated apps should all answer the same questions in the same order:
 These concepts are platform behavior and should not be redefined by each composition:
 
 - Credential protocols: API keys for machine access and certificate/request signing for federated identity.
-- Credential transport: REST uses HTTP headers; MCP and local callers may pass context directly.
+- Credential transport: REST uses HTTP headers; MCP stdio is trusted local execution; MCP HTTP uses HTTP bearer credentials.
 - Request authentication: generated entrypoints validate credentials and normalize them to one auth context.
 - Secret handling: API key hashing, signing key loading, certificate validation, and future revocation checks.
 - Error semantics: missing credentials return `401`, insufficient permission returns `403`.
@@ -35,6 +35,14 @@ export interface AuthContext {
 `scopes` are the normalized permission grants available to the caller. The service layer does not branch on principals, roles, claims, providers, credential kinds, or subjects. Roles can exist as product data or as an issuance-time concept, but generated enforcement consumes their resulting scopes.
 
 `SYSTEM_AUTH_CONTEXT` uses `scopes: ["*"]` and is reserved for trusted local/system execution such as auth-disabled development and local MCP execution.
+
+## MCP Transport Auth
+
+Generated MCP tools use the same service-layer authorization checks as REST and direct TypeScript callers.
+
+Local stdio MCP execution is treated as trusted local system execution. It receives `SYSTEM_AUTH_CONTEXT` and is intended for same-machine tools launched by the operator or the runtime.
+
+HTTP MCP execution is a remote transport and requires `Authorization: Bearer <token>` by default after session initialization. The bearer token can be an identity session token or an API key; the generated HTTP transport verifies it and passes the resulting `{ userId, scopes }` context into `handleRequest`. Set `MCP_HTTP_AUTH_ENABLED=false` only for local development.
 
 ## Certificate Registry State
 

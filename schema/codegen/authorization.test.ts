@@ -143,6 +143,34 @@ async function seedApiKey(db: Database, id: number, userId: number, key: string,
   `).run(id, userId, hash, key.slice(0, 11), `key-${id}`, scopes);
 }
 
+async function waitForHttpServer(url: string): Promise<void> {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch(url, { method: "OPTIONS" });
+      if (res.status === 204 || res.status === 403) return;
+    } catch {
+      // Server is still starting.
+    }
+    await Bun.sleep(50);
+  }
+  throw new Error(`server did not start at ${url}`);
+}
+
+function allocatePort(): number {
+  const probe = Bun.serve({ port: 0, fetch: () => new Response("ok") });
+  const port = probe.port;
+  probe.stop(true);
+  return port;
+}
+
+function postMcp(base: string, payload: unknown, headers: Record<string, string> = {}): Promise<Response> {
+  return fetch(base, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(payload),
+  });
+}
+
 describe("generated authorization enforcement", () => {
   test("OpenAPI marks generated CRUD and operation endpoints as authenticated", () => {
     const openapi = JSON.parse(genOpenAPI(schema));
@@ -248,5 +276,113 @@ describe("generated authorization enforcement", () => {
     const allowed = await callTool("confirm_ticket", { id: 2 }, serviceWithConfirm);
     expect(allowed.isError).toBeUndefined();
     expect(JSON.parse(allowed.content[0].text)).toEqual({ id: 2, status: "confirmed" });
+  });
+
+  test("MCP transport auth keeps local stdio trusted and protects HTTP with bearer credentials", async () => {
+    const mcpSource = genMcpServer(schema);
+    expect(mcpSource).toContain("Stdio transport uses trusted local system auth");
+    expect(mcpSource).toContain("const res = await handleRequest(req, MCP_AUTH_CONTEXT);");
+    expect(mcpSource).toContain("Content-Type, Mcp-Session-Id, Authorization");
+    expect(mcpSource).toContain("return (await S.verifyIdentitySession(db, token)) || (await S.verifyApiKey(db, token));");
+
+    const dir = writeGenerated();
+
+    const stdioDbPath = join(dir, "mcp-stdio.sqlite");
+    const stdioDb = new Database(stdioDbPath);
+    for (const stmt of genSQL(schema.tables).split(/;\s*\n/).filter(s => s.trim())) {
+      stdioDb.run(stmt);
+    }
+    seedDb(stdioDb);
+    stdioDb.close();
+
+    const stdio = Bun.spawn([process.execPath, join(dir, "mcp.ts")], {
+      env: {
+        ...process.env,
+        DB_PATH: stdioDbPath,
+        NODE_ENV: "test",
+      },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    stdio.stdin.write(JSON.stringify({
+      jsonrpc: "2.0",
+      id: "stdio-confirm",
+      method: "tools/call",
+      params: { name: "confirm_ticket", arguments: { id: 1 } },
+    }) + "\n");
+    stdio.stdin.end();
+    const stdioOutput = await new Response(stdio.stdout).text();
+    expect(await stdio.exited).toBe(0);
+    const stdioResponses = stdioOutput
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((line) => line.id === "stdio-confirm");
+    expect(stdioResponses).toHaveLength(1);
+    expect(stdioResponses[0].result.isError).toBeUndefined();
+    expect(JSON.parse(stdioResponses[0].result.content[0].text)).toEqual({ id: 1, status: "confirmed" });
+
+    const dbPath = join(dir, "mcp-http.sqlite");
+    const db = new Database(dbPath);
+    for (const stmt of genSQL(schema.tables).split(/;\s*\n/).filter(s => s.trim())) {
+      db.run(stmt);
+    }
+    seedDb(db);
+    const key = "do_mcp_http_abcdefghijklmnopqrstuvwxyz";
+    await seedApiKey(db, 1, 1, key, "ticket.read");
+    db.close();
+
+    const port = allocatePort();
+    const base = `http://127.0.0.1:${port}/mcp`;
+    const proc = Bun.spawn([process.execPath, join(dir, "mcp.ts"), "--http"], {
+      env: {
+        ...process.env,
+        DB_PATH: dbPath,
+        MCP_PORT: String(port),
+        MCP_HTTP_AUTH_ENABLED: "true",
+        NODE_ENV: "test",
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+
+    try {
+      await waitForHttpServer(base);
+
+      const initialized = await postMcp(base, { jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      expect(initialized.status).toBe(200);
+      const sessionId = initialized.headers.get("Mcp-Session-Id");
+      expect(sessionId).toBeTruthy();
+
+      const unauthenticated = await postMcp(
+        base,
+        { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_tickets", arguments: {} } },
+        { "Mcp-Session-Id": sessionId! },
+      );
+      expect(unauthenticated.status).toBe(401);
+      expect(await unauthenticated.json()).toMatchObject({
+        error: { code: -32001, message: "Authentication required" },
+      });
+
+      const invalid = await postMcp(
+        base,
+        { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_tickets", arguments: {} } },
+        { "Mcp-Session-Id": sessionId!, Authorization: "Bearer do_invalid" },
+      );
+      expect(invalid.status).toBe(401);
+
+      const allowed = await postMcp(
+        base,
+        { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "list_tickets", arguments: {} } },
+        { "Mcp-Session-Id": sessionId!, Authorization: `Bearer ${key}` },
+      );
+      expect(allowed.status).toBe(200);
+      const body = await allowed.json() as { result: { content: { text: string }[] } };
+      expect(JSON.parse(body.result.content[0].text).map((ticket: { id: number }) => ticket.id)).toEqual([1, 2, 3]);
+    } finally {
+      proc.kill();
+      await proc.exited.catch(() => null);
+    }
   });
 });
