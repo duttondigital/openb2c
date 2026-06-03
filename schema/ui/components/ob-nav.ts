@@ -35,12 +35,7 @@ export class ObNav extends HTMLElement {
     await api.ready();
 
     const items = api.getAdminWorkspaces().filter((item) => api.canCollection(item.entity, "read"));
-    const workflowScreens = api.getWorkflowScreens().filter((screen) => api.canCollection(screen.entity, "read"));
     const groups = api.getAdminWorkspaceGroups();
-    if (workflowScreens.length > 0 && !groups.some((group) => group.id === "workflow")) {
-      groups.push({ id: "workflow", label: "Workflow", displayPriority: 20 });
-      groups.sort((a, b) => (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label));
-    }
     const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
     const appTitle = escapeHtml(appTitleRaw);
     const appDescription = escapeHtml(apiDescription(api));
@@ -61,9 +56,7 @@ export class ObNav extends HTMLElement {
         </div>
         ${groups.map((group) => {
           const groupItems = items.filter((item) => (item.group || "data") === group.id);
-          const groupWorkflowScreens = group.id === "workflow" ? workflowScreens : [];
           const entries = [
-            ...groupWorkflowScreens.map((screen) => ({ path: screen.path, label: screen.label, entity: screen.entity, priority: screen.displayPriority ?? 0 })),
             ...groupItems.map((item) => ({ path: item.path, label: item.label, entity: item.entity, priority: item.displayPriority ?? 1000 })),
           ].sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
           if (entries.length === 0) return "";

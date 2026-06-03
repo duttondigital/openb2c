@@ -182,7 +182,7 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("./ob-auth-menu");
     expect(adminNav).toContain("getAdminWorkspaces");
     expect(adminNav).toContain("getAdminWorkspaceGroups");
-    expect(adminNav).toContain("getWorkflowScreens");
+    expect(adminNav).not.toContain("getWorkflowScreens");
     expect(adminNav).toContain('canCollection(item.entity, "read")');
     expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");

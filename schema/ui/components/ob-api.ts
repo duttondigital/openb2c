@@ -730,8 +730,10 @@ export class ObApi extends HTMLElement {
 
   private _isAdminWorkspaceNode(node: EntityGraphNode): boolean {
     if (node.isInternal) return true;
-    if (node.isCommerce || node.isWorkflow) return true;
+    if (node.isCommerce) return true;
     if (node.isSupport) return false;
+    if (isContextualChildNode(node)) return false;
+    if (node.isWorkflow) return true;
     if (node.temporalFields.length > 0) return true;
     if (node.outbound.length === 0) return true;
     if (node.inbound.length > 1) return true;
@@ -989,6 +991,16 @@ function isSupportEntity(
   if (outbound.length < 2) return false;
   if (intrinsicFieldCount(schema, outbound) <= 2) return true;
   return entityNamesCompose(entity, outbound.map((edge) => edge.targetEntity));
+}
+
+function isContextualChildNode(node: EntityGraphNode): boolean {
+  if (node.temporalFields.length > 0 || node.outbound.length === 0) return false;
+  return node.outbound.some((edge) => isOwnershipEdge(node.entity, edge));
+}
+
+function isOwnershipEdge(entity: string, edge: EntityGraphEdge): boolean {
+  const fieldBase = edge.sourceField.replace(/_id$/, "");
+  return fieldBase === edge.targetEntity || entity.split("_").includes(fieldBase);
 }
 
 function intrinsicFieldCount(schema: any | null, outbound: EntityGraphEdge[]): number {
