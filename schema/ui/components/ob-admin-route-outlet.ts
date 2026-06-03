@@ -70,6 +70,13 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: board };
     }
 
+    if ((match = hash.match(/^\/workspaces\/([a-z_]+)$/))) {
+      await import("./ob-admin-workspace");
+      const workspace = document.createElement("ob-admin-workspace");
+      workspace.setAttribute("entity", match[1]);
+      return { node: workspace };
+    }
+
     if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
       await import("./ob-entity-form");
       return { node: entityElement("ob-entity-form", match[1], { mode: "create" }) };
@@ -92,7 +99,7 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: entityElement("ob-entity-list", match[1], attrs) };
     }
 
-    const firstItem = api.getNavigationItems()[0];
+    const firstItem = api.getAdminWorkspaces()[0] || api.getNavigationItems()[0];
     if (firstItem) return { redirect: firstItem.path };
 
     const empty = document.createElement("p");

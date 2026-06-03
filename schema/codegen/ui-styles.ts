@@ -699,6 +699,111 @@ const nav = `
   }
 `;
 
+const adminWorkspace = `
+  :host(ob-admin-workspace) .workspace {
+    display: grid;
+    gap: 18px;
+  }
+  :host(ob-admin-workspace) .workspace-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  :host(ob-admin-workspace) .eyebrow {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  :host(ob-admin-workspace) h1 {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 800;
+  }
+  :host(ob-admin-workspace) .workspace-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  :host(ob-admin-workspace) .workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  :host(ob-admin-workspace) .workspace-panel {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-admin-workspace) .workspace-panel h2 {
+    font-size: 13px;
+    line-height: 1.2;
+    font-weight: 800;
+    color: var(--ob-text-muted);
+  }
+  :host(ob-admin-workspace) .link-grid {
+    display: grid;
+    gap: 8px;
+  }
+  :host(ob-admin-workspace) .link-card {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
+  :host(ob-admin-workspace) .link-card:hover {
+    border-color: var(--ob-border-strong);
+    background: var(--ob-bg-alt);
+    text-decoration: none;
+  }
+  :host(ob-admin-workspace) .link-card strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+  :host(ob-admin-workspace) .link-card span {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+  }
+  :host(ob-admin-workspace) .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  :host(ob-admin-workspace) .chip {
+    display: inline-flex;
+    min-height: 26px;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: var(--ob-bg-alt);
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  @media (max-width: 720px) {
+    :host(ob-admin-workspace) .workspace-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    :host(ob-admin-workspace) .workspace-actions,
+    :host(ob-admin-workspace) .workspace-actions a {
+      width: 100%;
+    }
+  }
+`;
+
 const entityList = `
   :host(ob-entity-list) .header {
     display: flex;
@@ -1128,6 +1233,7 @@ export function genAdminStylesheet(): string {
     authPage,
     accountSummary,
     nav,
+    adminWorkspace,
     entityList,
     entityForm,
     entityDetail,

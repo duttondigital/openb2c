@@ -69,25 +69,32 @@ export const button = `
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
   }
-  button:hover { background: var(--ob-bg-alt); border-color: var(--ob-border-strong); }
-  button.primary {
+  button:hover,
+  .btn:hover { background: var(--ob-bg-alt); border-color: var(--ob-border-strong); text-decoration: none; }
+  button.primary,
+  .btn.primary {
     background: var(--ob-primary);
     color: white;
     border-color: var(--ob-primary);
   }
-  button.primary:hover { background: var(--ob-primary-hover); }
-  button.secondary {
+  button.primary:hover,
+  .btn.primary:hover { background: var(--ob-primary-hover); }
+  button.secondary,
+  .btn.secondary {
     background: var(--ob-primary-soft);
     color: var(--ob-primary-hover);
     border-color: transparent;
   }
-  button.secondary:hover { background: #e2e2e2; border-color: transparent; }
-  button.danger {
+  button.secondary:hover,
+  .btn.secondary:hover { background: #e2e2e2; border-color: transparent; }
+  button.danger,
+  .btn.danger {
     background: var(--ob-danger-soft);
     color: var(--ob-danger);
     border-color: transparent;
   }
-  button.danger:hover {
+  button.danger:hover,
+  .btn.danger:hover {
     background: var(--ob-danger);
     color: white;
     border-color: var(--ob-danger);

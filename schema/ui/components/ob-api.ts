@@ -39,6 +39,42 @@ export interface NavigationItem {
   internal?: boolean;
 }
 
+export interface EntityGraphEdge {
+  sourceEntity: string;
+  sourceField: string;
+  targetEntity: string;
+  targetField: string;
+  label: string;
+  cardinality: string;
+}
+
+export interface EntityGraphNode {
+  entity: string;
+  inbound: EntityGraphEdge[];
+  outbound: EntityGraphEdge[];
+  temporalFields: string[];
+  workflowScreens: WorkflowScreen[];
+  isInternal: boolean;
+  isCommerce: boolean;
+  isWorkflow: boolean;
+  isSupport: boolean;
+  degree: number;
+}
+
+export interface EntityGraph {
+  nodes: EntityGraphNode[];
+  edges: EntityGraphEdge[];
+}
+
+export interface AdminWorkspace extends NavigationItem {
+  inbound: EntityGraphEdge[];
+  outbound: EntityGraphEdge[];
+  related: EntityGraphEdge[];
+  temporalFields: string[];
+  workflowScreens: WorkflowScreen[];
+  supportEntities: string[];
+}
+
 export interface WorkflowGroup {
   label?: string;
   description?: string;
@@ -584,9 +620,134 @@ export class ObApi extends HTMLElement {
     }));
   }
 
+  getEntityGraph(options: { includeInternal?: boolean } = {}): EntityGraph {
+    const allEntities = new Set(this.getAllEntities());
+    const entities = [...allEntities]
+      .filter((entity) => options.includeInternal || !this.isInternalEntity(entity));
+    const visibleEntities = new Set(entities);
+    const workflowScreens = this.getWorkflowScreens();
+    const edges: EntityGraphEdge[] = [];
+
+    for (const entity of entities) {
+      const relationships = this.getForeignKeyRelationships(entity);
+      const fks = this.getForeignKeys(entity);
+      for (const [field, targetEntity] of Object.entries(fks)) {
+        if (!allEntities.has(targetEntity) || !visibleEntities.has(targetEntity)) continue;
+        const relationship = relationships[field] || {};
+        edges.push({
+          sourceEntity: entity,
+          sourceField: field,
+          targetEntity,
+          targetField: relationship.targetField || "id",
+          label: relationship.label || titleCase(field.replace(/_id$/, "")),
+          cardinality: relationship.cardinality || "one",
+        });
+      }
+    }
+
+    const nodes = entities.map((entity) => {
+      const inbound = edges.filter((edge) => edge.targetEntity === entity);
+      const outbound = edges.filter((edge) => edge.sourceEntity === entity);
+      const entityWorkflowScreens = workflowScreens.filter((screen) => screen.entity === entity);
+      const isWorkflow = entityWorkflowScreens.length > 0 || this.getOperations(entity).some((operation) => Boolean(this.getOperationWorkflow(entity, operation)));
+      const isCommerce = this._isCommerceEntity(entity);
+      const isInternal = this.isInternalEntity(entity);
+      const temporalFields = temporalSchemaFields(this.getSchema(entity));
+      return {
+        entity,
+        inbound,
+        outbound,
+        temporalFields,
+        workflowScreens: entityWorkflowScreens,
+        isInternal,
+        isCommerce,
+        isWorkflow,
+        isSupport: isSupportEntity(entity, this.getSchema(entity), outbound, { isInternal, isCommerce, isWorkflow }),
+        degree: inbound.length + outbound.length,
+      };
+    });
+
+    return { nodes, edges };
+  }
+
+  getAdminWorkspaces(options: { includeInternal?: boolean } = {}): AdminWorkspace[] {
+    const graph = this.getEntityGraph(options);
+    const navigationItems = new Map(this.getNavigationItems({ includeInternal: true }).map((item) => [item.entity, item]));
+    return graph.nodes
+      .filter((node) => this._isAdminWorkspaceNode(node))
+      .map((node, index) => {
+        const item = navigationItems.get(node.entity);
+        const group = workspaceGroup(node, item?.group);
+        const workspace: AdminWorkspace = {
+          entity: node.entity,
+          path: `#/workspaces/${node.entity}`,
+          label: item?.label || pluralLabel(titleCase(node.entity)),
+          group,
+          displayPriority: item?.displayPriority ?? workspacePriority(node, index),
+          internal: node.isInternal,
+          inbound: node.inbound,
+          outbound: node.outbound,
+          related: [...node.inbound, ...node.outbound],
+          temporalFields: node.temporalFields,
+          workflowScreens: node.workflowScreens,
+          supportEntities: supportEntitiesFor(node, graph),
+        };
+        return workspace;
+      })
+      .filter((workspace) => options.includeInternal || !workspace.internal)
+      .sort((a, b) => {
+        const groupDelta = this._navigationGroupPriority(a.group) - this._navigationGroupPriority(b.group);
+        if (groupDelta !== 0) return groupDelta;
+        return sortNavigationItems(a, b);
+      });
+  }
+
+  getAdminWorkspace(entity: string, options: { includeInternal?: boolean } = {}): AdminWorkspace | null {
+    return this.getAdminWorkspaces(options).find((workspace) => workspace.entity === entity) || null;
+  }
+
+  getAdminWorkspaceGroups(options: { includeInternal?: boolean } = {}): NavigationGroup[] {
+    const workspaces = this.getAdminWorkspaces(options);
+    const usedGroups = new Set(workspaces.map((workspace) => workspace.group || "data"));
+    const configured = this.spec?.["x-openb2c-navigation"]?.groups || [];
+    const groups = configured.length > 0 ? configured : [{ id: "data", label: "Data", displayPriority: 100 }];
+    const byId = new Map(groups.map((group) => [group.id, group]));
+
+    for (const groupId of usedGroups) {
+      if (!byId.has(groupId)) byId.set(groupId, { id: groupId, label: titleCase(groupId), displayPriority: 1000 });
+    }
+
+    return [...byId.values()]
+      .filter((group) => usedGroups.has(group.id))
+      .filter((group) => options.includeInternal || !group.internal)
+      .sort(sortNavigationGroups);
+  }
+
   private _navigationGroupPriority(groupId?: string): number {
     const group = (this.spec?.["x-openb2c-navigation"]?.groups || []).find((candidate) => candidate.id === groupId);
     return group?.displayPriority ?? 1000;
+  }
+
+  private _isAdminWorkspaceNode(node: EntityGraphNode): boolean {
+    if (node.isInternal) return true;
+    if (node.isCommerce || node.isWorkflow) return true;
+    if (node.isSupport) return false;
+    if (node.temporalFields.length > 0) return true;
+    if (node.outbound.length === 0) return true;
+    if (node.inbound.length > 1) return true;
+    return node.degree === 0;
+  }
+
+  private _isCommerceEntity(entity: string): boolean {
+    const commerce = this.getEcommerceConfig();
+    if (!commerce?.enabled) return false;
+    const entities = [
+      commerce.catalog?.entity,
+      commerce.order?.entity,
+      commerce.lineItem?.entity,
+      commerce.transaction?.entity,
+    ];
+    return entities.includes(entity);
   }
 
   hasCommerceWorkflow(): boolean {
@@ -725,7 +886,7 @@ export class ObApi extends HTMLElement {
     // that match another entity are likely FKs. We check against known entities.
     const schema = this.getSchema(entity);
     if (!schema) return {};
-    const entities = this.getEntities();
+    const entities = this.getAllEntities();
     const fks: Record<string, string> = {};
     for (const col of Object.keys(schema.properties || {})) {
       if (col.endsWith("_id")) {
@@ -776,6 +937,78 @@ function sortNavigationGroups(a: NavigationGroup, b: NavigationGroup): number {
 
 function sortNavigationItems(a: NavigationItem, b: NavigationItem): number {
   return (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label);
+}
+
+function workspaceGroup(node: EntityGraphNode, configuredGroup?: string): string {
+  if (configuredGroup === "payment" || configuredGroup === "security" || configuredGroup === "system") return configuredGroup;
+  if (node.isCommerce) return "commerce";
+  if (configuredGroup) return configuredGroup;
+  if (node.isWorkflow) return "workflow";
+  return "data";
+}
+
+function workspacePriority(node: EntityGraphNode, index: number): number {
+  if (node.isCommerce) return 10 + index;
+  if (node.isWorkflow) {
+    const workflowPriority = Math.min(...node.workflowScreens.map((screen) => screen.displayPriority ?? 1000));
+    return Number.isFinite(workflowPriority) ? workflowPriority : 100 + index;
+  }
+  if (node.temporalFields.length > 0) return 200 + index;
+  if (node.outbound.length === 0 && node.inbound.length > 0) return 300 + index;
+  return 500 + index;
+}
+
+function supportEntitiesFor(node: EntityGraphNode, graph: EntityGraph): string[] {
+  return graph.nodes
+    .filter((candidate) => candidate.isSupport)
+    .filter((candidate) => candidate.outbound.some((edge) => edge.targetEntity === node.entity))
+    .map((candidate) => candidate.entity)
+    .sort();
+}
+
+function temporalSchemaFields(schema: any | null): string[] {
+  return Object.entries(schema?.properties || {})
+    .filter(([field, prop]) => isTemporalField(field, prop))
+    .map(([field]) => field);
+}
+
+function isTemporalField(field: string, prop: any): boolean {
+  if (field === "created_at" || field === "updated_at") return false;
+  const format = prop?.["x-openb2c-field"]?.format || prop?.format || "";
+  if (format === "date" || format === "time" || format === "date-time") return true;
+  return /(^|_)(date|time|starts_at|ends_at|opens_on|closes_on|expires_at)$/.test(field);
+}
+
+function isSupportEntity(
+  entity: string,
+  schema: any | null,
+  outbound: EntityGraphEdge[],
+  flags: { isInternal: boolean; isCommerce: boolean; isWorkflow: boolean },
+): boolean {
+  if (flags.isInternal || flags.isCommerce || flags.isWorkflow) return false;
+  if (outbound.length < 2) return false;
+  if (intrinsicFieldCount(schema, outbound) <= 2) return true;
+  return entityNamesCompose(entity, outbound.map((edge) => edge.targetEntity));
+}
+
+function intrinsicFieldCount(schema: any | null, outbound: EntityGraphEdge[]): number {
+  const fkFields = new Set(outbound.map((edge) => edge.sourceField));
+  return Object.keys(schema?.properties || {})
+    .filter((field) => field !== "id")
+    .filter((field) => !fkFields.has(field))
+    .filter((field) => !["created_at", "updated_at"].includes(field))
+    .length;
+}
+
+function entityNamesCompose(entity: string, relatedEntities: string[]): boolean {
+  const parts = entity.split("_");
+  const related = new Set(relatedEntities);
+  for (let i = 1; i < parts.length; i++) {
+    const left = parts.slice(0, i).join("_");
+    const right = parts.slice(i).join("_");
+    if (related.has(left) && related.has(right)) return true;
+  }
+  return false;
 }
 
 function operationPathAction(operation: string): string {

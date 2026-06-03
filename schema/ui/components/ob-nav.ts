@@ -34,9 +34,9 @@ export class ObNav extends HTMLElement {
     if (!api) return;
     await api.ready();
 
-    const items = api.getNavigationItems().filter((item) => api.canCollection(item.entity, "read"));
+    const items = api.getAdminWorkspaces().filter((item) => api.canCollection(item.entity, "read"));
     const workflowScreens = api.getWorkflowScreens().filter((screen) => api.canCollection(screen.entity, "read"));
-    const groups = api.getNavigationGroups();
+    const groups = api.getAdminWorkspaceGroups();
     if (workflowScreens.length > 0 && !groups.some((group) => group.id === "workflow")) {
       groups.push({ id: "workflow", label: "Workflow", displayPriority: 20 });
       groups.sort((a, b) => (a.displayPriority ?? 1000) - (b.displayPriority ?? 1000) || a.label.localeCompare(b.label));
@@ -95,7 +95,8 @@ export class ObNav extends HTMLElement {
   private _highlight() {
     const hash = location.hash || "#/";
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
-      const active = hash.startsWith(button.dataset.href || "");
+      const entity = button.dataset.entity || "";
+      const active = hash.startsWith(button.dataset.href || "") || (entity ? hash.startsWith(`#/${entity}s`) : false);
       button.classList.toggle("active", active);
       if (active) {
         button.setAttribute("aria-current", "page");
