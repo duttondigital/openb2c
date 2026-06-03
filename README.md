@@ -1,144 +1,125 @@
 # OpenB2C
 
-Composable application framework with Nix-based ontology definition and multi-protocol API generation.
+OpenB2C is an opinionated, composable platform for building operational systems for people, families, organisations, and businesses.
 
-## Overview
+The core assumption is that most real-world groups need the same underlying machinery: people, roles, events, resources, documents, tasks, payments, bookings, permissions, notifications, and history. OpenB2C should provide those pieces as reusable, prebuilt functionality that can be composed into a working system, rather than asking each app to invent a schema from scratch.
 
-OpenB2C lets a small team stitch together an extremely specific operating system for a business from reusable, prebuilt capabilities. A project starts with a small collection of Nix files that define the business ontology: entities, relationships, operations, guards, effects, and the domain modules being composed.
+Nix is the composition layer. A project imports the platform pieces it needs, applies ordinary Nix overrides where necessary, and OpenB2C generates the SQLite schema, TypeScript services, REST API, MCP tools, OpenAPI spec, and web UI from the evaluated configuration.
 
-That ontology is the source of truth for the whole system. OpenB2C evaluates the Nix composition and generates the database schema, TypeScript runtime services, REST API, MCP tools, OpenAPI spec, and web client from the same definition. The goal is to let a user compose standard modules, add a few bespoke rules, and avoid hand-maintaining separate backend, API, AI-tool, and web-client contracts.
+## Goal
 
-Authentication uses a fixed platform foundation with configurable domain authorization. OpenB2C standardizes credential handling and the generated `AuthContext`, while each composition declares operation scopes, record relationships, public access, and guards. See [Authentication And Authorization Principles](./docs/auth-and-authorization.md).
+The near-term goal is to prove that opinionated bundles can compose cleanly in one real pilot app: **Duchy Opera**.
 
-Generated API and UI behavior can also derive from field-level presentation, validation, ordering, privacy, redaction, derived display fields, relationship metadata, role/policy metadata, workflow metadata, audit requirements, seed data, and REST runtime conventions. See [Field Metadata](./docs/field-metadata.md), [Validation Metadata](./docs/validation-metadata.md), [Derived Fields](./docs/derived-fields.md), [Relationship Metadata](./docs/relationship-metadata.md), [Role And Policy Metadata](./docs/policy-metadata.md), [Workflow Metadata](./docs/workflow-metadata.md), [Audit Metadata](./docs/audit-metadata.md), [Seed Data](./docs/seed-data.md), and [Generated REST API](./docs/rest-api.md).
+That pilot needs both public and private functionality:
 
-## Features
+- Public commerce: performances, ticket sales, checkout, payments, customer entitlements.
+- Private operations: productions, rehearsal scheduling, resource planning, participant calls, production materials, and notifications.
 
-- **Declarative Schema**: Define tables, operations, guards, and effects in Nix
-- **Code Generation**: SQL, TypeScript types, services, REST + MCP servers, OpenAPI specs, and a basic web UI
-- **Multi-Protocol**: REST API for traditional clients, MCP for AI assistants
-- **Type-Safe**: End-to-end type safety from schema to runtime
-- **Modular**: Reusable domain modules (user, identity, ticketing, issue tracking, etc.)
-- **Federated Identity**: Ed25519-based auth, no passwords, cross-business verification
+Terminology customization is secondary for now. The priority is making the prebuilt pieces work together coherently and safely.
 
-## Examples
+## Model
 
-- **[Duchy Opera](./examples/duchyopera/)** - UK charity opera company ticketing platform
-- **[Ticketing](./examples/ticketing/)** - internal issue tracking system
+OpenB2C is organized around four conceptual layers:
 
-## Quick Start
+```text
+primitives
+  Shared product concepts used almost everywhere: principals, events,
+  resources, documents, commerce records, tasks, schedules, and history.
+
+capabilities
+  Fixed implementation machinery: auth, checkout, payments, calendar sync,
+  document storage, notifications, audit logging, migrations, and generated UI.
+
+bundles
+  Opinionated combinations of primitives and capabilities:
+  ticketed events, production scheduling, materials library, donations,
+  memberships, appointments, room booking, and issue tracking.
+
+apps
+  Specific compositions for a person, family, organisation, or business.
+  Apps mostly choose bundles and providers, but can also directly orchestrate
+  primitives and capabilities where no existing bundle fits.
+```
+
+The preferred path is to import bundles and configure them. Direct primitive and capability composition is available for genuinely app-specific needs or for patterns that have not yet become reusable bundles. Raw schema and custom behavior should be the last resort.
+
+### Principals
+
+The platform should avoid assuming that every known person is a login account. The broader concept is a principal:
+
+```text
+principal
+├── person
+├── organisation
+├── group
+└── service
+```
+
+A principal may or may not be able to authenticate. Roles are contextual: the same person can be a customer, donor, performer, volunteer, staff member, rehearsal participant, or administrator in different parts of the same app.
+
+### Events
+
+Events are a central primitive. They should support public and private use cases without creating a new schema for every event type.
+
+```text
+event
+├── kind                  # app-defined: performance, rehearsal, fundraiser
+├── visibility            # public | private
+├── schedule              # single | series | recurring
+├── participation         # none | rsvp | invite_only | ticketed | paid_registration | application
+├── resources             # venues, rooms, people, equipment
+├── materials             # linked documents/assets, optional
+└── workflow              # draft, published, cancelled, completed, etc.
+```
+
+Commerce belongs inside participation where it affects how someone joins an event. Resources are allocations with behavior such as display-only, availability-checking, or reservation/blocking. Materials are linked records, not a separate event mode.
+
+## Current Implementation
+
+The current codebase already implements the lower-level generation path:
+
+```text
+schema/
+├── base.nix              # current Nix option model
+├── modules/              # current reusable modules and business concepts
+├── lib/                  # expression and composition helpers
+├── codegen/              # SQL, TypeScript, REST, MCP, OpenAPI, UI generation
+└── ui/                   # generated web component runtime
+
+examples/
+├── duchyopera/           # first pilot app
+└── ticketing/            # internal workflow example
+```
+
+The architecture is expected to evolve from the current `schema/modules` layout toward clearer primitive, capability, and bundle boundaries. Existing Nix module imports remain the composition mechanism.
+
+## Commands
 
 ```bash
-# Setup (requires Nix with flakes)
+# Enter the dev shell
 direnv allow
 
-# Generate code from a composition
+# Generate an app
 compose examples/duchyopera/composition.nix
 
-# Run the framework test suite
+# Run the framework test suite from the dev shell
 bun test
 
-# Start the generated REST server
+# Start the generated Duchy Opera REST server
 cd examples/duchyopera
 bun run server
 
-# Or start the generated MCP server
+# Start the generated MCP server
 bun run mcp
 ```
 
-## Available Modules
+## Stack
 
-The framework provides these reusable domain modules:
-
-- **api_key** - Service authentication with scoped API keys
-- **artist** - Performers, crew, and contributors
-- **customer** - Customer accounts and profiles
-- **identity** - Ed25519-based federated authentication
-- **issue** - Issue tracking workflow
-- **label** - Labels and issue categorization
-- **performance** - Events with scheduling and capacity
-- **project** - Internal project organization
-- **ticket** - Ticket lifecycle (booking → confirmation → use)
-- **transaction** - Purchases, refunds, donations, and fulfillment records
-- **user** - Shared user identity base
-- **user_b2c** - B2C customer profile extension
-- **user_internal** - Internal staff/team profile extension
-- **venue** - Physical or virtual locations
-
-Examples compose these modules based on their needs.
-
-## Architecture
-
-```
-schema/                # Framework
-├── modules/           # Reusable domain modules
-│   ├── customer.nix
-│   ├── identity.nix
-│   ├── ticket.nix
-│   └── ...
-├── lib/expr.nix       # Guard expression builders
-├── base.nix           # Module system
-├── default.nix        # Module evaluator
-└── codegen/           # Code generators
-
-examples/              # Example compositions
-├── duchyopera/
-│   └── composition.nix  # Declares which modules to use
-└── ticketing/
-    └── composition.nix
-
-examples/*/generated/  # Generated code (gitignored)
-├── schema.sql         # SQLite DDL
-├── seed.sql           # Reference seed data
-├── fixtures.sql       # Optional example fixtures
-├── types.ts           # TypeScript interfaces
-├── services.ts        # Business logic
-├── server.ts          # REST API
-├── mcp.ts             # MCP server
-├── openapi.json       # OpenAPI spec
-└── ui/                # Basic generated web client
-```
-
-## Creating a New Example
-
-1. Create a composition file that imports the modules you need:
-   ```nix
-   # examples/myapp/composition.nix
-   let
-     lib = import <nixpkgs/lib>;
-     composeLib = import ../../schema/lib/compose.nix { inherit lib; };
-
-     modules = lib.evalModules {
-       modules = [
-         ../../schema/base.nix
-         ../../schema/modules/customer.nix
-         ../../schema/modules/identity.nix
-         # ... import other modules
-       ];
-     };
-
-   in {
-     organization = modules.config.organization;
-     tables = modules.config.tables;
-     refs = modules.config.refs;
-     relationships = modules.config.relationships;
-     operations = composeLib.processOperations modules.config.tables modules.config.relationships modules.config.operations;
-   }
-   ```
-
-2. Generate code:
-   ```bash
-   compose examples/myapp/composition.nix
-   ```
-
-## Tech Stack
-
-- **Runtime**: Bun
-- **Database**: SQLite
-- **Schema**: Nix
-- **Language**: TypeScript
-- **Protocols**: REST, MCP
+- Nix for composition
+- Bun and TypeScript for generated runtime code
+- SQLite for storage
+- REST, MCP, OpenAPI, and generated web UI outputs
 
 ## License
 
-See [LICENSE.md](LICENSE.md)
+See [LICENSE.md](LICENSE.md).
