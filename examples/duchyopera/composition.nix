@@ -53,6 +53,127 @@ let
                 active = 1;
               }
             ];
+            production = [
+              {
+                id = 1;
+                title = "The Magic Flute";
+                season = "Summer 2026";
+                description = "Duchy Opera pilot production for internal scheduling and public ticketing.";
+                status = "active";
+                opens_on = "2026-06-12";
+                closes_on = "2026-06-13";
+              }
+            ];
+            production_role = [
+              {
+                id = 1;
+                production_id = 1;
+                name = "Pamina";
+                category = "cast";
+                description = "Principal soprano role.";
+                required_count = 1;
+                status = "filled";
+              }
+              {
+                id = 2;
+                production_id = 1;
+                name = "Music director";
+                category = "creative";
+                description = "Conductor and music preparation lead.";
+                required_count = 1;
+                status = "filled";
+              }
+            ];
+            production_member = [
+              {
+                id = 1;
+                production_id = 1;
+                artist_id = 1;
+                role_id = 1;
+                responsibility = "Pamina";
+                status = "confirmed";
+              }
+              {
+                id = 2;
+                production_id = 1;
+                artist_id = 2;
+                role_id = 2;
+                responsibility = "Conductor";
+                status = "confirmed";
+              }
+            ];
+            rehearsal = [
+              {
+                id = 1;
+                production_id = 1;
+                title = "Act I music call";
+                venue_id = 1;
+                starts_at = "2026-05-20T18:30:00Z";
+                ends_at = "2026-05-20T21:30:00Z";
+                status = "published";
+                notes = "Cover Pamina entrance and Act I finale.";
+              }
+            ];
+            rehearsal_call = [
+              {
+                id = 1;
+                rehearsal_id = 1;
+                artist_id = 1;
+                role_id = 1;
+                call_status = "confirmed";
+                notes = "Called for full session.";
+              }
+              {
+                id = 2;
+                rehearsal_id = 1;
+                artist_id = 2;
+                role_id = 2;
+                call_status = "confirmed";
+                notes = "Music director call.";
+              }
+            ];
+            rehearsal_requirement = [
+              {
+                id = 1;
+                production_id = 1;
+                name = "Act I finale";
+                category = "music";
+                required_sessions = 2;
+                status = "scheduled";
+              }
+            ];
+            rehearsal_coverage = [
+              {
+                id = 1;
+                requirement_id = 1;
+                rehearsal_id = 1;
+                status = "planned";
+                notes = "First coverage pass.";
+              }
+            ];
+            production_material = [
+              {
+                id = 1;
+                production_id = 1;
+                title = "Current vocal score";
+                kind = "score";
+                visibility = "participants";
+                status = "current";
+                description = "Authoritative vocal score for the Summer 2026 production.";
+              }
+            ];
+            material_version = [
+              {
+                id = 1;
+                material_id = 1;
+                version_label = "v1";
+                storage_uri = "duchyopera://materials/magic-flute/vocal-score-v1.pdf";
+                checksum = "fixture";
+                status = "current";
+                notes = "Initial rehearsal score.";
+                created_by_user_id = 1;
+              }
+            ];
             performance = [
               {
                 id = 1;
@@ -174,6 +295,8 @@ let
       ../../schema/modules/transaction.nix
       ../../schema/modules/booking.nix
       ../../schema/modules/venue.nix
+      ../../schema/bundles/production-scheduling.nix
+      ../../schema/bundles/materials-library.nix
     ];
   };
 
