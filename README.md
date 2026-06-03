@@ -74,6 +74,80 @@ event
 
 Commerce belongs inside participation where it affects how someone joins an event. Resources are allocations with behavior such as display-only, availability-checking, or reservation/blocking. Materials are linked records, not a separate event mode.
 
+### Admin Surface Inference
+
+Generated admin interfaces should be workflow-first, but they should not require a separate hand-written UI definition. The admin surface should be inferred from the same structural model that defines the backend.
+
+The source of truth is the evaluated entity graph:
+
+```text
+entities
+├── fields
+├── foreign-key relationships
+├── validations
+├── operations
+├── workflows
+└── field metadata
+
+        ↓ inferred
+
+admin surfaces
+├── workspaces around significant graph nodes
+├── related records shown from every relevant perspective
+├── workflow boards from lifecycle operations
+├── calendars from temporal records
+├── matrices from bridge/junction records
+└── dashboards from counts, dates, status, and recent activity
+```
+
+Foreign keys are the primary structural signal. The model is a graph, not a tree: a record can belong to several important perspectives at once. For example, a ticket sits between a user and a performance, so it should be visible from both the customer perspective and the performance/sales perspective.
+
+```text
+user ── ticket ── performance
+
+derived perspectives
+├── Users
+│   └── tickets, bookings, payments, history
+└── Performances
+    └── tickets, bookings, sales state
+```
+
+For Duchy Opera internal operations, the graph should naturally produce production-centred surfaces without manually declaring tabs:
+
+```text
+production
+├── rehearsal
+├── rehearsal_requirement
+├── production_material
+├── production_member ── artist
+└── rehearsal_coverage ── rehearsal
+```
+
+That should infer:
+
+```text
+Productions
+├── overview
+├── rehearsals list/calendar
+├── people
+├── coverage matrix
+└── materials
+```
+
+The first implementation should derive as much as possible from existing declarations and avoid extra metadata. If the graph produces awkward or ambiguous surfaces, additional metadata can be introduced later as semantic hints rather than a parallel UI schema.
+
+Possible future hints:
+
+```text
+bundle membership       # which entities belong to a reusable bundle
+entity prominence       # ordering/visibility, not ownership
+relationship semantics  # owner, participant, resource, author, customer
+field semantics         # start/end, display label, money, status
+view preference         # calendar, matrix, timeline, list
+```
+
+These hints should refine inference only where needed. They should not replace the relationship graph as the main source of structure.
+
 ## Current Implementation
 
 The current codebase already implements the lower-level generation path:
