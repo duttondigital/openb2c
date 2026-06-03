@@ -634,6 +634,19 @@ const nav = `
     min-width: 0;
     gap: 5px;
   }
+  :host(ob-nav) .menu-toggle {
+    display: none;
+    width: 38px;
+    min-width: 38px;
+    padding: 8px;
+  }
+  :host(ob-nav) .menu-toggle span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+  }
   :host(ob-nav) .title {
     font-weight: 800;
     font-size: 17px;
@@ -644,6 +657,10 @@ const nav = `
     font-size: 12px;
     line-height: 1.4;
     margin-top: 5px;
+  }
+  :host(ob-nav) .nav-groups {
+    display: grid;
+    gap: 18px;
   }
   :host(ob-nav) .group { display: grid; gap: 4px; }
   :host(ob-nav) .account {
@@ -660,6 +677,7 @@ const nav = `
   :host(ob-nav) .nav-link {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     width: 100%;
     min-height: 38px;
     padding: 8px 10px;
@@ -695,6 +713,32 @@ const nav = `
       min-height: auto;
       border-right: 0;
       border-bottom: 1px solid var(--ob-border);
+      padding: 12px;
+      gap: 12px;
+    }
+    :host(ob-nav) .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0;
+      border-bottom: 0;
+    }
+    :host(ob-nav) .menu-toggle {
+      display: inline-grid;
+      place-items: center;
+      gap: 4px;
+    }
+    :host(ob-nav) .nav-groups,
+    :host(ob-nav) .account {
+      display: none;
+    }
+    :host(ob-nav) nav.expanded .nav-groups,
+    :host(ob-nav) nav.expanded .account {
+      display: grid;
+    }
+    :host(ob-nav) nav.expanded .nav-groups {
+      gap: 14px;
     }
   }
 `;

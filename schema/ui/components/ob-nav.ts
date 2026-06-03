@@ -8,6 +8,7 @@ import { stylesheetLink } from "../style-link";
 import "./ob-auth-menu";
 
 export class ObNav extends HTMLElement {
+  private _expanded = false;
   private _onHashChange = () => this._highlight();
   private _onAuthChanged = () => {
     void this._render();
@@ -44,7 +45,7 @@ export class ObNav extends HTMLElement {
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
-      <nav aria-label="Primary">
+      <nav aria-label="Primary" class="${this._expanded ? "expanded" : ""}">
         <div class="brand">
           <div class="brand-lockup">
             ${logo ? `<img class="brand-logo" src="${escapeAttr(logo.src)}" alt="${escapeAttr(logoAlt)}" />` : ""}
@@ -53,8 +54,12 @@ export class ObNav extends HTMLElement {
               ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
             </div>
           </div>
+          <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="${this._expanded ? "true" : "false"}">
+            <span></span><span></span><span></span>
+          </button>
         </div>
-        ${groups.map((group) => {
+        <div class="nav-groups">
+          ${groups.map((group) => {
           const groupItems = items.filter((item) => (item.group || "data") === group.id);
           const entries = [
             ...groupItems.map((item) => ({ path: item.path, label: item.label, entity: item.entity, priority: item.displayPriority ?? 1000 })),
@@ -66,19 +71,27 @@ export class ObNav extends HTMLElement {
               ${entries.map((item) => `<button type="button" class="nav-link" data-href="${escapeAttr(item.path)}" data-entity="${escapeAttr(item.entity)}">${escapeHtml(item.label)}</button>`).join("")}
             </div>
           `;
-        }).join("")}
+          }).join("")}
+        </div>
         <div class="account">
           <ob-auth-menu placement="sidebar"></ob-auth-menu>
         </div>
       </nav>
     `;
 
+    this.shadowRoot!.querySelector<HTMLButtonElement>(".menu-toggle")?.addEventListener("click", async () => {
+      this._expanded = !this._expanded;
+      await this._render();
+    });
+
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
       button.addEventListener("click", () => {
         const href = button.dataset.href || "";
         if (!href.startsWith("#/")) return;
         location.hash = href;
+        this._expanded = false;
         this._highlight();
+        void this._render();
       });
     });
 

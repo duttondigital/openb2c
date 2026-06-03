@@ -96,11 +96,12 @@ export class ObAdminWorkspace extends HTMLElement {
           ${edges.map((edge) => {
             const entity = direction === "inbound" ? edge.sourceEntity : edge.targetEntity;
             const href = workspaceHref(api, entity);
-            const label = pluralDisplayName(entity);
+            const label = contextualPluralDisplayName(entity, this.entity, direction === "inbound" ? edge : null);
+            const hint = relationshipHint(edge, direction, this.entity);
             return `
               <a class="link-card" href="${escapeAttr(href)}">
                 <strong>${escapeHtml(label)}</strong>
-                <span>${escapeHtml(edge.label)}</span>
+                ${hint ? `<span>${escapeHtml(hint)}</span>` : ""}
               </a>
             `;
           }).join("")}
@@ -117,7 +118,7 @@ export class ObAdminWorkspace extends HTMLElement {
         <div class="link-grid">
           ${entities.map((entity) => `
             <a class="link-card" href="#/${escapeAttr(entity)}s">
-              <strong>${escapeHtml(pluralDisplayName(entity))}</strong>
+              <strong>${escapeHtml(contextualPluralDisplayName(entity, this.entity))}</strong>
               <span>Context</span>
             </a>
           `).join("")}
@@ -159,6 +160,41 @@ function fallbackWorkspace(api: ObApi, entity: string): AdminWorkspace {
 
 function workspaceHref(api: ObApi, entity: string): string {
   return api.getAdminWorkspace(entity) ? `#/workspaces/${entity}` : `#/${entity}s`;
+}
+
+function contextualPluralDisplayName(entity: string, contextEntity: string, edge: EntityGraphEdge | null = null): string {
+  return pluralDisplayName(contextualEntityName(entity, contextEntity, edge));
+}
+
+function contextualEntityName(entity: string, contextEntity: string, edge: EntityGraphEdge | null): string {
+  const candidates = [
+    contextEntity,
+    edge?.sourceField.replace(/_id$/, ""),
+    edge?.targetEntity,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    const stripped = stripEntityPrefix(entity, candidate);
+    if (stripped !== entity) return stripped;
+  }
+  return entity;
+}
+
+function stripEntityPrefix(entity: string, prefix: string): string {
+  const entityParts = entity.split("_");
+  const prefixParts = prefix.split("_");
+  if (prefixParts.length >= entityParts.length) return entity;
+  if (!prefixParts.every((part, index) => entityParts[index] === part)) return entity;
+  return entityParts.slice(prefixParts.length).join("_") || entity;
+}
+
+function relationshipHint(edge: EntityGraphEdge, direction: "inbound" | "outbound", contextEntity: string): string {
+  if (direction === "outbound") return edge.label;
+  const fieldBase = edge.sourceField.replace(/_id$/, "");
+  if (edge.targetEntity === contextEntity && (fieldBase === contextEntity || edge.label.toLowerCase() === contextEntity.replace(/_/g, " "))) {
+    return "";
+  }
+  return edge.label;
 }
 
 function groupLabel(api: ObApi, groupId?: string): string {

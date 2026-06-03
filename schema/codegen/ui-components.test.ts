@@ -183,6 +183,8 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("getAdminWorkspaces");
     expect(adminNav).toContain("getAdminWorkspaceGroups");
     expect(adminNav).not.toContain("getWorkflowScreens");
+    expect(adminNav).toContain("menu-toggle");
+    expect(adminNav).toContain("aria-expanded");
     expect(adminNav).toContain('canCollection(item.entity, "read")');
     expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");
@@ -358,6 +360,16 @@ describe("generated UI web components", () => {
     expect(changeDetailsButtonCount).toBe(1);
     expect(addToCartIndex).toBeGreaterThan(changeDetailsIndex);
     expect(publicStyles).toContain(":host(ob-commerce) .split-actions{align-items:center;justify-content:flex-end}");
+  });
+
+  test("admin navigation collapses by default on mobile", () => {
+    const adminStyles = genAdminStylesheet();
+
+    expect(adminStyles).toContain(":host(ob-nav) .menu-toggle{display:none");
+    expect(adminStyles).toContain(":host(ob-nav) .nav-groups,:host(ob-nav) .account{display:none}");
+    expect(adminStyles).toContain(":host(ob-nav) nav.expanded .nav-groups,:host(ob-nav) nav.expanded .account{display:grid}");
+    expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");
+    expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px}");
   });
 
   test("public and admin bundles only include their required components", async () => {
