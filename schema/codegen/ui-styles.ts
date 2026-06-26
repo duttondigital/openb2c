@@ -30,6 +30,7 @@ const documentBase = `
     --ob-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
     --ob-shadow-sm: 0 1px 2px rgba(36, 37, 33, 0.06);
     --ob-nav-width: 248px;
+    --ob-nav-collapsed-width: 64px;
     --ob-font: system-ui, -apple-system, sans-serif;
   }
   html {
@@ -146,6 +147,7 @@ const adminShell = `
   ${shellBaseStyles("ob-admin-app")}
   ob-admin-app {
     --ob-nav-width: 248px;
+    --ob-nav-collapsed-width: 64px;
   }
   ob-admin-app .app {
     display: flex;
@@ -153,6 +155,11 @@ const adminShell = `
   }
   ob-admin-app ob-nav {
     flex: 0 0 var(--ob-nav-width);
+    min-width: 0;
+    transition: flex-basis 0.18s ease;
+  }
+  ob-admin-app ob-nav[collapsed] {
+    flex-basis: var(--ob-nav-collapsed-width);
   }
   ob-admin-app ob-admin-route-outlet {
     flex: 1;
@@ -175,6 +182,9 @@ const adminShell = `
       flex-direction: column;
     }
     ob-admin-app ob-nav {
+      flex-basis: auto;
+    }
+    ob-admin-app ob-nav[collapsed] {
       flex-basis: auto;
     }
     ob-admin-app ob-admin-route-outlet {
@@ -607,6 +617,8 @@ const nav = `
     top: 0;
     height: 100vh;
     z-index: 2;
+    min-width: 0;
+    overflow: hidden;
   }
   :host(ob-nav) nav {
     width: var(--ob-nav-width);
@@ -617,8 +629,17 @@ const nav = `
     display: flex;
     flex-direction: column;
     gap: 18px;
+    overflow: hidden;
+    transition: width 0.18s ease;
   }
   :host(ob-nav) .brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    height: 52px;
+    box-sizing: border-box;
+    flex: 0 0 52px;
     padding: 0 8px 14px;
     border-bottom: 1px solid var(--ob-border);
   }
@@ -626,6 +647,7 @@ const nav = `
     display: flex;
     align-items: center;
     min-width: 0;
+    overflow: hidden;
     gap: 10px;
   }
   :host(ob-nav) .brand-logo {
@@ -637,7 +659,29 @@ const nav = `
   :host(ob-nav) .brand-copy {
     display: grid;
     min-width: 0;
+    overflow: hidden;
     gap: 5px;
+  }
+  :host(ob-nav) .brand-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :host(ob-nav) .collapse-toggle {
+    display: inline-grid;
+    width: 34px;
+    min-width: 34px;
+    place-items: center;
+    padding: 8px;
+  }
+  :host(ob-nav) .collapse-icon {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   :host(ob-nav) .menu-toggle {
     display: none;
@@ -656,12 +700,9 @@ const nav = `
     font-weight: 800;
     font-size: 17px;
     line-height: 1.2;
-  }
-  :host(ob-nav) .description {
-    color: var(--ob-text-muted);
-    font-size: 12px;
-    line-height: 1.4;
-    margin-top: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   :host(ob-nav) .nav-groups {
     display: grid;
@@ -708,6 +749,23 @@ const nav = `
     border-color: var(--ob-primary);
     box-shadow: var(--ob-shadow-sm);
   }
+  @media (min-width: 781px) {
+    :host(ob-nav[collapsed]) nav {
+      width: var(--ob-nav-collapsed-width);
+      padding: 18px 8px;
+      align-items: center;
+    }
+    :host(ob-nav[collapsed]) .brand {
+      width: 100%;
+      justify-content: center;
+      padding: 0 0 14px;
+    }
+    :host(ob-nav[collapsed]) .brand-lockup,
+    :host(ob-nav[collapsed]) .nav-groups,
+    :host(ob-nav[collapsed]) .account {
+      display: none;
+    }
+  }
   @media (max-width: 780px) {
     :host(ob-nav) {
       position: static;
@@ -733,6 +791,9 @@ const nav = `
       display: inline-grid;
       place-items: center;
       gap: 4px;
+    }
+    :host(ob-nav) .collapse-toggle {
+      display: none;
     }
     :host(ob-nav) .nav-groups,
     :host(ob-nav) .account {

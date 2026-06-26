@@ -22,6 +22,7 @@ export const theme = `
     --ob-focus: 0 0 0 3px rgba(17, 17, 17, 0.16);
     --ob-shadow-sm: 0 1px 2px rgba(36, 37, 33, 0.06);
     --ob-nav-width: 248px;
+    --ob-nav-collapsed-width: 64px;
     --ob-font: system-ui, -apple-system, sans-serif;
     font-family: var(--ob-font);
     color: var(--ob-text);

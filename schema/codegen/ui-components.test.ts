@@ -183,12 +183,19 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("getAdminWorkspaces");
     expect(adminNav).toContain("getAdminWorkspaceGroups");
     expect(adminNav).not.toContain("getWorkflowScreens");
+    expect(adminNav).not.toContain("apiDescription");
     expect(adminNav).toContain("menu-toggle");
     expect(adminNav).toContain("aria-expanded");
     expect(adminNav).toContain('canCollection(item.entity, "read")');
     expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");
     expect(adminNav).toContain('<ob-auth-menu placement="sidebar">');
+    expect(adminNav).toContain("collapse-toggle");
+    expect(adminNav).toContain("sidebarCollapseIcon");
+    expect(adminNav).toContain('class="collapse-icon"');
+    expect(adminNav).toContain("openb2c.admin.navCollapsed");
+    expect(adminNav).toContain('this.toggleAttribute("collapsed", this._collapsed)');
+    expect(adminNav).toContain("_syncCollapsedState");
     expect(authMenu).toContain("#/login");
     expect(authMenu).toContain("#/account");
     expect(authMenu).not.toContain("./ob-auth-panel");
@@ -388,6 +395,14 @@ describe("generated UI web components", () => {
     const adminStyles = genAdminStylesheet();
 
     expect(adminStyles).toContain(":host(ob-nav) .menu-toggle{display:none");
+    expect(adminStyles).toContain("ob-admin-app ob-nav{flex:0 0 var(--ob-nav-width);min-width:0;transition:flex-basis 0.18s ease}");
+    expect(adminStyles).toContain(":host(ob-nav){position:sticky;top:0;height:100vh;z-index:2;min-width:0;overflow:hidden}");
+    expect(adminStyles).toContain(":host(ob-nav) .brand{display:flex;align-items:center;justify-content:space-between;gap:10px;height:52px");
+    expect(adminStyles).toContain(":host(ob-nav) .title{font-weight:800;font-size:17px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}");
+    expect(adminStyles).toContain(":host(ob-nav) .collapse-toggle{display:inline-grid");
+    expect(adminStyles).toContain(":host(ob-nav) .collapse-icon{width:18px;height:18px;fill:none;stroke:currentColor");
+    expect(adminStyles).toContain("ob-admin-app ob-nav[collapsed]{flex-basis:var(--ob-nav-collapsed-width)}");
+    expect(adminStyles).toContain(":host(ob-nav[collapsed]) nav{width:var(--ob-nav-collapsed-width)");
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups,:host(ob-nav) .account{display:none}");
     expect(adminStyles).toContain(":host(ob-nav) nav.expanded .nav-groups,:host(ob-nav) nav.expanded .account{display:grid}");
     expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");

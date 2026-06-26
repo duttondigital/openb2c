@@ -3,12 +3,13 @@
  */
 import { ObApi } from "./ob-api";
 import { escapeAttr, escapeHtml } from "../format";
-import { apiDescription, apiLogo } from "../shell";
+import { apiLogo } from "../shell";
 import { stylesheetLink } from "../style-link";
 import "./ob-auth-menu";
 
 export class ObNav extends HTMLElement {
   private _expanded = false;
+  private _collapsed = readCollapsedState();
   private _onHashChange = () => this._highlight();
   private _onAuthChanged = () => {
     void this._render();
@@ -39,9 +40,11 @@ export class ObNav extends HTMLElement {
     const groups = api.getAdminWorkspaceGroups();
     const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
     const appTitle = escapeHtml(appTitleRaw);
-    const appDescription = escapeHtml(apiDescription(api));
     const logo = apiLogo(api);
     const logoAlt = logo?.alt || `${appTitleRaw} logo`;
+    this.toggleAttribute("collapsed", this._collapsed);
+    const collapseLabel = this._collapsed ? "Expand sidebar" : "Collapse sidebar";
+    const collapseIcon = sidebarCollapseIcon(this._collapsed);
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
@@ -51,12 +54,16 @@ export class ObNav extends HTMLElement {
             ${logo ? `<img class="brand-logo" src="${escapeAttr(logo.src)}" alt="${escapeAttr(logoAlt)}" />` : ""}
             <div class="brand-copy">
               <div class="title">${appTitle}</div>
-              ${appDescription ? `<div class="description">${appDescription}</div>` : ""}
             </div>
           </div>
-          <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="${this._expanded ? "true" : "false"}">
-            <span></span><span></span><span></span>
-          </button>
+          <div class="brand-actions">
+            <button class="collapse-toggle" type="button" aria-label="${escapeAttr(collapseLabel)}" title="${escapeAttr(collapseLabel)}" aria-pressed="${this._collapsed ? "true" : "false"}">
+              ${collapseIcon}
+            </button>
+            <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="${this._expanded ? "true" : "false"}">
+              <span></span><span></span><span></span>
+            </button>
+          </div>
         </div>
         <div class="nav-groups">
           ${groups.map((group) => {
@@ -78,6 +85,13 @@ export class ObNav extends HTMLElement {
         </div>
       </nav>
     `;
+    this._syncCollapsedState();
+
+    this.shadowRoot!.querySelector<HTMLButtonElement>(".collapse-toggle")?.addEventListener("click", () => {
+      this._collapsed = !this._collapsed;
+      writeCollapsedState(this._collapsed);
+      this._syncCollapsedState();
+    });
 
     this.shadowRoot!.querySelector<HTMLButtonElement>(".menu-toggle")?.addEventListener("click", async () => {
       this._expanded = !this._expanded;
@@ -98,6 +112,17 @@ export class ObNav extends HTMLElement {
     this._highlight();
   }
 
+  private _syncCollapsedState() {
+    this.toggleAttribute("collapsed", this._collapsed);
+    const collapseLabel = this._collapsed ? "Expand sidebar" : "Collapse sidebar";
+    const button = this.shadowRoot!.querySelector<HTMLButtonElement>(".collapse-toggle");
+    if (!button) return;
+    button.setAttribute("aria-label", collapseLabel);
+    button.setAttribute("title", collapseLabel);
+    button.setAttribute("aria-pressed", this._collapsed ? "true" : "false");
+    button.innerHTML = sidebarCollapseIcon(this._collapsed);
+  }
+
   private _highlight() {
     const hash = location.hash || "#/";
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
@@ -114,3 +139,34 @@ export class ObNav extends HTMLElement {
 }
 
 customElements.define("ob-nav", ObNav);
+
+function sidebarCollapseIcon(collapsed: boolean): string {
+  const arrow = collapsed
+    ? `<path d="M14 8l4 4-4 4" />`
+    : `<path d="M18 8l-4 4 4 4" />`;
+  return `
+    <svg class="collapse-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      ${arrow}
+    </svg>
+  `;
+}
+
+const NAV_COLLAPSED_KEY = "openb2c.admin.navCollapsed";
+
+function readCollapsedState(): boolean {
+  try {
+    return localStorage.getItem(NAV_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsedState(value: boolean): void {
+  try {
+    localStorage.setItem(NAV_COLLAPSED_KEY, value ? "true" : "false");
+  } catch {
+    // Ignore unavailable storage; the toggle still works for the current render.
+  }
+}
