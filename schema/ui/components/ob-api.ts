@@ -75,6 +75,10 @@ export interface AdminWorkspace extends NavigationItem {
   supportEntities: string[];
 }
 
+export interface AdminTemporalEntity extends NavigationItem {
+  temporalFields: string[];
+}
+
 export interface WorkflowGroup {
   label?: string;
   description?: string;
@@ -706,6 +710,32 @@ export class ObApi extends HTMLElement {
     return this.getAdminWorkspaces(options).find((workspace) => workspace.entity === entity) || null;
   }
 
+  getAdminTemporalEntities(options: { includeInternal?: boolean } = {}): AdminTemporalEntity[] {
+    const graph = this.getEntityGraph(options);
+    const navigationItems = new Map(this.getNavigationItems({ includeInternal: true }).map((item) => [item.entity, item]));
+    return graph.nodes
+      .filter((node) => node.temporalFields.length > 0)
+      .filter((node) => options.includeInternal || !node.isInternal)
+      .filter((node) => temporalFieldsHaveCalendarAnchor(this.getSchema(node.entity), node.temporalFields))
+      .map((node, index) => {
+        const item = navigationItems.get(node.entity);
+        return {
+          entity: node.entity,
+          path: `#/${node.entity}s`,
+          label: item?.label || pluralLabel(titleCase(node.entity)),
+          group: item?.group || workspaceGroup(node),
+          displayPriority: item?.displayPriority ?? workspacePriority(node, index),
+          internal: node.isInternal,
+          temporalFields: node.temporalFields,
+        };
+      })
+      .sort((a, b) => {
+        const groupDelta = this._navigationGroupPriority(a.group) - this._navigationGroupPriority(b.group);
+        if (groupDelta !== 0) return groupDelta;
+        return sortNavigationItems(a, b);
+      });
+  }
+
   getAdminWorkspaceGroups(options: { includeInternal?: boolean } = {}): NavigationGroup[] {
     const workspaces = this.getAdminWorkspaces(options);
     const usedGroups = new Set(workspaces.map((workspace) => workspace.group || "data"));
@@ -979,6 +1009,16 @@ function isTemporalField(field: string, prop: any): boolean {
   const format = prop?.["x-openb2c-field"]?.format || prop?.format || "";
   if (format === "date" || format === "time" || format === "date-time") return true;
   return /(^|_)(date|time|starts_at|ends_at|opens_on|closes_on|expires_at)$/.test(field);
+}
+
+function temporalFieldsHaveCalendarAnchor(schema: any | null, fields: string[]): boolean {
+  return fields.some((field) => {
+    const prop = schema?.properties?.[field];
+    const format = prop?.["x-openb2c-field"]?.format || prop?.format || "";
+    if (format === "date" || format === "date-time") return true;
+    if (format === "time") return false;
+    return /(^|_)(date|starts_at|ends_at|opens_on|closes_on|expires_at)$/.test(field) || field.endsWith("_at");
+  });
 }
 
 function isSupportEntity(

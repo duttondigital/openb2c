@@ -11,6 +11,7 @@ export { ObAccountSummary } from "./components/ob-account-summary";
 export { ObNav } from "./components/ob-nav";
 export { ObRouteOutlet } from "./components/ob-route-outlet";
 export { ObAdminRouteOutlet } from "./components/ob-admin-route-outlet";
+export { ObAdminCalendar } from "./components/ob-admin-calendar";
 export { ObAdminWorkspace } from "./components/ob-admin-workspace";
 export { ObEntityList } from "./components/ob-entity-list";
 export { ObEntityForm } from "./components/ob-entity-form";

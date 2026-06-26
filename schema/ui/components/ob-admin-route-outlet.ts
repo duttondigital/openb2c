@@ -70,6 +70,11 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: board };
     }
 
+    if (hash === "/calendar") {
+      await import("./ob-admin-calendar");
+      return { node: document.createElement("ob-admin-calendar") };
+    }
+
     if ((match = hash.match(/^\/workspaces\/([a-z_]+)$/))) {
       await import("./ob-admin-workspace");
       const workspace = document.createElement("ob-admin-workspace");

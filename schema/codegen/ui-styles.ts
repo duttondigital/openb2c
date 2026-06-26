@@ -1067,6 +1067,194 @@ const adminWorkspace = `
   }
 `;
 
+const adminCalendar = `
+  :host(ob-admin-calendar) {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+  :host(ob-admin-calendar) .calendar-shell {
+    display: grid;
+    gap: 18px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  :host(ob-admin-calendar) .calendar-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  :host(ob-admin-calendar) .eyebrow,
+  :host(ob-admin-calendar) .calendar-summary,
+  :host(ob-admin-calendar) .calendar-filter span {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  :host(ob-admin-calendar) h1 {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 800;
+  }
+  :host(ob-admin-calendar) .calendar-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-admin-calendar) .segmented,
+  :host(ob-admin-calendar) .month-controls {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  :host(ob-admin-calendar) .segmented button.active {
+    background: var(--ob-primary);
+    border-color: var(--ob-primary);
+    color: white;
+  }
+  :host(ob-admin-calendar) .calendar-filter {
+    display: grid;
+    gap: 6px;
+    min-width: 180px;
+  }
+  :host(ob-admin-calendar) .month-controls strong {
+    min-width: 150px;
+    text-align: center;
+  }
+  :host(ob-admin-calendar) .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(110px, 1fr));
+    gap: 1px;
+    overflow-x: auto;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-border);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-admin-calendar) .weekday,
+  :host(ob-admin-calendar) .calendar-day {
+    min-width: 110px;
+    background: var(--ob-bg);
+  }
+  :host(ob-admin-calendar) .weekday {
+    padding: 9px 10px;
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  :host(ob-admin-calendar) .calendar-day {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-height: 118px;
+    padding: 9px;
+  }
+  :host(ob-admin-calendar) .calendar-day.outside {
+    background: var(--ob-bg-subtle);
+    color: var(--ob-text-muted);
+  }
+  :host(ob-admin-calendar) .calendar-day.today {
+    box-shadow: inset 0 0 0 2px var(--ob-primary);
+  }
+  :host(ob-admin-calendar) .day-number {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  :host(ob-admin-calendar) .day-events,
+  :host(ob-admin-calendar) .calendar-list {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  :host(ob-admin-calendar) .calendar-event,
+  :host(ob-admin-calendar) .event-row {
+    min-width: 0;
+    border-left: 3px solid var(--ob-primary);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+    color: var(--ob-text);
+    text-decoration: none;
+  }
+  :host(ob-admin-calendar) .calendar-event {
+    display: grid;
+    gap: 2px;
+    padding: 6px 7px;
+  }
+  :host(ob-admin-calendar) .calendar-event span,
+  :host(ob-admin-calendar) .more-events,
+  :host(ob-admin-calendar) .event-row span,
+  :host(ob-admin-calendar) .event-row em {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-style: normal;
+  }
+  :host(ob-admin-calendar) .calendar-event strong,
+  :host(ob-admin-calendar) .event-row strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  :host(ob-admin-calendar) .calendar-event:hover,
+  :host(ob-admin-calendar) .event-row:hover {
+    background: var(--ob-bg-alt);
+    text-decoration: none;
+  }
+  :host(ob-admin-calendar) .more-events {
+    padding: 2px 7px;
+    font-weight: 800;
+  }
+  :host(ob-admin-calendar) .event-row {
+    display: grid;
+    grid-template-columns: 150px 96px minmax(0, 1fr) 140px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  :host(ob-admin-calendar) .empty-state {
+    color: var(--ob-text-muted);
+    padding: 16px;
+    border: 1px dashed var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
+  :host(ob-admin-calendar) .event-color-1 { border-left-color: var(--ob-accent); }
+  :host(ob-admin-calendar) .event-color-2 { border-left-color: var(--ob-success); }
+  :host(ob-admin-calendar) .event-color-3 { border-left-color: var(--ob-warning); }
+  :host(ob-admin-calendar) .event-color-4 { border-left-color: var(--ob-danger); }
+  :host(ob-admin-calendar) .event-color-5 { border-left-color: var(--ob-border-strong); }
+  @media (max-width: 760px) {
+    :host(ob-admin-calendar) .calendar-header,
+    :host(ob-admin-calendar) .calendar-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    :host(ob-admin-calendar) .calendar-filter,
+    :host(ob-admin-calendar) .calendar-filter select,
+    :host(ob-admin-calendar) .segmented,
+    :host(ob-admin-calendar) .segmented button,
+    :host(ob-admin-calendar) .month-controls,
+    :host(ob-admin-calendar) .month-controls button {
+      width: 100%;
+    }
+    :host(ob-admin-calendar) .event-row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+`;
+
 const entityList = `
   :host(ob-entity-list) {
     display: block;
@@ -1553,6 +1741,7 @@ export function genAdminStylesheet(): string {
     accountSummary,
     nav,
     adminWorkspace,
+    adminCalendar,
     entityList,
     entityForm,
     entityDetail,

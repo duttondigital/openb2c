@@ -38,6 +38,7 @@ export class ObNav extends HTMLElement {
 
     const items = api.getAdminWorkspaces().filter((item) => api.canCollection(item.entity, "read"));
     const groups = api.getAdminWorkspaceGroups();
+    const temporalEntities = api.getAdminTemporalEntities().filter((item) => api.canCollection(item.entity, "read"));
     const appTitleRaw = api.spec?.info.title?.replace(/\s+API$/, "") || "App";
     const appTitle = escapeHtml(appTitleRaw);
     const logo = apiLogo(api);
@@ -66,6 +67,12 @@ export class ObNav extends HTMLElement {
           </div>
         </div>
         <div class="nav-groups">
+          ${temporalEntities.length > 0 ? `
+            <div class="group">
+              <div class="group-title">Views</div>
+              <button type="button" class="nav-link" data-href="#/calendar">Calendar</button>
+            </div>
+          ` : ""}
           ${groups.map((group) => {
           const groupItems = items.filter((item) => (item.group || "data") === group.id);
           const entries = [

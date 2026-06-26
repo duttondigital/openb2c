@@ -41,22 +41,6 @@ in
       };
       validation.enum = [ "planning" "active" "completed" "cancelled" ];
     };
-    opens_on = {
-      type = "text";
-      metadata = {
-        label = "Opens";
-        format = "date";
-        displayPriority = 50;
-      };
-    };
-    closes_on = {
-      type = "text";
-      metadata = {
-        label = "Closes";
-        format = "date";
-        displayPriority = 60;
-      };
-    };
     created_at = {
       type = "text";
       default = "CURRENT_TIMESTAMP";
@@ -74,6 +58,21 @@ in
         format = "date-time";
         displayPriority = 1010;
       };
+    };
+  };
+
+  tables.performance.production_id = {
+    type = "integer";
+    required = true;
+    references = "production(id)";
+    metadata = {
+      label = "Production";
+      displayPriority = 15;
+    };
+    relationship = {
+      label = "Production";
+      description = "Production this performance belongs to.";
+      targetLabel = config.refs.production.title;
     };
   };
 
@@ -415,6 +414,10 @@ in
 
   indexes.production.by_status = {
     columns = [ "status" ];
+  };
+
+  indexes.performance.by_production_date = {
+    columns = [ "production_id" "date" ];
   };
 
   indexes.production_role.by_production_category = {

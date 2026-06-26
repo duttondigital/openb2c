@@ -116,6 +116,13 @@ describe("generated UI browser automation", () => {
     const { context, page, errors } = await newPage();
 
     try {
+      await page.goto(`${staticApp.baseUrl}/admin/index.html#/calendar`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("heading", { name: "Calendar" }).waitFor();
+      const calendarOptions = await page.locator("ob-admin-calendar select option").allTextContents();
+      expect(calendarOptions).toEqual(expect.arrayContaining(["Performances", "Rehearsals"]));
+      expect(calendarOptions).not.toContain("Productions");
+      await page.locator("ob-admin-calendar").getByText("The Magic Flute").first().waitFor();
+
       await page.goto(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`, { waitUntil: "domcontentloaded" });
       await page.getByRole("heading", { name: "The Magic Flute" }).waitFor();
       await page.getByRole("heading", { name: "Coverage matrix" }).waitFor();

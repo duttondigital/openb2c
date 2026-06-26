@@ -60,8 +60,6 @@ let
                 season = "Summer 2026";
                 description = "Duchy Opera pilot production for internal scheduling and public ticketing.";
                 status = "active";
-                opens_on = "2026-06-12";
-                closes_on = "2026-06-13";
               }
             ];
             production_role = [
@@ -177,6 +175,7 @@ let
             performance = [
               {
                 id = 1;
+                production_id = 1;
                 title = "The Magic Flute";
                 venue_id = 1;
                 date = "2026-06-12";
@@ -188,6 +187,7 @@ let
               }
               {
                 id = 2;
+                production_id = 1;
                 title = "Cancelled Gala";
                 venue_id = 1;
                 date = "2026-06-13";

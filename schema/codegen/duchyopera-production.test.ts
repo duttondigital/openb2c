@@ -50,6 +50,14 @@ describe("Duchy Opera production backend", () => {
       expect(schema.tables[table]).toBeDefined();
     }
 
+    expect(schema.tables.production.opens_on).toBeUndefined();
+    expect(schema.tables.production.closes_on).toBeUndefined();
+    expect(schema.tables.performance.production_id).toMatchObject({
+      type: "integer",
+      required: true,
+      references: "production(id)",
+    });
+
     expect(schema.workflows?.groups).toMatchObject({
       productionLifecycle: { label: "Production lifecycle" },
       rehearsalLifecycle: { label: "Rehearsal lifecycle" },
@@ -76,9 +84,20 @@ describe("Duchy Opera production backend", () => {
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS production");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS rehearsal");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS production_material");
+    expect(sql).not.toContain("opens_on");
+    expect(sql).not.toContain("closes_on");
+    expect(sql).toContain("production_id INTEGER NOT NULL REFERENCES production(id)");
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS performance_by_production_date");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS rehearsal_call_unique_rehearsal_artist");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS material_version_unique_material_version");
 
+    expect(openapi.components.schemas.Production.properties.opens_on).toBeUndefined();
+    expect(openapi.components.schemas.Production.properties.closes_on).toBeUndefined();
+    expect(openapi.components.schemas.Performance.properties.production_id["x-openb2c-relationship"]).toMatchObject({
+      targetEntity: "production",
+      label: "Production",
+      targetLabel: { entity: "production", field: "title" },
+    });
     expect(openapi.paths["/api/productions"]).toBeDefined();
     expect(openapi.paths["/api/rehearsals/{id}/publish"]).toBeDefined();
     expect(openapi.paths["/api/production_materials"]).toBeDefined();

@@ -145,6 +145,7 @@ describe("generated UI web components", () => {
     expect(index).toContain('export { ObAccountSummary }');
     expect(index).toContain('export { ObRouteOutlet }');
     expect(index).toContain('export { ObAdminRouteOutlet }');
+    expect(index).toContain('export { ObAdminCalendar }');
     expect(index).toContain('export { ObAdminWorkspace }');
     expect(index).toContain('export { ObWorkflowBoard }');
   });
@@ -162,6 +163,7 @@ describe("generated UI web components", () => {
     const entityForm = await Bun.file(join(UI_DIR, "components", "ob-entity-form.ts")).text();
     const entityDetail = await Bun.file(join(UI_DIR, "components", "ob-entity-detail.ts")).text();
     const adminWorkspace = await Bun.file(join(UI_DIR, "components", "ob-admin-workspace.ts")).text();
+    const adminCalendar = await Bun.file(join(UI_DIR, "components", "ob-admin-calendar.ts")).text();
     const workflowBoard = await Bun.file(join(UI_DIR, "components", "ob-workflow-board.ts")).text();
     const adminNav = await Bun.file(join(UI_DIR, "components", "ob-nav.ts")).text();
     const publicRoute = await Bun.file(join(UI_DIR, "components", "ob-route-outlet.ts")).text();
@@ -182,6 +184,8 @@ describe("generated UI web components", () => {
     expect(adminNav).toContain("./ob-auth-menu");
     expect(adminNav).toContain("getAdminWorkspaces");
     expect(adminNav).toContain("getAdminWorkspaceGroups");
+    expect(adminNav).toContain("getAdminTemporalEntities");
+    expect(adminNav).toContain('data-href="#/calendar"');
     expect(adminNav).not.toContain("getWorkflowScreens");
     expect(adminNav).not.toContain("apiDescription");
     expect(adminNav).toContain("menu-toggle");
@@ -266,6 +270,12 @@ describe("generated UI web components", () => {
     expect(adminWorkspace).toContain("inferPeople");
     expect(adminWorkspace).toContain("Coverage matrix");
     expect(adminWorkspace).toContain("<ob-entity-list");
+    expect(adminCalendar).toContain('customElements.define("ob-admin-calendar"');
+    expect(adminCalendar).toContain("getAdminTemporalEntities");
+    expect(adminCalendar).toContain("temporalDescriptor");
+    expect(adminCalendar).toContain("groupEventsByDay");
+    expect(adminCalendar).toContain("more-events");
+    expect(adminCalendar).toContain('data-action="entity-filter"');
     expect(workflowBoard).toContain('customElements.define("ob-workflow-board"');
     expect(workflowBoard).toContain("getWorkflowScreen");
     expect(workflowBoard).toContain("getWorkflowOperations");
@@ -287,6 +297,8 @@ describe("generated UI web components", () => {
     expect(obApi).toContain("getEntityGraph");
     expect(obApi).toContain("getAdminWorkspaces");
     expect(obApi).toContain("getAdminWorkspaceGroups");
+    expect(obApi).toContain("getAdminTemporalEntities");
+    expect(obApi).toContain("temporalFieldsHaveCalendarAnchor");
     expect(obApi).toContain("restoreAuthContext");
     expect(obApi).toContain("setBearerAuth");
     expect(obApi).toContain("setApiKeyAuth");
@@ -319,6 +331,8 @@ describe("generated UI web components", () => {
     expect(adminRoute).toContain('page.setAttribute("context", "admin")');
     expect(adminRoute).toContain("const filter = params.toString()");
     expect(adminRoute).toContain("./ob-admin-workspace");
+    expect(adminRoute).toContain("./ob-admin-calendar");
+    expect(adminRoute).toContain('hash === "/calendar"');
     expect(adminRoute).toContain('workspace.setAttribute("record-id"');
     expect(adminRoute).toContain("formRouteAttrs");
     expect(adminRoute).toContain("./ob-workflow-board");
@@ -408,6 +422,9 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .record-panels{display:grid;gap:16px}");
+    expect(adminStyles).toContain(":host(ob-admin-calendar) .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr))");
+    expect(adminStyles).toContain(":host(ob-admin-calendar) .event-row{display:grid;grid-template-columns:150px 96px minmax(0,1fr) 140px");
+    expect(adminStyles).toContain(":host(ob-admin-calendar) .more-events{padding:2px 7px;font-weight:800}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .matrix-wrap{max-width:100%;overflow-x:auto}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) ob-entity-list{display:block;min-width:0;max-width:100%}");
     expect(adminStyles).toContain(":host(ob-entity-list){display:block;min-width:0;max-width:100%}");
@@ -472,9 +489,11 @@ describe("generated UI web components", () => {
       expect(publicBundle).not.toContain("ob-entity-list");
       expect(publicBundle).not.toContain("ob-entity-form");
       expect(publicBundle).not.toContain("ob-entity-detail");
+      expect(publicBundle).not.toContain("ob-admin-calendar");
       expect(publicBundle).not.toContain("ob-workflow-board");
 
       expect(adminBundle).toContain("ob-admin-app");
+      expect(adminBundle).toContain("ob-admin-calendar");
       expect(adminBundle).toContain("ob-admin-workspace");
       expect(adminBundle).toContain("ob-entity-list");
       expect(adminBundle).toContain("ob-entity-form");

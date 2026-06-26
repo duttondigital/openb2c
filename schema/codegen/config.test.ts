@@ -76,6 +76,7 @@ function clearEnv() {
   delete process.env.CORS_ORIGINS;
   delete process.env.REGISTRY_PUBLIC_KEY;
   delete process.env.ALLOW_FAKE_PROVIDERS;
+  delete process.env.ALLOW_INSECURE_AUTH_DISABLED;
   delete process.env.EMAIL_WEBHOOK_URL;
   delete process.env.PAYMENT_PROVIDER;
   delete process.env.PAYMENT_API_KEY;
@@ -146,6 +147,7 @@ describe("generated configuration", () => {
       process.env.PAYMENT_API_KEY = "test-payment-key";
       process.env.WEBHOOK_URL = "https://hooks.example/openb2c";
       process.env.WEBHOOK_SIGNING_SECRET = "test-webhook-secret";
+      process.env.ALLOW_INSECURE_AUTH_DISABLED = "true";
       const { server } = await import(pathToFileURL(join(validDir, "server.ts")).href);
       server.stop(true);
     } finally {
