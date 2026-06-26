@@ -15,7 +15,7 @@ export class ObEntityForm extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return ["entity", "mode", "record-id"];
+    return ["entity", "mode", "record-id", "defaults", "return-to"];
   }
 
   async connectedCallback() {
@@ -35,6 +35,12 @@ export class ObEntityForm extends HTMLElement {
   private get recordId(): string {
     return this.getAttribute("record-id") || "";
   }
+  private get defaults(): Record<string, string> {
+    return Object.fromEntries(new URLSearchParams(this.getAttribute("defaults") || ""));
+  }
+  private get returnTo(): string {
+    return this.getAttribute("return-to") || "";
+  }
 
   async _render() {
     const api = ObApi.instance;
@@ -48,13 +54,15 @@ export class ObEntityForm extends HTMLElement {
     const relationships = api.getForeignKeyRelationships(this.entity);
     const required = new Set(inputSchema.required || []);
     const fields = orderedSchemaFields(inputSchema);
+    const defaults = this.defaults;
+    const lockedFields = new Set(Object.keys(defaults));
 
     // Load existing record for edit mode
-    let record: any = {};
+    let record: any = { ...defaults };
     if (this.mode === "edit" && this.recordId) {
       try {
         const res = await api.request(`/api/${this.entity}s/${this.recordId}`);
-        record = await res.json();
+        record = { ...await res.json(), ...defaults };
       } catch { /* empty */ }
     }
 
@@ -73,7 +81,7 @@ export class ObEntityForm extends HTMLElement {
         </div>
       `;
       this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", () => {
-        location.hash = this.mode === "edit" && this.recordId ? `#/${this.entity}s/${this.recordId}` : `#/${this.entity}s`;
+        location.hash = this._backTarget();
       });
       return;
     }
@@ -105,12 +113,14 @@ export class ObEntityForm extends HTMLElement {
           ${fields.map(([name, prop]) => {
             const req = required.has(name);
             const val = formDisplayValue(name, prop, record[name] ?? prop.default ?? "");
+            const locked = lockedFields.has(name);
             const id = `field-${name}`;
             const label = fieldDisplayLabel(name, prop);
             const help = fieldHelpText(prop);
             const describedBy = help ? `${id}-help` : "";
             const describedByAttr = describedBy ? ` aria-describedby="${escapeAttr(describedBy)}"` : "";
             const helpMarkup = help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : "";
+            const lockedMarkup = locked ? `<input type="hidden" name="${escapeAttr(name)}" value="${escapeAttr(val)}" /><div class="help-text">Set by the current workspace.</div>` : "";
             const full = isWideField(name, prop) ? " full" : "";
 
             if (fks[name]) {
@@ -119,14 +129,14 @@ export class ObEntityForm extends HTMLElement {
               return `
                 <div class="form-group${full}">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""}>
+                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""} ${locked ? "disabled" : ""}>
                     <option value="">Select ${escapeHtml(label.toLowerCase())}</option>
                     ${opts.map((o: any) => {
                       const optionLabel = relationshipLabelFor(o, relationship);
                       return `<option value="${escapeAttr(o.id)}" ${String(o.id) === String(val) ? "selected" : ""}>${escapeHtml(optionLabel)} (${escapeHtml(o.id)})</option>`;
                     }).join("")}
                   </select>
-                  ${helpMarkup}
+                  ${helpMarkup}${lockedMarkup}
                 </div>`;
             }
 
@@ -134,11 +144,11 @@ export class ObEntityForm extends HTMLElement {
               return `
                 <div class="form-group${full}">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""}>
+                  <select id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr} ${req ? "required" : ""} ${locked ? "disabled" : ""}>
                     <option value="">Select ${escapeHtml(label.toLowerCase())}</option>
                     ${prop.enum.map((choice: unknown) => `<option value="${escapeAttr(choice)}" ${String(choice) === String(val) ? "selected" : ""}>${escapeHtml(choice)}</option>`).join("")}
                   </select>
-                  ${helpMarkup}
+                  ${helpMarkup}${lockedMarkup}
                 </div>`;
             }
 
@@ -150,16 +160,16 @@ export class ObEntityForm extends HTMLElement {
               return `
                 <div class="form-group full">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""}>${escapeHtml(val)}</textarea>
-                  ${helpMarkup}
+                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "readonly" : ""}>${escapeHtml(val)}</textarea>
+                  ${helpMarkup}${lockedMarkup}
                 </div>`;
             }
 
             return `
               <div class="form-group${full}">
                 <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} />
-                ${helpMarkup}
+                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "readonly" : ""} />
+                ${helpMarkup}${lockedMarkup}
               </div>`;
           }).join("")}
           </div>
@@ -176,13 +186,7 @@ export class ObEntityForm extends HTMLElement {
       this._submit();
     });
 
-    const goBack = () => {
-      if (this.mode === "edit" && this.recordId) {
-        location.hash = `#/${this.entity}s/${this.recordId}`;
-      } else {
-        location.hash = `#/${this.entity}s`;
-      }
-    };
+    const goBack = () => { location.hash = this._backTarget(); };
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="back"]')?.addEventListener("click", goBack);
     this.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="cancel"]')?.addEventListener("click", goBack);
   }
@@ -192,12 +196,18 @@ export class ObEntityForm extends HTMLElement {
     const data: Record<string, any> = {};
     const formData = new FormData(formEl);
     const inputSchema = ObApi.instance!.getInputSchema(this.entity)!;
+    const defaults = this.defaults;
 
     for (const [key, value] of formData.entries()) {
       const v = String(value);
       if (v === "") continue;
       const prop = inputSchema.properties[key];
       data[key] = formValueFor(key, prop, v);
+    }
+    for (const [key, value] of Object.entries(defaults)) {
+      const prop = inputSchema.properties[key];
+      if (!prop) continue;
+      data[key] = formValueFor(key, prop, String(value));
     }
 
     try {
@@ -220,11 +230,23 @@ export class ObEntityForm extends HTMLElement {
       }
 
       const result = await res.json();
-      location.hash = `#/${this.entity}s/${result.id || this.recordId}`;
+      location.hash = this._successTarget(result.id || this.recordId);
     } catch (e: any) {
       this._error = e.message;
       this._render();
     }
+  }
+
+  private _backTarget(): string {
+    if (this.returnTo) return this.returnTo;
+    return this.mode === "edit" && this.recordId ? `#/${this.entity}s/${this.recordId}` : `#/${this.entity}s`;
+  }
+
+  private _successTarget(id: unknown): string {
+    if (this.returnTo) return this.returnTo;
+    const api = ObApi.instance;
+    if (id && api?.getAdminWorkspace(this.entity)) return `#/workspaces/${this.entity}/${id}`;
+    return `#/${this.entity}s/${id}`;
   }
 }
 

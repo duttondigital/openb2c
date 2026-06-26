@@ -109,6 +109,8 @@ export class ObEntityList extends HTMLElement {
           body: canCreate ? `Create the first ${displayName(this.entity).toLowerCase()} record.` : "No records are visible to your current session.",
           action: canCreate ? `<button type="button" class="primary" data-action="create-empty">New ${escapeHtml(displayName(this.entity))}</button>` : "",
         };
+    const rowHref = (row: any) => recordHref(api, this.entity, row.id);
+    const tableMinWidth = Math.max(760, (cols.length + 1) * 128);
 
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
@@ -129,7 +131,7 @@ export class ObEntityList extends HTMLElement {
         </form>
       ` : ""}
       <div class="table-wrap">
-        <table>
+        <table class="entity-table" style="min-width: ${tableMinWidth}px">
           <thead>
             <tr>
               ${cols.map(([c, prop]) => {
@@ -152,7 +154,7 @@ export class ObEntityList extends HTMLElement {
             ${items.map((row: any) => `
               <tr data-id="${escapeAttr(row.id)}">
                 ${cols.map(([c, prop]) => this._renderCell(c, row[c], fks, prop)).join("")}
-                <td><a class="row-action" href="#/${this.entity}s/${escapeAttr(row.id)}">Open</a></td>
+                <td><a class="row-action" href="${escapeAttr(rowHref(row))}">Open</a></td>
               </tr>
             `).join("")}
           </tbody>
@@ -205,7 +207,7 @@ export class ObEntityList extends HTMLElement {
     this.shadowRoot!.querySelectorAll("tr[data-id]").forEach((tr) => {
       tr.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).tagName === "A") return;
-        location.hash = `#/${this.entity}s/${(tr as HTMLElement).dataset.id}`;
+        location.hash = recordHref(ObApi.instance!, this.entity, (tr as HTMLElement).dataset.id || "");
       });
     });
 
@@ -316,16 +318,16 @@ export class ObEntityList extends HTMLElement {
     }
 
     if (fks[column]) {
-      return `<td><a href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a></td>`;
+      return `<td><a class="cell-link" title="#${escapeAttr(value)}" href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a></td>`;
     }
 
     const formatted = formatValue(column, value, prop);
     const badgeClass = statusClass(column, value);
     if (column === "status" || ["active", "used", "revoked"].includes(column)) {
-      return `<td><span class="badge ${badgeClass}">${escapeHtml(formatted)}</span></td>`;
+      return `<td><span class="badge ${badgeClass}" title="${escapeAttr(formatted)}">${escapeHtml(formatted)}</span></td>`;
     }
 
-    return `<td>${escapeHtml(formatted)}</td>`;
+    return `<td><span class="cell-value" title="${escapeAttr(formatted)}">${escapeHtml(formatted)}</span></td>`;
   }
 }
 
@@ -357,3 +359,8 @@ function relationshipLabelFor(row: Record<string, unknown>, relationship: any): 
 }
 
 customElements.define("ob-entity-list", ObEntityList);
+
+function recordHref(api: ObApi, entity: string, id: unknown): string {
+  if (api.getAdminWorkspace(entity)) return `#/workspaces/${entity}/${id}`;
+  return `#/${entity}s/${id}`;
+}

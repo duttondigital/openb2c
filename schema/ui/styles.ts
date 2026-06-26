@@ -115,6 +115,10 @@ export const button = `
 export const table = `
   .table-wrap {
     overflow: auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    contain: layout paint inline-size;
     border: 1px solid var(--ob-border);
     border-radius: var(--ob-radius);
     background: var(--ob-bg);
@@ -123,6 +127,7 @@ export const table = `
   table {
     width: 100%;
     min-width: 760px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 14px;
     background: var(--ob-bg);
@@ -132,6 +137,13 @@ export const table = `
     padding: 12px 14px;
     border-bottom: 1px solid var(--ob-border);
     vertical-align: middle;
+  }
+  table:not(.matrix) th,
+  table:not(.matrix) td {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   th {
     font-weight: 600;

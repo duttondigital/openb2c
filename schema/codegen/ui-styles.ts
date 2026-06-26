@@ -34,11 +34,15 @@ const documentBase = `
   }
   html {
     min-height: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     background: var(--ob-shell-bg);
   }
   body {
     background: var(--ob-shell-bg);
     min-height: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   ob-app,
   ob-admin-app {
@@ -155,6 +159,7 @@ const adminShell = `
     min-width: 0;
     width: 100%;
     max-width: 1280px;
+    overflow-x: hidden;
     padding: 32px;
     margin: 0 auto;
   }
@@ -747,6 +752,13 @@ const adminWorkspace = `
   :host(ob-admin-workspace) .workspace {
     display: grid;
     gap: 18px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  :host(ob-admin-workspace) ob-entity-list {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
   }
   :host(ob-admin-workspace) .workspace-header {
     display: flex;
@@ -836,6 +848,147 @@ const adminWorkspace = `
     font-size: 12px;
     font-weight: 700;
   }
+  :host(ob-admin-workspace) .record-panels {
+    display: grid;
+    gap: 16px;
+  }
+  :host(ob-admin-workspace) .record-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-admin-workspace) .panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :host(ob-admin-workspace) .panel-header h2 {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+  :host(ob-admin-workspace) .panel-header p,
+  :host(ob-admin-workspace) .muted {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+  }
+  :host(ob-admin-workspace) .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  :host(ob-admin-workspace) .summary-grid div {
+    display: grid;
+    gap: 3px;
+  }
+  :host(ob-admin-workspace) dt {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  :host(ob-admin-workspace) dd {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+  :host(ob-admin-workspace) .panel-actions,
+  :host(ob-admin-workspace) .inline-actions,
+  :host(ob-admin-workspace) .segmented,
+  :host(ob-admin-workspace) .call-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  :host(ob-admin-workspace) .segmented button.active {
+    background: var(--ob-primary);
+    border-color: var(--ob-primary);
+    color: white;
+  }
+  :host(ob-admin-workspace) .timeline,
+  :host(ob-admin-workspace) .compact-list,
+  :host(ob-admin-workspace) .material-list {
+    display: grid;
+    gap: 8px;
+  }
+  :host(ob-admin-workspace) .timeline-item,
+  :host(ob-admin-workspace) .compact-row,
+  :host(ob-admin-workspace) .material-card {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
+  :host(ob-admin-workspace) .compact-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  :host(ob-admin-workspace) .timeline-item:hover,
+  :host(ob-admin-workspace) .compact-row:hover,
+  :host(ob-admin-workspace) .material-card:hover {
+    border-color: var(--ob-border-strong);
+    text-decoration: none;
+  }
+  :host(ob-admin-workspace) .timeline-item time,
+  :host(ob-admin-workspace) .timeline-item span,
+  :host(ob-admin-workspace) .version-note span {
+    color: var(--ob-text-muted);
+    font-size: 12px;
+  }
+  :host(ob-admin-workspace) .matrix-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  :host(ob-admin-workspace) .matrix {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+  }
+  :host(ob-admin-workspace) .matrix th,
+  :host(ob-admin-workspace) .matrix td {
+    padding: 10px;
+    border-bottom: 1px solid var(--ob-border);
+    vertical-align: top;
+    text-align: left;
+  }
+  :host(ob-admin-workspace) .matrix-cell {
+    display: grid;
+    gap: 6px;
+    min-width: 120px;
+  }
+  :host(ob-admin-workspace) .matrix-add {
+    display: inline-flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 8px;
+    border: 1px dashed var(--ob-border-strong);
+    border-radius: var(--ob-radius);
+    color: var(--ob-text-muted);
+  }
+  :host(ob-admin-workspace) .material-card {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, .7fr);
+    align-items: start;
+  }
+  :host(ob-admin-workspace) .version-note {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  :host(ob-admin-workspace) .empty-state {
+    color: var(--ob-text-muted);
+    padding: 12px;
+    border: 1px dashed var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg-subtle);
+  }
   @media (max-width: 720px) {
     :host(ob-admin-workspace) .workspace-header {
       align-items: stretch;
@@ -845,10 +998,20 @@ const adminWorkspace = `
     :host(ob-admin-workspace) .workspace-actions a {
       width: 100%;
     }
+    :host(ob-admin-workspace) .panel-header,
+    :host(ob-admin-workspace) .material-card {
+      grid-template-columns: 1fr;
+      flex-direction: column;
+    }
   }
 `;
 
 const entityList = `
+  :host(ob-entity-list) {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
   :host(ob-entity-list) .header {
     display: flex;
     align-items: center;
@@ -889,6 +1052,38 @@ const entityList = `
   }
   :host(ob-entity-list) .column-label {
     font-weight: 600;
+  }
+  .entity-table {
+    table-layout: fixed;
+  }
+  .entity-table th,
+  .entity-table td {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .entity-table th:last-child,
+  .entity-table td:last-child {
+    width: 86px;
+  }
+  .entity-table .sort-btn,
+  .entity-table .column-label,
+  .entity-table .cell-value,
+  .entity-table .cell-link,
+  .entity-table .cell-muted,
+  .entity-table .row-action {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .entity-table .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   :host(ob-entity-list) .arrow { font-size: 11px; margin-left: 6px; }
   :host(ob-entity-list) .empty-state {
@@ -933,6 +1128,12 @@ const entityForm = `
     gap: 16px;
   }
   :host(ob-entity-form) .form-group.full { grid-column: 1 / -1; }
+  :host(ob-entity-form) .form-group input[readonly],
+  :host(ob-entity-form) .form-group textarea[readonly],
+  :host(ob-entity-form) .form-group select:disabled {
+    background: var(--ob-bg-alt);
+    color: var(--ob-text-muted);
+  }
   :host(ob-entity-form) .actions {
     display: flex;
     flex-wrap: wrap;

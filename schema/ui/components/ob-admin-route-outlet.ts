@@ -77,14 +77,22 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: workspace };
     }
 
+    if ((match = hash.match(/^\/workspaces\/([a-z_]+)\/(\d+)$/))) {
+      await import("./ob-admin-workspace");
+      const workspace = document.createElement("ob-admin-workspace");
+      workspace.setAttribute("entity", match[1]);
+      workspace.setAttribute("record-id", match[2]);
+      return { node: workspace };
+    }
+
     if ((match = hash.match(/^\/([a-z_]+s)\/new$/))) {
       await import("./ob-entity-form");
-      return { node: entityElement("ob-entity-form", match[1], { mode: "create" }) };
+      return { node: entityElement("ob-entity-form", match[1], formRouteAttrs(params, { mode: "create" })) };
     }
 
     if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)\/edit$/))) {
       await import("./ob-entity-form");
-      return { node: entityElement("ob-entity-form", match[1], { mode: "edit", "record-id": match[2] }) };
+      return { node: entityElement("ob-entity-form", match[1], formRouteAttrs(params, { mode: "edit", "record-id": match[2] })) };
     }
 
     if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)$/))) {
@@ -114,6 +122,16 @@ function entityElement(tagName: string, pluralEntity: string, attrs: Record<stri
   element.setAttribute("entity", pluralEntity.replace(/s$/, ""));
   for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
   return element;
+}
+
+function formRouteAttrs(params: URLSearchParams, attrs: Record<string, string>): Record<string, string> {
+  const next = { ...attrs };
+  const returnTo = safeReturnTo(params.get("return"));
+  const defaults = new URLSearchParams(params);
+  defaults.delete("return");
+  if (returnTo) next["return-to"] = returnTo;
+  if ([...defaults.keys()].length > 0) next.defaults = defaults.toString();
+  return next;
 }
 
 customElements.define("ob-admin-route-outlet", ObAdminRouteOutlet);

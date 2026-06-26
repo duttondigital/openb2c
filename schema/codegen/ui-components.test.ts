@@ -210,6 +210,9 @@ describe("generated UI web components", () => {
     expect(entityList).toContain('data-filter-field');
     expect(entityList).toContain('data-action="page-size"');
     expect(entityList).toContain('data-action="clear-filters"');
+    expect(entityList).toContain("const tableMinWidth = Math.max(760, (cols.length + 1) * 128)");
+    expect(entityList).toContain('style="min-width: ${tableMinWidth}px"');
+    expect(entityList).toContain("recordHref(api, this.entity, row.id)");
     expect(entityList).toContain('api.canCollection(this.entity, "read")');
     expect(entityList).toContain('api.canCollection(this.entity, "create")');
     expect(entityForm).toContain('type="date"');
@@ -219,6 +222,10 @@ describe("generated UI web components", () => {
     expect(entityForm).toContain("formValueFor");
     expect(entityForm).toContain("formDisplayValue");
     expect(entityForm).toContain("relationshipLabelFor");
+    expect(entityForm).toContain('"defaults"');
+    expect(entityForm).toContain('"return-to"');
+    expect(entityForm).toContain("lockedFields");
+    expect(entityForm).toContain("this.returnTo");
     expect(entityForm).toContain('api.can(this.entity, "update", record)');
     expect(entityForm).toContain('api.canCollection(this.entity, "create")');
     expect(entityDetail).toContain("getOperationWorkflow");
@@ -235,9 +242,16 @@ describe("generated UI web components", () => {
     expect(entityDetail).toContain("disabled");
     expect(entityDetail).toContain("relatedListHref");
     expect(adminWorkspace).toContain('customElements.define("ob-admin-workspace"');
+    expect(adminWorkspace).toContain('"record-id"');
     expect(adminWorkspace).toContain("getAdminWorkspace");
     expect(adminWorkspace).toContain("getEntityGraph");
     expect(adminWorkspace).toContain("workspaceHref");
+    expect(adminWorkspace).toContain("recordHref");
+    expect(adminWorkspace).toContain("loadRecordContext");
+    expect(adminWorkspace).toContain("inferMatrices");
+    expect(adminWorkspace).toContain("inferMaterials");
+    expect(adminWorkspace).toContain("inferPeople");
+    expect(adminWorkspace).toContain("Coverage matrix");
     expect(adminWorkspace).toContain("<ob-entity-list");
     expect(workflowBoard).toContain('customElements.define("ob-workflow-board"');
     expect(workflowBoard).toContain("getWorkflowScreen");
@@ -292,6 +306,8 @@ describe("generated UI web components", () => {
     expect(adminRoute).toContain('page.setAttribute("context", "admin")');
     expect(adminRoute).toContain("const filter = params.toString()");
     expect(adminRoute).toContain("./ob-admin-workspace");
+    expect(adminRoute).toContain('workspace.setAttribute("record-id"');
+    expect(adminRoute).toContain("formRouteAttrs");
     expect(adminRoute).toContain("./ob-workflow-board");
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
@@ -370,6 +386,16 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-nav) nav.expanded .nav-groups,:host(ob-nav) nav.expanded .account{display:grid}");
     expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .record-panels{display:grid;gap:16px}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .matrix-wrap{max-width:100%;overflow-x:auto}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) ob-entity-list{display:block;min-width:0;max-width:100%}");
+    expect(adminStyles).toContain(":host(ob-entity-list){display:block;min-width:0;max-width:100%}");
+    expect(adminStyles).toContain("html{min-height:100%;max-width:100%;overflow-x:hidden");
+    expect(adminStyles).toContain("ob-admin-app ob-admin-route-outlet{flex:1;min-width:0;width:100%;max-width:1280px;overflow-x:hidden");
+    expect(adminStyles).toContain(".table-wrap{overflow:auto;width:100%;max-width:100%;min-width:0;contain:layout paint inline-size");
+    expect(adminStyles).toContain(":host(ob-entity-form) .form-group input[readonly]");
+    expect(adminStyles).toContain(".entity-table{table-layout:fixed}");
+    expect(adminStyles).toContain(".entity-table th,.entity-table td{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}");
   });
 
   test("public and admin bundles only include their required components", async () => {

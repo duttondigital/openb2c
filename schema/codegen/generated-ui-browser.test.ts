@@ -108,6 +108,67 @@ describe("generated UI browser automation", () => {
       api.stop();
     }
   }, TEST_TIMEOUT_MS);
+
+  test("admin app supports the generated Duchy Opera production workspace", async () => {
+    const app = await generateExample("duchyopera");
+    const api = await startGeneratedApi(app, { authEnabled: false });
+    const staticApp = startStaticApp(app.uiDir, api.baseUrl);
+    const { context, page, errors } = await newPage();
+
+    try {
+      await page.goto(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("heading", { name: "The Magic Flute" }).waitFor();
+      await page.getByRole("heading", { name: "Coverage matrix" }).waitFor();
+      await page.getByRole("heading", { name: "Materials" }).waitFor();
+
+      const newRehearsalLink = page.locator('a[href*="/rehearsals/new"][href*="production_id=1"]');
+      expect(await newRehearsalLink.count()).toBe(1);
+      await newRehearsalLink.click();
+      await page.getByRole("heading", { name: "New Rehearsal" }).waitFor();
+      expect(await page.locator('ob-entity-form select[name="production_id"]').isDisabled()).toBe(true);
+
+      const rehearsalTitle = `Act II staging ${Date.now()}`;
+      await page.getByLabel("Rehearsal").fill(rehearsalTitle);
+      await page.getByLabel("Starts").fill("2026-05-22T18:00");
+      await page.getByLabel("Ends").fill("2026-05-22T21:00");
+      await page.getByRole("button", { name: "Create" }).click();
+      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+      await page.locator("ob-admin-workspace").getByText(rehearsalTitle).first().waitFor();
+
+      const newRequirementLink = page.locator('a[href*="/rehearsal_requirements/new"][href*="production_id=1"]');
+      expect(await newRequirementLink.count()).toBeGreaterThan(0);
+      await newRequirementLink.first().click();
+      await page.getByRole("heading", { name: "New Rehearsal Requirement" }).waitFor();
+
+      const requirementName = `Act II duet ${Date.now()}`;
+      await page.getByLabel("Requirement").fill(requirementName);
+      await page.getByRole("button", { name: "Create" }).click();
+      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+      await page.locator("ob-admin-workspace").getByText(requirementName).first().waitFor();
+
+      const coverageLinks = page.locator('a[href*="/rehearsal_coverages/new"]');
+      expect(await coverageLinks.count()).toBeGreaterThan(0);
+      await coverageLinks.first().click();
+      await page.getByRole("heading", { name: "New Rehearsal Coverage" }).waitFor();
+      expect(await page.locator('ob-entity-form input[type="hidden"][name="requirement_id"]').count()).toBe(1);
+      expect(await page.locator('ob-entity-form input[type="hidden"][name="rehearsal_id"]').count()).toBe(1);
+      await page.getByRole("button", { name: "Create" }).click();
+      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+
+      await page.getByRole("heading", { name: "Coverage matrix" }).waitFor();
+      const markCovered = page.locator("ob-admin-workspace").getByRole("button", { name: "Mark covered" });
+      await markCovered.first().waitFor();
+      expect(await markCovered.count()).toBeGreaterThan(0);
+      await markCovered.first().click();
+      await page.getByText("Mark Covered completed.").waitFor();
+
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+      staticApp.stop();
+      api.stop();
+    }
+  }, TEST_TIMEOUT_MS);
 });
 
 async function generateExample(example: "duchyopera" | "ticketing"): Promise<GeneratedApp> {
