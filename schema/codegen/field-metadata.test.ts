@@ -11,7 +11,7 @@ import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import { validateSchema } from "./validation";
 import type { Column, Operation, Schema } from "./types";
-import { fieldDisplayLabel, filterableSchemaFields, listSchemaFields, orderedSchemaFields } from "../ui/format";
+import { fieldDisplayLabel, filterableSchemaFields, formatValue, listFieldDisplayLabel, listSchemaFields, orderedSchemaFields } from "../ui/format";
 
 const baseColumn: Column = {
   type: "text",
@@ -124,6 +124,32 @@ describe("field metadata generation", () => {
     expect(listSchemaFields(schema).map(([name]) => name)).toEqual(["email", "name", "status", "age"]);
     expect(filterableSchemaFields(schema).map(([name]) => name)).toEqual(["status"]);
     expect(fieldDisplayLabel("email", schema.properties.email)).toBe("Email address");
+  });
+
+  test("generated UI list helpers prefer record names over derived display labels", () => {
+    const schema = {
+      properties: {
+        title: {
+          title: "Performance",
+          "x-openb2c-field": { displayPriority: 10 },
+        },
+        display_title: {
+          title: "Display title",
+          readOnly: true,
+          "x-openb2c-field": { displayPriority: 15 },
+          "x-openb2c-derived": { displayOnly: true },
+        },
+        duration_mins: {
+          title: "Duration",
+          "x-openb2c-field": { displayPriority: 20 },
+        },
+      },
+    };
+
+    expect(listSchemaFields(schema).map(([name]) => name)).toEqual(["title", "duration_mins"]);
+    expect(listFieldDisplayLabel("title", schema.properties.title, true)).toBe("Name");
+    expect(formatValue("duration_mins", 150)).toBe("2h 30m");
+    expect(formatValue("duration_mins", 120)).toBe("2h");
   });
 
   test("generated services enforce per-field validation metadata", async () => {

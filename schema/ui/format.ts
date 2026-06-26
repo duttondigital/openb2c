@@ -52,6 +52,12 @@ export type FieldSchema = {
       field?: string;
     };
   };
+  "x-openb2c-derived"?: {
+    displayOnly?: boolean;
+    dependencies?: unknown[];
+    template?: string;
+    expression?: unknown;
+  };
   "x-openb2c-field"?: {
     label?: string;
     helpText?: string;
@@ -69,6 +75,11 @@ export function fieldMetadata(prop?: FieldSchema | null): FieldSchema["x-openb2c
 
 export function fieldDisplayLabel(field: string, prop?: FieldSchema | null): string {
   return fieldMetadata(prop).label || prop?.title || fieldLabel(field);
+}
+
+export function listFieldDisplayLabel(field: string, prop?: FieldSchema | null, primary = false): string {
+  if (primary && (field === "name" || field === "title")) return "Name";
+  return fieldDisplayLabel(field, prop);
 }
 
 export function fieldHelpText(prop?: FieldSchema | null): string {
@@ -108,8 +119,18 @@ export function isLongTextField(field: string, prop?: FieldSchema | null): boole
   return fieldFormat(prop) === "textarea" || ["description", "notes", "body", "content"].some((part) => field.includes(part));
 }
 
+export function isDerivedDisplayField(field: string, prop?: FieldSchema | null): boolean {
+  if (!prop?.["x-openb2c-derived"]?.displayOnly) return false;
+  return field === "display_name"
+    || field === "display_title"
+    || field === "display_label"
+    || field.startsWith("display_")
+    || field.endsWith("_display_title")
+    || field.endsWith("_display_label");
+}
+
 export function listSchemaFields(schema: { properties?: Record<string, FieldSchema> } | null | undefined): [string, FieldSchema][] {
-  return orderedSchemaFields(schema).filter(([field, prop]) => !isLongTextField(field, prop));
+  return orderedSchemaFields(schema).filter(([field, prop]) => !isLongTextField(field, prop) && !isDerivedDisplayField(field, prop));
 }
 
 export function filterableSchemaFields(
@@ -131,6 +152,11 @@ export function labelFor(row: Record<string, unknown>): string {
 export function formatValue(field: string, value: unknown, prop?: FieldSchema | null): string {
   if (value === null || value === undefined || value === "") return "";
 
+  if (isDurationMinutesField(field, prop)) {
+    const minutes = Number(value);
+    if (Number.isFinite(minutes)) return formatMinutes(minutes);
+  }
+
   if ((field.endsWith("_pence") || fieldFormat(prop) === "money") && typeof value === "number") {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
@@ -143,6 +169,24 @@ export function formatValue(field: string, value: unknown, prop?: FieldSchema | 
   }
 
   return String(value);
+}
+
+function isDurationMinutesField(field: string, prop?: FieldSchema | null): boolean {
+  const format = fieldFormat(prop);
+  return format === "duration-minutes"
+    || field === "duration_mins"
+    || field === "duration_minutes"
+    || field.endsWith("_duration_mins")
+    || field.endsWith("_duration_minutes");
+}
+
+function formatMinutes(value: number): string {
+  const total = Math.round(value);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
 }
 
 export function statusClass(field: string, value: unknown): string {

@@ -2,7 +2,7 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listSchemaFields, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listFieldDisplayLabel, listSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
@@ -110,6 +110,7 @@ export class ObEntityList extends HTMLElement {
           action: canCreate ? `<button type="button" class="primary" data-action="create-empty">New ${escapeHtml(displayName(this.entity))}</button>` : "",
         };
     const rowHref = (row: any) => recordHref(api, this.entity, row.id);
+    const primaryColumn = primaryRecordColumn(cols);
     const tableMinWidth = Math.max(760, (cols.length + 1) * 128);
 
     this.shadowRoot!.innerHTML = `
@@ -141,7 +142,7 @@ export class ObEntityList extends HTMLElement {
                 return `
                   <th scope="col" aria-sort="${ariaSort}">
                     ${sortable ? `<button class="sort-btn" data-col="${escapeAttr(c)}">` : `<span class="column-label">`}
-                      ${escapeHtml(fieldDisplayLabel(c, prop))}
+                      ${escapeHtml(listFieldDisplayLabel(c, prop, c === primaryColumn))}
                       ${arrow ? `<span class="arrow" aria-hidden="true">${arrow === "up" ? "^" : "v"}</span>` : ""}
                     ${sortable ? "</button>" : "</span>"}
                   </th>`;
@@ -153,7 +154,7 @@ export class ObEntityList extends HTMLElement {
             ${items.length === 0 ? `<tr><td colspan="${cols.length + 1}"><div class="empty-state"><strong>${escapeHtml(emptyState.title)}</strong><span>${escapeHtml(emptyState.body)}</span>${emptyState.action}</div></td></tr>` : ""}
             ${items.map((row: any) => `
               <tr data-id="${escapeAttr(row.id)}">
-                ${cols.map(([c, prop]) => this._renderCell(c, row[c], fks, prop)).join("")}
+                ${cols.map(([c, prop]) => this._renderCell(c, row[c], fks, prop, api, relationships[c], filterOptions[c] || [], c === primaryColumn ? rowHref(row) : "")).join("")}
                 <td><a class="row-action" href="${escapeAttr(rowHref(row))}">Open</a></td>
               </tr>
             `).join("")}
@@ -312,16 +313,23 @@ export class ObEntityList extends HTMLElement {
     return "";
   }
 
-  private _renderCell(column: string, value: unknown, fks: Record<string, string>, prop: any): string {
+  private _renderCell(column: string, value: unknown, fks: Record<string, string>, prop: any, api: ObApi, relationship: any, lookupRows: any[], href = ""): string {
     if (value === null || value === undefined || value === "") {
       return `<td><span class="cell-muted">-</span></td>`;
     }
 
-    if (fks[column]) {
-      return `<td><a class="cell-link" title="#${escapeAttr(value)}" href="#/${fks[column]}s/${escapeAttr(value)}">#${escapeHtml(value)}</a></td>`;
+    const formatted = formatValue(column, value, prop);
+    if (href) {
+      return `<td><a class="record-link" title="${escapeAttr(formatted)}" href="${escapeAttr(href)}">${escapeHtml(formatted)}</a></td>`;
     }
 
-    const formatted = formatValue(column, value, prop);
+    if (fks[column]) {
+      const targetHref = recordHref(api, fks[column], value);
+      const targetLabel = lookupLabelFor(value, lookupRows, relationship);
+      const title = targetLabel === `#${value}` ? targetLabel : `${targetLabel} (#${value})`;
+      return `<td><a class="cell-link" title="${escapeAttr(title)}" href="${escapeAttr(targetHref)}">${escapeHtml(targetLabel)}</a></td>`;
+    }
+
     const badgeClass = statusClass(column, value);
     if (column === "status" || ["active", "used", "revoked"].includes(column)) {
       return `<td><span class="badge ${badgeClass}" title="${escapeAttr(formatted)}">${escapeHtml(formatted)}</span></td>`;
@@ -358,9 +366,25 @@ function relationshipLabelFor(row: Record<string, unknown>, relationship: any): 
   return labelFor(row);
 }
 
+function lookupLabelFor(value: unknown, rows: any[], relationship: any): string {
+  const row = rows.find((candidate) => String(candidate.id) === String(value));
+  if (!row) return `#${value}`;
+  return relationshipLabelFor(row, relationship);
+}
+
 customElements.define("ob-entity-list", ObEntityList);
 
 function recordHref(api: ObApi, entity: string, id: unknown): string {
   if (api.getAdminWorkspace(entity)) return `#/workspaces/${entity}/${id}`;
   return `#/${entity}s/${id}`;
+}
+
+function primaryRecordColumn(cols: [string, any][]): string {
+  return cols.find(([field]) => field === "name")?.[0]
+    || cols.find(([field]) => field === "title")?.[0]
+    || cols.find(([field]) => field === "email")?.[0]
+    || cols.find(([field]) => field === "reference")?.[0]
+    || cols.find(([field]) => field !== "id")?.[0]
+    || cols[0]?.[0]
+    || "";
 }

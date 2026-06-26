@@ -213,6 +213,12 @@ describe("generated UI web components", () => {
     expect(entityList).toContain("const tableMinWidth = Math.max(760, (cols.length + 1) * 128)");
     expect(entityList).toContain('style="min-width: ${tableMinWidth}px"');
     expect(entityList).toContain("recordHref(api, this.entity, row.id)");
+    expect(entityList).toContain("primaryRecordColumn(cols)");
+    expect(entityList).toContain("listFieldDisplayLabel(c, prop, c === primaryColumn)");
+    expect(entityList).toContain('class="record-link"');
+    expect(entityList).toContain("recordHref(api, fks[column], value)");
+    expect(entityList).toContain("lookupLabelFor(value, lookupRows, relationship)");
+    expect(entityList).toContain("function lookupLabelFor");
     expect(entityList).toContain('api.canCollection(this.entity, "read")');
     expect(entityList).toContain('api.canCollection(this.entity, "create")');
     expect(entityForm).toContain('type="date"');
@@ -396,6 +402,7 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-entity-form) .form-group input[readonly]");
     expect(adminStyles).toContain(".entity-table{table-layout:fixed}");
     expect(adminStyles).toContain(".entity-table th,.entity-table td{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}");
+    expect(adminStyles).toContain(".entity-table .cell-link,.entity-table .record-link{color:var(--ob-primary);font-weight:700;text-decoration:underline");
   });
 
   test("public and admin bundles only include their required components", async () => {

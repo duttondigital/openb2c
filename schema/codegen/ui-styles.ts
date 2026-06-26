@@ -1071,6 +1071,7 @@ const entityList = `
   .entity-table .column-label,
   .entity-table .cell-value,
   .entity-table .cell-link,
+  .entity-table .record-link,
   .entity-table .cell-muted,
   .entity-table .row-action {
     display: block;
@@ -1078,6 +1079,18 @@ const entityList = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .entity-table .cell-link,
+  .entity-table .record-link {
+    color: var(--ob-primary);
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+  .entity-table .cell-link:hover,
+  .entity-table .record-link:hover {
+    color: var(--ob-accent);
   }
   .entity-table .badge {
     max-width: 100%;
