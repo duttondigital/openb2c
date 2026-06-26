@@ -100,11 +100,6 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: entityElement("ob-entity-form", match[1], formRouteAttrs(params, { mode: "edit", "record-id": match[2] })) };
     }
 
-    if ((match = hash.match(/^\/([a-z_]+s)\/(\d+)$/))) {
-      await import("./ob-entity-detail");
-      return { node: entityElement("ob-entity-detail", match[1], { "record-id": match[2] }) };
-    }
-
     if ((match = hash.match(/^\/([a-z_]+s)$/))) {
       await import("./ob-entity-list");
       const filter = params.toString();
@@ -112,11 +107,16 @@ export class ObAdminRouteOutlet extends HTMLElement {
       return { node: entityElement("ob-entity-list", match[1], attrs) };
     }
 
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    if (hash !== "/") {
+      empty.textContent = "No admin view exists for this route.";
+      return { node: empty };
+    }
+
     const firstItem = api.getAdminWorkspaces()[0] || api.getNavigationItems()[0];
     if (firstItem) return { redirect: firstItem.path };
 
-    const empty = document.createElement("p");
-    empty.className = "empty";
     empty.textContent = "No admin data views are available for this composition.";
     return { node: empty };
   }
@@ -124,9 +124,13 @@ export class ObAdminRouteOutlet extends HTMLElement {
 
 function entityElement(tagName: string, pluralEntity: string, attrs: Record<string, string> = {}): HTMLElement {
   const element = document.createElement(tagName);
-  element.setAttribute("entity", pluralEntity.replace(/s$/, ""));
+  element.setAttribute("entity", singularEntity(pluralEntity));
   for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
   return element;
+}
+
+function singularEntity(pluralEntity: string): string {
+  return pluralEntity.replace(/s$/, "");
 }
 
 function formRouteAttrs(params: URLSearchParams, attrs: Record<string, string>): Record<string, string> {

@@ -271,7 +271,9 @@ describe("generated UI web components", () => {
     expect(adminWorkspace).toContain("inferMaterials");
     expect(adminWorkspace).toContain("inferPeople");
     expect(adminWorkspace).toContain("Coverage matrix");
+    expect(adminWorkspace).toContain('class="detail-fields"');
     expect(adminWorkspace).toContain("<ob-entity-list");
+    expect(adminWorkspace).not.toContain("Raw detail");
     expect(adminCalendar).toContain('customElements.define("ob-admin-calendar"');
     expect(adminCalendar).toContain("getAdminTemporalEntities");
     expect(adminCalendar).toContain("temporalDescriptor");
@@ -340,7 +342,9 @@ describe("generated UI web components", () => {
     expect(adminRoute).toContain("./ob-workflow-board");
     expect(adminRoute).toContain("./ob-entity-list");
     expect(adminRoute).toContain("./ob-entity-form");
-    expect(adminRoute).toContain("./ob-entity-detail");
+    expect(adminRoute).toContain("No admin view exists for this route.");
+    expect(adminRoute).not.toContain("./ob-entity-detail");
+    expect(adminRoute).not.toContain('redirect: `#/workspaces/${entity}/${match[2]}`');
     expect(adminRoute).not.toContain("./ob-commerce");
   });
 
@@ -427,6 +431,7 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px;flex:1 1 auto;align-content:start;min-height:0;overflow-y:auto}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .record-panels{display:grid;gap:16px}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .detail-fields{width:100%}");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr))");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .event-row{display:grid;grid-template-columns:150px 96px minmax(0,1fr) 140px");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .more-events{padding:2px 7px;font-weight:800}");
@@ -503,7 +508,7 @@ describe("generated UI web components", () => {
       expect(adminBundle).toContain("ob-admin-workspace");
       expect(adminBundle).toContain("ob-entity-list");
       expect(adminBundle).toContain("ob-entity-form");
-      expect(adminBundle).toContain("ob-entity-detail");
+      expect(adminBundle).not.toContain("ob-entity-detail");
       expect(adminBundle).toContain("ob-workflow-board");
       expect(adminBundle).toContain("ob-auth-menu");
       expect(adminBundle).toContain("ob-auth-page");

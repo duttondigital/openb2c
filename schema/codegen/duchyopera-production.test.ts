@@ -67,6 +67,7 @@ describe("Duchy Opera production backend", () => {
       required: true,
       references: "production(id)",
     });
+    expect(schema.derived?.performance?.display_title).toBeUndefined();
 
     expect(schema.workflows?.groups).toMatchObject({
       productionLifecycle: { label: "Production lifecycle" },
@@ -98,6 +99,7 @@ describe("Duchy Opera production backend", () => {
     expect(sql).not.toMatch(/CREATE TABLE IF NOT EXISTS artist\s*\(/);
     expect(sql).not.toContain("opens_on");
     expect(sql).not.toContain("closes_on");
+    expect(sql).not.toContain("display_title");
     expect(sql).toContain("production_id INTEGER NOT NULL REFERENCES production(id)");
     expect(sql).toContain("CREATE INDEX IF NOT EXISTS performance_by_production_date");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS rehearsal_call_unique_rehearsal_user");
@@ -107,6 +109,7 @@ describe("Duchy Opera production backend", () => {
     expect(openapi.components.schemas.ArtistProfile).toBeDefined();
     expect(openapi.components.schemas.Production.properties.opens_on).toBeUndefined();
     expect(openapi.components.schemas.Production.properties.closes_on).toBeUndefined();
+    expect(openapi.components.schemas.Performance.properties.display_title).toBeUndefined();
     expect(openapi.components.schemas.ProductionMember.properties.user_id["x-openb2c-relationship"]).toMatchObject({
       targetEntity: "user",
       label: "Person",

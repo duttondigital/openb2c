@@ -104,21 +104,6 @@ in
     columns = [ "venue_id" "date" ];
   };
 
-  derived.performance.display_title = {
-    type = "text";
-    metadata = {
-      label = "Display title";
-      helpText = "Generated display label combining title, date, and time.";
-      displayPriority = 15;
-    };
-    dependencies = [
-      config.refs.performance.title
-      config.refs.performance.date
-      config.refs.performance.time
-    ];
-    template = "{title} - {date} {time}";
-  };
-
   audit.entities.performance = {
     operations = [ "create" "update" "delete" "cancel" "complete" "reschedule" ];
     category = "workflow";

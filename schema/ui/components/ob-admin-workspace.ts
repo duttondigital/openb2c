@@ -151,7 +151,6 @@ export class ObAdminWorkspace extends HTMLElement {
           <div class="workspace-actions">
             <a class="btn" href="#/workspaces/${escapeAttr(this.entity)}">All ${escapeHtml(workspace.label)}</a>
             <a class="btn secondary" href="#/${escapeAttr(this.entity)}s/${escapeAttr(this.recordId)}/edit?return=${escapeAttr(returnPath(this.entity, this.recordId))}">Edit</a>
-            <a class="btn secondary" href="#/${escapeAttr(this.entity)}s/${escapeAttr(this.recordId)}">Raw detail</a>
           </div>
         </div>
         <div class="record-panels">
@@ -253,12 +252,10 @@ export class ObAdminWorkspace extends HTMLElement {
           </div>
           ${this._renderOperationButtons(this.entity, this.recordId, operations)}
         </div>
-        <dl class="summary-grid">
+        <dl class="detail-fields">
           ${fields.map(([field, prop]) => `
-            <div>
-              <dt>${escapeHtml(fieldDisplayLabel(field, prop))}</dt>
-              <dd>${renderFormattedValue(field, record[field], prop)}</dd>
-            </div>
+            <dt>${escapeHtml(fieldDisplayLabel(field, prop))}</dt>
+            <dd>${renderFormattedValue(field, record[field], prop)}</dd>
           `).join("")}
         </dl>
         ${this._renderPendingConfirmation()}

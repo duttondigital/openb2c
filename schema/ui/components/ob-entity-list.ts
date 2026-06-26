@@ -2,7 +2,7 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listFieldDisplayLabel, listSchemaFields, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, labelWithTemporal, listFieldDisplayLabel, listSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
@@ -361,7 +361,7 @@ function parseFilter(raw: string): Record<string, string> {
 function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
   const targetField = relationship?.targetLabel?.field;
   if (targetField && row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== "") {
-    return String(row[targetField]);
+    return labelWithTemporal(String(row[targetField]), row);
   }
   return labelFor(row);
 }

@@ -963,14 +963,8 @@ const adminWorkspace = `
     color: var(--ob-text-muted);
     font-size: 13px;
   }
-  :host(ob-admin-workspace) .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-  }
-  :host(ob-admin-workspace) .summary-grid div {
-    display: grid;
-    gap: 3px;
+  :host(ob-admin-workspace) .detail-fields {
+    width: 100%;
   }
   :host(ob-admin-workspace) dt {
     color: var(--ob-text-muted);

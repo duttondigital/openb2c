@@ -146,7 +146,22 @@ export function filterableSchemaFields(
 }
 
 export function labelFor(row: Record<string, unknown>): string {
-  return String(row.title || row.name || row.email || row.reference || `#${row.id}`);
+  return labelWithTemporal(String(row.title || row.name || row.email || row.reference || `#${row.id}`), row);
+}
+
+export function labelWithTemporal(label: string, row: Record<string, unknown>): string {
+  const temporal = temporalSummaryFor(row);
+  if (!temporal || label.includes(temporal)) return label;
+  return `${label} · ${temporal}`;
+}
+
+export function temporalSummaryFor(row: Record<string, unknown>): string {
+  const date = firstPresent(row, ["date", "start_date", "starts_on", "starts_at", "start_at", "scheduled_at"]);
+  if (!date) return "";
+  const time = firstPresent(row, ["time", "start_time", "starts_time"]);
+  const dateLabel = formatDateLabel(date);
+  const timeLabel = formatTimeLabel(time) || timeFromDateTime(date);
+  return [dateLabel, timeLabel].filter(Boolean).join(" ");
 }
 
 export function formatValue(field: string, value: unknown, prop?: FieldSchema | null): string {
@@ -169,6 +184,36 @@ export function formatValue(field: string, value: unknown, prop?: FieldSchema | 
   }
 
   return String(value);
+}
+
+function firstPresent(row: Record<string, unknown>, fields: string[]): unknown {
+  for (const field of fields) {
+    const value = row[field];
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return "";
+}
+
+function formatDateLabel(value: unknown): string {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return text;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function formatTimeLabel(value: unknown): string {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+function timeFromDateTime(value: unknown): string {
+  const text = String(value || "").trim();
+  const match = text.match(/T(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
 function isDurationMinutesField(field: string, prop?: FieldSchema | null): boolean {

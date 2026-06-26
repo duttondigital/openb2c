@@ -11,7 +11,7 @@ import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import { validateSchema } from "./validation";
 import type { Column, Operation, Schema } from "./types";
-import { fieldDisplayLabel, filterableSchemaFields, formatValue, listFieldDisplayLabel, listSchemaFields, orderedSchemaFields } from "../ui/format";
+import { fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, labelWithTemporal, listFieldDisplayLabel, listSchemaFields, orderedSchemaFields } from "../ui/format";
 
 const baseColumn: Column = {
   type: "text",
@@ -150,6 +150,8 @@ describe("field metadata generation", () => {
     expect(listFieldDisplayLabel("title", schema.properties.title, true)).toBe("Name");
     expect(formatValue("duration_mins", 150)).toBe("2h 30m");
     expect(formatValue("duration_mins", 120)).toBe("2h");
+    expect(labelFor({ id: 1, title: "The Magic Flute", date: "2026-06-12", time: "19:30" })).toBe("The Magic Flute · 12 Jun 2026 19:30");
+    expect(labelWithTemporal("The Magic Flute", { date: "2026-06-12", time: "19:30" })).toBe("The Magic Flute · 12 Jun 2026 19:30");
   });
 
   test("generated services enforce per-field validation metadata", async () => {
