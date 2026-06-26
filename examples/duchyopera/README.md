@@ -13,7 +13,7 @@ This example composes the following OpenB2C modules:
 - **Customer** - Customer accounts with federated identity
 - **Identity** - Ed25519-based authentication, no passwords
 - **Venue** - Performance venues
-- **Artist** - Performers and crew
+- **Artist profile** - Performer/crew enrichment on canonical users
 - **Performance** - Shows with dates, times, and pricing
 - **Ticket** - Ticket sales and lifecycle (booked → confirmed → used → cancelled)
 - **Booking** - Checkout reservations, payment intent handoff, and stale checkout expiry

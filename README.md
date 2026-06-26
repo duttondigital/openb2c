@@ -119,7 +119,7 @@ production
 ├── rehearsal
 ├── rehearsal_requirement
 ├── production_material
-├── production_member ── artist
+├── production_member ── user ── artist_profile
 └── rehearsal_coverage ── rehearsal
 ```
 

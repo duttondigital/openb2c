@@ -46,10 +46,20 @@ describe("Duchy Opera production backend", () => {
       "rehearsal_coverage",
       "production_material",
       "material_version",
+      "artist_profile",
     ]) {
       expect(schema.tables[table]).toBeDefined();
     }
 
+    expect(schema.tables.artist).toBeUndefined();
+    expect(schema.tables.artist_profile.user_id).toMatchObject({
+      type: "integer",
+      required: true,
+      unique: true,
+      references: "user(id)",
+    });
+    expect(schema.tables.production_member.user_id.references).toBe("user(id)");
+    expect(schema.tables.rehearsal_call.user_id.references).toBe("user(id)");
     expect(schema.tables.production.opens_on).toBeUndefined();
     expect(schema.tables.production.closes_on).toBeUndefined();
     expect(schema.tables.performance.production_id).toMatchObject({
@@ -84,15 +94,24 @@ describe("Duchy Opera production backend", () => {
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS production");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS rehearsal");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS production_material");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS artist_profile");
+    expect(sql).not.toMatch(/CREATE TABLE IF NOT EXISTS artist\s*\(/);
     expect(sql).not.toContain("opens_on");
     expect(sql).not.toContain("closes_on");
     expect(sql).toContain("production_id INTEGER NOT NULL REFERENCES production(id)");
     expect(sql).toContain("CREATE INDEX IF NOT EXISTS performance_by_production_date");
-    expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS rehearsal_call_unique_rehearsal_artist");
+    expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS rehearsal_call_unique_rehearsal_user");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS material_version_unique_material_version");
 
+    expect(openapi.components.schemas.Artist).toBeUndefined();
+    expect(openapi.components.schemas.ArtistProfile).toBeDefined();
     expect(openapi.components.schemas.Production.properties.opens_on).toBeUndefined();
     expect(openapi.components.schemas.Production.properties.closes_on).toBeUndefined();
+    expect(openapi.components.schemas.ProductionMember.properties.user_id["x-openb2c-relationship"]).toMatchObject({
+      targetEntity: "user",
+      label: "Person",
+      targetLabel: { entity: "user", field: "name" },
+    });
     expect(openapi.components.schemas.Performance.properties.production_id["x-openb2c-relationship"]).toMatchObject({
       targetEntity: "production",
       label: "Production",

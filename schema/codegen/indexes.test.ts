@@ -58,7 +58,7 @@ describe("ontology indexes", () => {
     const ticketingSql = genSQL(ticketing.tables, ticketing.indexes);
     expect(duchySql).toContain("CREATE INDEX IF NOT EXISTS ticket_by_user_status ON ticket (user_id, status);");
     expect(duchySql).toContain("CREATE INDEX IF NOT EXISTS performance_by_venue_date ON performance (venue_id, date);");
-    expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS performance_artist_unique_pair ON performance_artist (performance_id, artist_id);");
+    expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS performance_artist_unique_pair ON performance_artist (performance_id, user_id);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS transaction_ticket_unique_pair ON transaction_ticket (transaction_id, ticket_id);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS booking_ticket_unique_pair ON booking_ticket (booking_id, ticket_id);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS booking_ticket_unique_ticket ON booking_ticket (ticket_id);");
@@ -74,9 +74,9 @@ describe("ontology indexes", () => {
 
     try {
       applySql(duchyDb, genSQL(duchyOpera.tables, duchyOpera.indexes));
-      duchyDb.run("INSERT INTO performance_artist (performance_id, artist_id) VALUES (1, 1)");
+      duchyDb.run("INSERT INTO performance_artist (performance_id, user_id) VALUES (1, 1)");
       expect(() => {
-        duchyDb.run("INSERT INTO performance_artist (performance_id, artist_id) VALUES (1, 1)");
+        duchyDb.run("INSERT INTO performance_artist (performance_id, user_id) VALUES (1, 1)");
       }).toThrow();
 
       duchyDb.run("INSERT INTO transaction_ticket (transaction_id, ticket_id) VALUES (1, 1)");

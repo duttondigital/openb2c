@@ -150,14 +150,14 @@ in
         targetLabel = config.refs.production.title;
       };
     };
-    artist_id = {
+    user_id = {
       type = "integer";
       required = true;
-      references = "artist(id)";
+      references = "user(id)";
       relationship = {
-        label = "Artist";
+        label = "Person";
         description = "Person or performer participating in the production.";
-        targetLabel = config.refs.artist.name;
+        targetLabel = config.refs.user.name;
       };
     };
     role_id = {
@@ -287,13 +287,13 @@ in
         targetLabel = config.refs.rehearsal.title;
       };
     };
-    artist_id = {
+    user_id = {
       type = "integer";
       required = true;
-      references = "artist(id)";
+      references = "user(id)";
       relationship = {
         label = "Participant";
-        targetLabel = config.refs.artist.name;
+        targetLabel = config.refs.user.name;
       };
     };
     role_id = {
@@ -424,8 +424,8 @@ in
     columns = [ "production_id" "category" ];
   };
 
-  indexes.production_member.unique_production_artist = {
-    columns = [ "production_id" "artist_id" ];
+  indexes.production_member.unique_production_user = {
+    columns = [ "production_id" "user_id" ];
     unique = true;
   };
 
@@ -437,8 +437,8 @@ in
     columns = [ "venue_id" "starts_at" ];
   };
 
-  indexes.rehearsal_call.unique_rehearsal_artist = {
-    columns = [ "rehearsal_id" "artist_id" ];
+  indexes.rehearsal_call.unique_rehearsal_user = {
+    columns = [ "rehearsal_id" "user_id" ];
     unique = true;
   };
 

@@ -36,18 +36,30 @@ let
                 name = "Ada Lovelace";
                 customer_type = "patron";
               }
+              {
+                id = 2;
+                email = "elowen@example.test";
+                name = "Elowen Trevorrow";
+                customer_type = "individual";
+              }
+              {
+                id = 3;
+                email = "morgan@example.test";
+                name = "Morgan Trelawny";
+                customer_type = "individual";
+              }
             ];
-            artist = [
+            artist_profile = [
               {
                 id = 1;
-                name = "Elowen Trevorrow";
+                user_id = 2;
                 role = "Soprano";
                 bio = "Cornish soprano performing as Pamina.";
                 active = 1;
               }
               {
                 id = 2;
-                name = "Morgan Trelawny";
+                user_id = 3;
                 role = "Conductor";
                 bio = "Music director for the Duchy Opera summer season.";
                 active = 1;
@@ -86,7 +98,7 @@ let
               {
                 id = 1;
                 production_id = 1;
-                artist_id = 1;
+                user_id = 2;
                 role_id = 1;
                 responsibility = "Pamina";
                 status = "confirmed";
@@ -94,7 +106,7 @@ let
               {
                 id = 2;
                 production_id = 1;
-                artist_id = 2;
+                user_id = 3;
                 role_id = 2;
                 responsibility = "Conductor";
                 status = "confirmed";
@@ -116,7 +128,7 @@ let
               {
                 id = 1;
                 rehearsal_id = 1;
-                artist_id = 1;
+                user_id = 2;
                 role_id = 1;
                 call_status = "confirmed";
                 notes = "Called for full session.";
@@ -124,7 +136,7 @@ let
               {
                 id = 2;
                 rehearsal_id = 1;
-                artist_id = 2;
+                user_id = 3;
                 role_id = 2;
                 call_status = "confirmed";
                 notes = "Music director call.";
@@ -289,7 +301,7 @@ let
       ../../schema/modules/user.nix
       ../../schema/modules/user_b2c.nix  # Adds customer_type to user
       ../../schema/modules/api_key.nix
-      ../../schema/modules/artist.nix
+      ../../schema/modules/artist_profile.nix
       ../../schema/modules/performance.nix
       ../../schema/modules/ticket.nix
       ../../schema/modules/transaction.nix

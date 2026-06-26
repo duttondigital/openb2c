@@ -125,7 +125,7 @@ in
     reason = "Performance changes affect public catalog state and ticket holder communications.";
   };
 
-  # Junction table for performance-artist many-to-many
+  # Junction table for performance artist participation.
   tables.performance_artist = {
     id = { type = "integer"; pk = true; auto = true; };
     performance_id = {
@@ -137,20 +137,20 @@ in
         targetLabel = config.refs.performance.title;
       };
     };
-    artist_id = {
+    user_id = {
       type = "integer";
       required = true;
-      references = "artist(id)";
+      references = "user(id)";
       relationship = {
         label = "Artist";
-        targetLabel = config.refs.artist.name;
+        targetLabel = config.refs.user.name;
       };
     };
     role_in_performance = { type = "text"; };  # Character name or role
   };
 
   indexes.performance_artist.unique_pair = {
-    columns = [ "performance_id" "artist_id" ];
+    columns = [ "performance_id" "user_id" ];
     unique = true;
   };
 
