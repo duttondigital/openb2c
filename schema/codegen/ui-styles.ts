@@ -148,10 +148,14 @@ const adminShell = `
   ob-admin-app {
     --ob-nav-width: 248px;
     --ob-nav-collapsed-width: 64px;
+    height: 100vh;
+    overflow: hidden;
   }
   ob-admin-app .app {
     display: flex;
-    min-height: 100vh;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
   }
   ob-admin-app ob-nav {
     flex: 0 0 var(--ob-nav-width);
@@ -166,7 +170,9 @@ const adminShell = `
     min-width: 0;
     width: 100%;
     max-width: 1280px;
+    height: 100vh;
     overflow-x: hidden;
+    overflow-y: auto;
     padding: 32px;
     margin: 0 auto;
   }
@@ -178,8 +184,15 @@ const adminShell = `
     color: #68675f;
   }
   @media (max-width: 780px) {
+    ob-admin-app {
+      height: auto;
+      overflow: visible;
+    }
     ob-admin-app .app {
       flex-direction: column;
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
     }
     ob-admin-app ob-nav {
       flex-basis: auto;
@@ -188,6 +201,8 @@ const adminShell = `
       flex-basis: auto;
     }
     ob-admin-app ob-admin-route-outlet {
+      height: auto;
+      overflow: visible;
       padding: 20px;
     }
   }
@@ -622,7 +637,8 @@ const nav = `
   }
   :host(ob-nav) nav {
     width: var(--ob-nav-width);
-    min-height: 100vh;
+    height: 100%;
+    min-height: 0;
     background: var(--ob-bg);
     border-right: 1px solid var(--ob-border);
     padding: 18px 12px;
@@ -707,6 +723,10 @@ const nav = `
   :host(ob-nav) .nav-groups {
     display: grid;
     gap: 18px;
+    flex: 1 1 auto;
+    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
   }
   :host(ob-nav) .group { display: grid; gap: 4px; }
   :host(ob-nav) .account {
@@ -773,6 +793,7 @@ const nav = `
     }
     :host(ob-nav) nav {
       width: 100%;
+      height: auto;
       min-height: auto;
       border-right: 0;
       border-bottom: 1px solid var(--ob-border);
@@ -798,6 +819,9 @@ const nav = `
     :host(ob-nav) .nav-groups,
     :host(ob-nav) .account {
       display: none;
+    }
+    :host(ob-nav) .nav-groups {
+      overflow: visible;
     }
     :host(ob-nav) nav.expanded .nav-groups,
     :host(ob-nav) nav.expanded .account {

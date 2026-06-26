@@ -190,6 +190,8 @@ describe("generated UI web components", () => {
     expect(adminNav).not.toContain("apiDescription");
     expect(adminNav).toContain("menu-toggle");
     expect(adminNav).toContain("aria-expanded");
+    expect(adminNav).toContain('width="36" height="36"');
+    expect(adminNav).toContain("_syncExpandedState");
     expect(adminNav).toContain('canCollection(item.entity, "read")');
     expect(adminNav).toContain("ob-auth-changed");
     expect(adminNav).not.toContain("INTERNAL_PREFIXES");
@@ -409,8 +411,11 @@ describe("generated UI web components", () => {
     const adminStyles = genAdminStylesheet();
 
     expect(adminStyles).toContain(":host(ob-nav) .menu-toggle{display:none");
+    expect(adminStyles).toContain("ob-admin-app{--ob-nav-width:248px;--ob-nav-collapsed-width:64px;height:100vh;overflow:hidden}");
+    expect(adminStyles).toContain("ob-admin-app .app{display:flex;height:100vh;min-height:0;overflow:hidden}");
     expect(adminStyles).toContain("ob-admin-app ob-nav{flex:0 0 var(--ob-nav-width);min-width:0;transition:flex-basis 0.18s ease}");
     expect(adminStyles).toContain(":host(ob-nav){position:sticky;top:0;height:100vh;z-index:2;min-width:0;overflow:hidden}");
+    expect(adminStyles).toContain(":host(ob-nav) nav{width:var(--ob-nav-width);height:100%;min-height:0");
     expect(adminStyles).toContain(":host(ob-nav) .brand{display:flex;align-items:center;justify-content:space-between;gap:10px;height:52px");
     expect(adminStyles).toContain(":host(ob-nav) .title{font-weight:800;font-size:17px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}");
     expect(adminStyles).toContain(":host(ob-nav) .collapse-toggle{display:inline-grid");
@@ -420,7 +425,7 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups,:host(ob-nav) .account{display:none}");
     expect(adminStyles).toContain(":host(ob-nav) nav.expanded .nav-groups,:host(ob-nav) nav.expanded .account{display:grid}");
     expect(adminStyles).toContain(":host(ob-nav) .nav-link{display:flex;align-items:center;justify-content:flex-start");
-    expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px}");
+    expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px;flex:1 1 auto;align-content:start;min-height:0;overflow-y:auto}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .record-panels{display:grid;gap:16px}");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr))");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .event-row{display:grid;grid-template-columns:150px 96px minmax(0,1fr) 140px");
@@ -429,7 +434,8 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-admin-workspace) ob-entity-list{display:block;min-width:0;max-width:100%}");
     expect(adminStyles).toContain(":host(ob-entity-list){display:block;min-width:0;max-width:100%}");
     expect(adminStyles).toContain("html{min-height:100%;max-width:100%;overflow-x:hidden");
-    expect(adminStyles).toContain("ob-admin-app ob-admin-route-outlet{flex:1;min-width:0;width:100%;max-width:1280px;overflow-x:hidden");
+    expect(adminStyles).toContain("ob-admin-app ob-admin-route-outlet{flex:1;min-width:0;width:100%;max-width:1280px;height:100vh;overflow-x:hidden;overflow-y:auto");
+    expect(adminStyles).toContain("@media (max-width:780px){ob-admin-app{height:auto;overflow:visible}ob-admin-app .app{flex-direction:column;height:auto;min-height:100vh;overflow:visible}");
     expect(adminStyles).toContain(".table-wrap{overflow:auto;width:100%;max-width:100%;min-width:0;contain:layout paint inline-size");
     expect(adminStyles).toContain(":host(ob-entity-form) .form-group input[readonly]");
     expect(adminStyles).toContain(".entity-table{table-layout:fixed}");

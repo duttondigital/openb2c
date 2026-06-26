@@ -52,7 +52,7 @@ export class ObNav extends HTMLElement {
       <nav aria-label="Primary" class="${this._expanded ? "expanded" : ""}">
         <div class="brand">
           <div class="brand-lockup">
-            ${logo ? `<img class="brand-logo" src="${escapeAttr(logo.src)}" alt="${escapeAttr(logoAlt)}" />` : ""}
+            ${logo ? `<img class="brand-logo" src="${escapeAttr(logo.src)}" alt="${escapeAttr(logoAlt)}" width="36" height="36" />` : ""}
             <div class="brand-copy">
               <div class="title">${appTitle}</div>
             </div>
@@ -93,6 +93,7 @@ export class ObNav extends HTMLElement {
       </nav>
     `;
     this._syncCollapsedState();
+    this._syncExpandedState();
 
     this.shadowRoot!.querySelector<HTMLButtonElement>(".collapse-toggle")?.addEventListener("click", () => {
       this._collapsed = !this._collapsed;
@@ -100,9 +101,9 @@ export class ObNav extends HTMLElement {
       this._syncCollapsedState();
     });
 
-    this.shadowRoot!.querySelector<HTMLButtonElement>(".menu-toggle")?.addEventListener("click", async () => {
+    this.shadowRoot!.querySelector<HTMLButtonElement>(".menu-toggle")?.addEventListener("click", () => {
       this._expanded = !this._expanded;
-      await this._render();
+      this._syncExpandedState();
     });
 
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-href]").forEach((button) => {
@@ -112,7 +113,7 @@ export class ObNav extends HTMLElement {
         location.hash = href;
         this._expanded = false;
         this._highlight();
-        void this._render();
+        this._syncExpandedState();
       });
     });
 
@@ -128,6 +129,13 @@ export class ObNav extends HTMLElement {
     button.setAttribute("title", collapseLabel);
     button.setAttribute("aria-pressed", this._collapsed ? "true" : "false");
     button.innerHTML = sidebarCollapseIcon(this._collapsed);
+  }
+
+  private _syncExpandedState() {
+    const nav = this.shadowRoot!.querySelector("nav");
+    nav?.classList.toggle("expanded", this._expanded);
+    const button = this.shadowRoot!.querySelector<HTMLButtonElement>(".menu-toggle");
+    button?.setAttribute("aria-expanded", this._expanded ? "true" : "false");
   }
 
   private _highlight() {
