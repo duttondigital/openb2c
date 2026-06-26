@@ -47,10 +47,6 @@ export type FieldSchema = {
     label?: string;
     description?: string;
     cardinality?: "one" | "many";
-    targetLabel?: {
-      entity?: string;
-      field?: string;
-    };
   };
   "x-openb2c-derived"?: {
     displayOnly?: boolean;
@@ -78,7 +74,7 @@ export function fieldDisplayLabel(field: string, prop?: FieldSchema | null): str
 }
 
 export function listFieldDisplayLabel(field: string, prop?: FieldSchema | null, primary = false): string {
-  if (primary && (field === "name" || field === "title")) return "Name";
+  if (primary && field === "name") return "Name";
   return fieldDisplayLabel(field, prop);
 }
 
@@ -146,33 +142,41 @@ export function filterableSchemaFields(
 }
 
 export function labelFor(row: Record<string, unknown>): string {
-  return labelWithTemporal(String(row.title || row.name || row.email || row.reference || `#${row.id}`), row);
+  return String(row.name || row.email || row.reference || temporalSummaryFor(row) || `#${row.id}`);
 }
 
-export function labelWithTemporal(label: string, row: Record<string, unknown>): string {
-  const temporal = temporalSummaryFor(row);
-  if (!temporal || label.includes(temporal)) return label;
-  return `${label} · ${temporal}`;
-}
-
-export function temporalSummaryFor(row: Record<string, unknown>): string {
-  const date = firstPresent(row, ["date", "start_date", "starts_on", "starts_at", "start_at", "scheduled_at"]);
-  if (!date) return "";
+function temporalSummaryFor(row: Record<string, unknown>): string {
+  const start = firstPresent(row, ["starts_at", "start_at", "scheduled_at", "date"]);
+  if (!start) return "";
   const time = firstPresent(row, ["time", "start_time", "starts_time"]);
-  const dateLabel = formatDateLabel(date);
-  const timeLabel = formatTimeLabel(time) || timeFromDateTime(date);
-  return [dateLabel, timeLabel].filter(Boolean).join(" ");
+  const formatted = String(start).includes("T")
+    ? formatDateTime(start)
+    : [formatDate(start), time ? formatTime(time) : ""].filter(Boolean).join(", ");
+  return formatted;
+}
+
+function firstPresent(row: Record<string, unknown>, fields: string[]): unknown {
+  for (const field of fields) {
+    const value = row[field];
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return "";
 }
 
 export function formatValue(field: string, value: unknown, prop?: FieldSchema | null): string {
   if (value === null || value === undefined || value === "") return "";
+
+  const format = fieldFormat(prop);
+  if (format === "date-time" || field.endsWith("_at")) return formatDateTime(value);
+  if (format === "date" || field === "date" || field.endsWith("_date")) return formatDate(value);
+  if (format === "time" || field === "time" || field.endsWith("_time")) return formatTime(value);
 
   if (isDurationMinutesField(field, prop)) {
     const minutes = Number(value);
     if (Number.isFinite(minutes)) return formatMinutes(minutes);
   }
 
-  if ((field.endsWith("_pence") || fieldFormat(prop) === "money") && typeof value === "number") {
+  if ((field.endsWith("_pence") || format === "money") && typeof value === "number") {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: "GBP",
@@ -186,15 +190,7 @@ export function formatValue(field: string, value: unknown, prop?: FieldSchema | 
   return String(value);
 }
 
-function firstPresent(row: Record<string, unknown>, fields: string[]): unknown {
-  for (const field of fields) {
-    const value = row[field];
-    if (value !== null && value !== undefined && value !== "") return value;
-  }
-  return "";
-}
-
-function formatDateLabel(value: unknown): string {
+function formatDate(value: unknown): string {
   const text = String(value || "").trim();
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return text;
@@ -202,18 +198,26 @@ function formatDateLabel(value: unknown): string {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
-function formatTimeLabel(value: unknown): string {
+function formatTime(value: unknown): string {
   const text = String(value || "").trim();
   const match = text.match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return "";
+  if (!match) return text;
   return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
-function timeFromDateTime(value: unknown): string {
+function formatDateTime(value: unknown): string {
   const text = String(value || "").trim();
-  const match = text.match(/T(\d{1,2}):(\d{2})/);
-  if (!match) return "";
-  return `${match[1].padStart(2, "0")}:${match[2]}`;
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})/);
+  if (!match) return text;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 function isDurationMinutesField(field: string, prop?: FieldSchema | null): boolean {

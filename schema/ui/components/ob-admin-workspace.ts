@@ -40,6 +40,13 @@ type PeoplePanel = {
   calls: Record<string, unknown>[];
 };
 
+type ReferenceValue = {
+  entity: string;
+  value: unknown;
+  relationship: any;
+  row: Record<string, unknown> | null;
+};
+
 type RecordContext = {
   children: ChildCollection[];
   schedules: ChildCollection[];
@@ -139,22 +146,24 @@ export class ObAdminWorkspace extends HTMLElement {
       return;
     }
 
+    const fields = overviewFields(api.getSchema(this.entity));
+    const references = await loadReferenceRows(api, this.entity, fields, record);
     const context = await loadRecordContext(api, workspace, record);
+    const overview = this._renderOverview(api, record, fields, references);
+    const title = recordTitleFor(api, this.entity, record, fields, references);
     this.shadowRoot!.innerHTML = `
       ${stylesheetLink()}
       <section class="workspace record-workspace">
         <div class="workspace-header">
           <div>
-            <div class="eyebrow">${escapeHtml(workspace.label)}</div>
-            <h1>${escapeHtml(labelFor(record))}</h1>
-          </div>
-          <div class="workspace-actions">
-            <a class="btn" href="#/workspaces/${escapeAttr(this.entity)}">All ${escapeHtml(workspace.label)}</a>
-            <a class="btn secondary" href="#/${escapeAttr(this.entity)}s/${escapeAttr(this.recordId)}/edit?return=${escapeAttr(returnPath(this.entity, this.recordId))}">Edit</a>
+            <nav class="workspace-breadcrumb" aria-label="Breadcrumb">
+              <a href="#/workspaces/${escapeAttr(this.entity)}">${escapeHtml(workspace.label)}</a>
+            </nav>
+            <h1>${escapeHtml(title)}</h1>
           </div>
         </div>
         <div class="record-panels">
-          ${this._renderOverview(api, record)}
+          ${overview}
           ${context.schedules.map((child) => this._renderSchedule(api, child)).join("")}
           ${context.people ? this._renderPeople(api, context.people) : ""}
           ${context.matrices.map((panel) => this._renderMatrix(api, panel)).join("")}
@@ -238,10 +247,7 @@ export class ObAdminWorkspace extends HTMLElement {
     `;
   }
 
-  private _renderOverview(api: ObApi, record: Record<string, unknown>): string {
-    const schema = api.getSchema(this.entity);
-    const fields = orderedSchemaFields(schema)
-      .filter(([field]) => !["id", "created_at", "updated_at"].includes(field));
+  private _renderOverview(api: ObApi, record: Record<string, unknown>, fields: [string, any][], references: Map<string, ReferenceValue>): string {
     const operations = this._operationViews(api, this.entity, record);
     return `
       <section class="record-panel overview-panel" aria-label="Overview">
@@ -250,12 +256,15 @@ export class ObAdminWorkspace extends HTMLElement {
             <h2>Overview</h2>
             <p>${escapeHtml(displayName(this.entity))} #${escapeHtml(this.recordId)}</p>
           </div>
-          ${this._renderOperationButtons(this.entity, this.recordId, operations)}
+          <div class="panel-controls">
+            ${this._renderOperationButtons(this.entity, this.recordId, operations)}
+            <a class="btn secondary" href="#/${escapeAttr(this.entity)}s/${escapeAttr(this.recordId)}/edit?return=${escapeAttr(returnPath(this.entity, this.recordId))}">Edit</a>
+          </div>
         </div>
         <dl class="detail-fields">
           ${fields.map(([field, prop]) => `
             <dt>${escapeHtml(fieldDisplayLabel(field, prop))}</dt>
-            <dd>${renderFormattedValue(field, record[field], prop)}</dd>
+            <dd>${renderRecordFieldValue(api, field, record[field], prop, references.get(field))}</dd>
           `).join("")}
         </dl>
         ${this._renderPendingConfirmation()}
@@ -390,8 +399,20 @@ export class ObAdminWorkspace extends HTMLElement {
 
   private _renderOperationButtons(entity: string, id: string, operations: OperationView[], mode: "normal" | "compact" = "normal"): string {
     if (operations.length === 0) return "";
+    if (mode === "normal") {
+      return `
+        <details class="action-menu">
+          <summary>Workflow actions</summary>
+          <div class="action-menu-list">
+            ${operations.map((operation) => `
+              <button type="button" class="secondary workspace-op" data-entity="${escapeAttr(entity)}" data-id="${escapeAttr(id)}" data-op="${escapeAttr(operation.op)}" title="${escapeAttr(operation.available ? operation.description : operation.unavailableReason)}" ${operation.available ? "" : "disabled"}>${escapeHtml(operation.label)}</button>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
     return `
-      <div class="${mode === "compact" ? "inline-actions" : "panel-actions"}">
+      <div class="inline-actions">
         ${operations.map((operation) => `
           <button type="button" class="secondary workspace-op" data-entity="${escapeAttr(entity)}" data-id="${escapeAttr(id)}" data-op="${escapeAttr(operation.op)}" title="${escapeAttr(operation.available ? operation.description : operation.unavailableReason)}" ${operation.available ? "" : "disabled"}>${escapeHtml(operation.label)}</button>
         `).join("")}
@@ -417,10 +438,11 @@ export class ObAdminWorkspace extends HTMLElement {
     return api.getOperations(entity).map((op) => {
       const policy = api.getOperationPolicy(entity, op) || {};
       const workflow = api.getOperationWorkflow(entity, op) || {};
-      const availability = operationAvailability(record, workflow, policy.label || displayOperation(op));
+      const label = contextualOperationLabel(policy.label || displayOperation(op), entity);
+      const availability = operationAvailability(record, workflow, label);
       return {
         op,
-        label: policy.label || displayOperation(op),
+        label,
         description: policy.description || workflow.audit?.summary || "",
         workflow,
         available: availability.available,
@@ -617,6 +639,41 @@ async function fetchList(api: ObApi, entity: string, params: Record<string, unkn
   return data.items || [];
 }
 
+async function loadReferenceRows(
+  api: ObApi,
+  entity: string,
+  fields: [string, any][],
+  record: Record<string, unknown>,
+): Promise<Map<string, ReferenceValue>> {
+  const fks = api.getForeignKeys(entity);
+  const relationships = api.getForeignKeyRelationships(entity);
+  const references = new Map<string, ReferenceValue>();
+
+  await Promise.all(fields.map(async ([field]) => {
+    const targetEntity = fks[field];
+    const value = record[field];
+    if (!targetEntity || value === null || value === undefined || value === "") return;
+
+    let row: Record<string, unknown> | null = null;
+    if (api.canCollection(targetEntity, "read")) {
+      const res = await api.request(`/api/${targetEntity}s/${value}`);
+      if (res.ok) {
+        const candidate = await res.json();
+        if (api.can(targetEntity, "read", candidate)) row = candidate;
+      }
+    }
+
+    references.set(field, {
+      entity: targetEntity,
+      value,
+      relationship: relationships[field],
+      row,
+    });
+  }));
+
+  return references;
+}
+
 function fallbackWorkspace(api: ObApi, entity: string): AdminWorkspace {
   const node = api.getEntityGraph({ includeInternal: true }).nodes.find((candidate) => candidate.entity === entity);
   return {
@@ -667,6 +724,48 @@ function compactRow(api: ObApi, entity: string, row: Record<string, unknown>): s
   `;
 }
 
+function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
+  return labelFor(row);
+}
+
+function overviewFields(schema: any): [string, any][] {
+  return orderedSchemaFields(schema).filter(([field]) => !["id", "created_at", "updated_at"].includes(field));
+}
+
+function recordTitleFor(
+  api: ObApi,
+  entity: string,
+  record: Record<string, unknown>,
+  fields: [string, any][],
+  references: Map<string, ReferenceValue>,
+): string {
+  const direct = primaryLabelFor(record);
+  if (direct) return direct;
+
+  const refParts = fields
+    .map(([field]) => references.get(field))
+    .filter((reference): reference is ReferenceValue => Boolean(reference?.row))
+    .map((reference) => relationshipLabelFor(reference.row!, reference.relationship))
+    .filter(Boolean);
+
+  const temporalParts = fields
+    .filter(([field, prop]) => isTemporalSummaryField(field, prop))
+    .map(([field, prop]) => formatValue(field, record[field], prop))
+    .filter(Boolean);
+
+  const parts = [...refParts, ...temporalParts].slice(0, 3);
+  return parts.length > 0 ? parts.join(" · ") : `${displayName(entity)} #${record.id}`;
+}
+
+function primaryLabelFor(record: Record<string, unknown>): string {
+  return String(record.name || record.email || record.reference || "");
+}
+
+function isTemporalSummaryField(field: string, prop?: any): boolean {
+  const format = prop?.format || prop?.["x-openb2c-field"]?.format || "";
+  return format === "date" || format === "time" || format === "date-time" || field === "date" || field === "time" || field.endsWith("_date") || field.endsWith("_time") || field.endsWith("_at");
+}
+
 function panelTitle(title: string, meta: string, createUrl: string, createLabel?: string): string {
   return `
     <div class="panel-header">
@@ -686,6 +785,15 @@ function renderFormattedValue(field: string, value: unknown, prop?: any): string
     return `<span class="badge ${statusClass(field, value)}">${escapeHtml(formatted)}</span>`;
   }
   return escapeHtml(formatted);
+}
+
+function renderRecordFieldValue(api: ObApi, field: string, value: unknown, prop?: any, reference?: ReferenceValue): string {
+  if (reference) {
+    const label = reference.row ? relationshipLabelFor(reference.row, reference.relationship) : `#${reference.value}`;
+    const title = reference.row ? `${label} (#${reference.value})` : label;
+    return `<a class="detail-link" href="${escapeAttr(recordHref(api, reference.entity, reference.value))}" title="${escapeAttr(title)}">${escapeHtml(label)}</a>`;
+  }
+  return renderFormattedValue(field, value, prop);
 }
 
 function emptyText(text: string): string {
@@ -709,6 +817,19 @@ function matrixTitle(entity: string): string {
   if (entity.includes("coverage")) return "Coverage matrix";
   if (entity.includes("call")) return "Call matrix";
   return `${displayName(entity)} matrix`;
+}
+
+function contextualOperationLabel(label: string, entity: string): string {
+  const suffixes = [displayName(entity), pluralDisplayName(entity)];
+  for (const suffix of suffixes) {
+    const normalized = label.replace(new RegExp(`\\s+${escapeRegExp(suffix)}$`, "i"), "").trim();
+    if (normalized && normalized !== label) return normalized;
+  }
+  return label;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function contextualPluralDisplayName(entity: string, contextEntity: string, edge: EntityGraphEdge | null = null): string {

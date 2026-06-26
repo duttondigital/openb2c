@@ -557,12 +557,6 @@ function columnRelationshipMetadata(col: Column): Record<string, unknown> | null
   };
   if (relationship.label || metadata.label) extension.label = relationship.label || metadata.label;
   if (relationship.description) extension.description = relationship.description;
-  if (relationship.targetLabel) {
-    extension.targetLabel = {
-      entity: relationship.targetLabel.table,
-      field: relationship.targetLabel.field,
-    };
-  }
   return extension;
 }
 

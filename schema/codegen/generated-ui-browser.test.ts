@@ -42,7 +42,7 @@ describe("generated UI browser automation", () => {
 
       await page.getByRole("button", { name: /The Magic Flute/ }).click();
       await page.getByRole("heading", { name: "Choose details" }).waitFor();
-      await page.getByRole("button", { name: /2026-06-12.*19:30.*Hall for Cornwall/ }).click();
+      await page.getByRole("button", { name: /27 Jun 2026.*19:30.*Hall for Cornwall/ }).click();
 
       await page.getByLabel("Seat").fill("A1");
       await page.getByLabel("Ticket type").selectOption("patron");
@@ -136,8 +136,8 @@ describe("generated UI browser automation", () => {
 
       const rehearsalTitle = `Act II staging ${Date.now()}`;
       await page.getByLabel("Rehearsal").fill(rehearsalTitle);
-      await page.getByLabel("Starts").fill("2026-05-22T18:00");
-      await page.getByLabel("Ends").fill("2026-05-22T21:00");
+      await page.getByLabel("Starts").fill("2027-05-22T18:00");
+      await page.getByLabel("Ends").fill("2027-05-22T21:00");
       await page.getByRole("button", { name: "Create" }).click();
       await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
       await page.locator("ob-admin-workspace").getByText(rehearsalTitle).first().waitFor();

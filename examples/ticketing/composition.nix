@@ -45,7 +45,7 @@ let
                 id = 1;
                 project_id = 1;
                 number = 1;
-                title = "Harden generated checkout flow";
+                name = "Harden generated checkout flow";
                 description = "Verify generated ecommerce journeys with realistic browser fixtures.";
                 type = "task";
                 status = "todo";

@@ -5,7 +5,7 @@ in
 {
   tables.production = {
     id = { type = "integer"; pk = true; auto = true; };
-    title = {
+    name = {
       type = "text";
       required = true;
       metadata = {
@@ -72,7 +72,6 @@ in
     relationship = {
       label = "Production";
       description = "Production this performance belongs to.";
-      targetLabel = config.refs.production.title;
     };
   };
 
@@ -89,7 +88,6 @@ in
       relationship = {
         label = "Production";
         description = "Production this role belongs to.";
-        targetLabel = config.refs.production.title;
       };
     };
     name = {
@@ -147,7 +145,6 @@ in
       references = "production(id)";
       relationship = {
         label = "Production";
-        targetLabel = config.refs.production.title;
       };
     };
     user_id = {
@@ -157,7 +154,6 @@ in
       relationship = {
         label = "Person";
         description = "Person or performer participating in the production.";
-        targetLabel = config.refs.user.name;
       };
     };
     role_id = {
@@ -165,7 +161,6 @@ in
       references = "production_role(id)";
       relationship = {
         label = "Role";
-        targetLabel = config.refs.production_role.name;
       };
     };
     responsibility = {
@@ -195,10 +190,9 @@ in
       references = "production(id)";
       relationship = {
         label = "Production";
-        targetLabel = config.refs.production.title;
       };
     };
-    title = {
+    name = {
       type = "text";
       required = true;
       metadata = {
@@ -218,7 +212,6 @@ in
       relationship = {
         label = "Venue";
         description = "Venue or room reserved for this rehearsal.";
-        targetLabel = config.refs.venue.name;
       };
     };
     starts_at = {
@@ -284,7 +277,6 @@ in
       references = "rehearsal(id)";
       relationship = {
         label = "Rehearsal";
-        targetLabel = config.refs.rehearsal.title;
       };
     };
     user_id = {
@@ -293,7 +285,6 @@ in
       references = "user(id)";
       relationship = {
         label = "Participant";
-        targetLabel = config.refs.user.name;
       };
     };
     role_id = {
@@ -301,7 +292,6 @@ in
       references = "production_role(id)";
       relationship = {
         label = "Role";
-        targetLabel = config.refs.production_role.name;
       };
     };
     call_status = {
@@ -331,7 +321,6 @@ in
       references = "production(id)";
       relationship = {
         label = "Production";
-        targetLabel = config.refs.production.title;
       };
     };
     name = {
@@ -381,7 +370,6 @@ in
       references = "rehearsal_requirement(id)";
       relationship = {
         label = "Requirement";
-        targetLabel = config.refs.rehearsal_requirement.name;
       };
     };
     rehearsal_id = {
@@ -390,7 +378,6 @@ in
       references = "rehearsal(id)";
       relationship = {
         label = "Rehearsal";
-        targetLabel = config.refs.rehearsal.title;
       };
     };
     status = {
@@ -416,8 +403,8 @@ in
     columns = [ "status" ];
   };
 
-  indexes.performance.by_production_date = {
-    columns = [ "production_id" "date" ];
+  indexes.performance.by_production_start = {
+    columns = [ "production_id" "starts_at" ];
   };
 
   indexes.production_role.by_production_category = {

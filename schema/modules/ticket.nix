@@ -16,7 +16,6 @@ in
       relationship = {
         label = "Performance";
         description = "Performance this ticket admits the customer to.";
-        targetLabel = config.refs.performance.title;
       };
     };
     user_id = {
@@ -30,7 +29,6 @@ in
       relationship = {
         label = "Customer";
         description = "Customer who owns this ticket.";
-        targetLabel = config.refs.user.email;
       };
     };
     seat = {

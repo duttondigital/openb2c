@@ -3,7 +3,7 @@
  * Derives form fields from OpenAPI spec.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, fieldFormat, fieldHelpText, fieldPlaceholder, labelFor, labelWithTemporal, orderedSchemaFields } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, fieldFormat, fieldHelpText, fieldPlaceholder, labelFor, orderedSchemaFields } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityForm extends HTMLElement {
@@ -53,9 +53,11 @@ export class ObEntityForm extends HTMLElement {
     const fks = api.getForeignKeys(this.entity);
     const relationships = api.getForeignKeyRelationships(this.entity);
     const required = new Set(inputSchema.required || []);
-    const fields = orderedSchemaFields(inputSchema);
+    const fields = orderedSchemaFields(inputSchema).filter(([name]) => !isSystemTimestampField(name));
     const defaults = this.defaults;
-    const lockedFields = new Set(Object.keys(defaults));
+    const defaultLockedFields = new Set(Object.keys(defaults));
+    const lifecycleLockedFields = lifecycleControlledFields(api, this.entity);
+    const lockedFields = new Set([...defaultLockedFields, ...lifecycleLockedFields]);
 
     // Load existing record for edit mode
     let record: any = { ...defaults };
@@ -120,7 +122,8 @@ export class ObEntityForm extends HTMLElement {
             const describedBy = help ? `${id}-help` : "";
             const describedByAttr = describedBy ? ` aria-describedby="${escapeAttr(describedBy)}"` : "";
             const helpMarkup = help ? `<div class="help-text" id="${escapeAttr(describedBy)}">${escapeHtml(help)}</div>` : "";
-            const lockedMarkup = locked ? `<input type="hidden" name="${escapeAttr(name)}" value="${escapeAttr(val)}" /><div class="help-text">Set by the current workspace.</div>` : "";
+            const lockedHelp = lifecycleLockedFields.has(name) ? "Managed by workflow actions." : "Set by the current workspace.";
+            const lockedMarkup = locked ? `${defaultLockedFields.has(name) ? `<input type="hidden" name="${escapeAttr(name)}" value="${escapeAttr(val)}" />` : ""}<div class="help-text">${escapeHtml(lockedHelp)}</div>` : "";
             const full = isWideField(name, prop) ? " full" : "";
 
             if (fks[name]) {
@@ -160,7 +163,7 @@ export class ObEntityForm extends HTMLElement {
               return `
                 <div class="form-group full">
                   <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "readonly" : ""}>${escapeHtml(val)}</textarea>
+                  <textarea id="${escapeAttr(id)}" name="${escapeAttr(name)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "disabled" : ""}>${escapeHtml(val)}</textarea>
                   ${helpMarkup}${lockedMarkup}
                 </div>`;
             }
@@ -168,7 +171,7 @@ export class ObEntityForm extends HTMLElement {
             return `
               <div class="form-group${full}">
                 <label for="${escapeAttr(id)}">${escapeHtml(label)}${req ? ' <span class="required">*</span>' : ""}</label>
-                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "readonly" : ""} />
+                <input id="${escapeAttr(id)}" ${inputAttrs} name="${escapeAttr(name)}" value="${escapeAttr(val)}"${describedByAttr}${placeholderAttr}${validationAttrs} ${req ? "required" : ""} ${locked ? "disabled" : ""} />
                 ${helpMarkup}${lockedMarkup}
               </div>`;
           }).join("")}
@@ -239,6 +242,8 @@ export class ObEntityForm extends HTMLElement {
 
   private _backTarget(): string {
     if (this.returnTo) return this.returnTo;
+    const api = ObApi.instance;
+    if (this.mode === "edit" && this.recordId && api?.getAdminWorkspace(this.entity)) return `#/workspaces/${this.entity}/${this.recordId}`;
     return this.mode === "edit" && this.recordId ? `#/${this.entity}s/${this.recordId}` : `#/${this.entity}s`;
   }
 
@@ -279,6 +284,10 @@ function validationAttrsFor(name: string, prop: any): string {
   if (prop.maxLength !== undefined) attrs.push(`maxlength="${escapeAttr(prop.maxLength)}"`);
   if (prop.minimum !== undefined) attrs.push(`min="${escapeAttr(validationNumberValue(name, prop, prop.minimum))}"`);
   if (prop.maximum !== undefined) attrs.push(`max="${escapeAttr(validationNumberValue(name, prop, prop.maximum))}"`);
+  if (isFutureTemporalField(name, prop)) {
+    if (isDateTimeField(name, prop)) attrs.push(`min="${escapeAttr(localDateTimeMin())}"`);
+    if (isDateField(name, prop)) attrs.push(`min="${escapeAttr(localDateMin())}"`);
+  }
   if (prop.pattern) attrs.push(`pattern="${escapeAttr(prop.pattern)}"`);
   return attrs.length ? ` ${attrs.join(" ")}` : "";
 }
@@ -324,11 +333,50 @@ function isWideField(name: string, prop?: any): boolean {
   return fieldFormat(prop) === "textarea" || ["description", "notes", "body", "content"].some((part) => name.includes(part));
 }
 
-function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
-  const targetField = relationship?.targetLabel?.field;
-  if (targetField && row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== "") {
-    return labelWithTemporal(String(row[targetField]), row);
+function isSystemTimestampField(name: string): boolean {
+  return name === "created_at" || name === "updated_at";
+}
+
+function isFutureTemporalField(name: string, prop?: any): boolean {
+  if (isSystemTimestampField(name)) return false;
+  return isDateField(name, prop) || isDateTimeField(name, prop) || fieldFormat(prop) === "time" || name === "time" || name.endsWith("_time");
+}
+
+function isDateField(name: string, prop?: any): boolean {
+  return fieldFormat(prop) === "date" || name === "date" || name.endsWith("_date");
+}
+
+function isDateTimeField(name: string, prop?: any): boolean {
+  return fieldFormat(prop) === "date-time" || name.endsWith("_at");
+}
+
+function localDateMin(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+function localDateTimeMin(): string {
+  const now = new Date();
+  return `${localDateMin()}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function lifecycleControlledFields(api: ObApi, entity: string): Set<string> {
+  const fields = new Set<string>();
+  for (const op of api.getOperations(entity)) {
+    const workflow = api.getOperationWorkflow(entity, op);
+    for (const transition of workflow?.transitions || []) {
+      const field = transition?.field?.field;
+      if (field) fields.add(field);
+    }
   }
+  return fields;
+}
+
+function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
   return labelFor(row);
 }
 

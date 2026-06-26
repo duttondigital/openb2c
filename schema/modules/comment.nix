@@ -11,7 +11,6 @@ in
       references = "issue(id)";
       relationship = {
         label = "Issue";
-        targetLabel = config.refs.issue.title;
       };
     };
     author_id = {
@@ -20,7 +19,6 @@ in
       references = "user(id)";
       relationship = {
         label = "Author";
-        targetLabel = config.refs.user.email;
       };
     };
     body = { type = "text"; required = true; };

@@ -122,10 +122,11 @@ describe("generated MCP example integrations", () => {
       const catalogResult = await mcp.callTool("list_commerce_catalog", {}, auth);
       expect(catalogResult.isError).toBeUndefined();
       const catalog = JSON.parse(catalogResult.content[0].text) as {
-        items: { id: number; title: string }[];
+        items: { id: number; production_id: number }[];
         lookups: Record<string, Record<string, string>>;
       };
-      expect(catalog.items.map(item => item.title)).toEqual(["The Magic Flute"]);
+      expect(catalog.items.map(item => item.production_id)).toEqual([1]);
+      expect(catalog.lookups.production_id["1"]).toBe("The Magic Flute");
       expect(catalog.lookups.venue_id["1"]).toBe("Hall for Cornwall");
 
       const checkoutResult = await mcp.callTool("checkout_cart", {
@@ -201,13 +202,13 @@ describe("generated MCP example integrations", () => {
       }, auth);
       expect(listResult.isError).toBeUndefined();
       const issues = JSON.parse(listResult.content[0].text) as {
-        items: { id: number; title: string; status: string }[];
+        items: { id: number; name: string; status: string }[];
         total: number;
       };
       expect(issues.total).toBe(1);
       expect(issues.items[0]).toMatchObject({
         id: 1,
-        title: "Harden generated checkout flow",
+        name: "Harden generated checkout flow",
         status: "todo",
       });
 

@@ -56,9 +56,9 @@ function seedDuchyOpera(dbPath: string) {
   try {
     db.query("INSERT INTO user (id, email, name) VALUES (1, 'ada@example.test', 'Ada Lovelace')").run();
     db.query("INSERT INTO venue (id, name, address, city, postcode, capacity) VALUES (1, 'Hall for Cornwall', 'Back Quay', 'Truro', 'TR1 2LL', 900)").run();
-    db.query("INSERT INTO production (id, title, season, status) VALUES (1, 'The Magic Flute', 'Summer 2026', 'active')").run();
-    db.query("INSERT INTO performance (id, production_id, title, venue_id, date, time, duration_mins, price_pence, status) VALUES (1, 1, 'The Magic Flute', 1, '2026-06-12', '19:30', 150, 2500, 'scheduled')").run();
-    db.query("INSERT INTO performance (id, production_id, title, venue_id, date, time, duration_mins, price_pence, status) VALUES (2, 1, 'Cancelled Gala', 1, '2026-06-13', '19:30', 120, 3000, 'cancelled')").run();
+    db.query("INSERT INTO production (id, name, season, status) VALUES (1, 'The Magic Flute', 'Summer 2026', 'active')").run();
+    db.query("INSERT INTO performance (id, production_id, venue_id, starts_at, ends_at, price_pence, status) VALUES (1, 1, 1, '2026-06-27T19:30:00Z', '2026-06-27T22:00:00Z', 2500, 'scheduled')").run();
+    db.query("INSERT INTO performance (id, production_id, venue_id, starts_at, ends_at, price_pence, status) VALUES (2, 1, 1, '2026-06-28T19:30:00Z', '2026-06-28T21:30:00Z', 3000, 'cancelled')").run();
   } finally {
     db.close();
   }
@@ -146,7 +146,7 @@ function genericShopSchema(): Schema {
       enabled: true,
       catalog: {
         entity: "product",
-        title: ref("product", "name"),
+        label: ref("product", "name"),
         description: null,
         price: ref("product", "price_pence"),
         groupBy: [ref("product", "name")],
@@ -345,10 +345,11 @@ describe("Duchy Opera commerce workflow", () => {
       const catalog = await fetch(`${base}/commerce/catalog`);
       expect(catalog.status).toBe(200);
       const catalogBody = await catalog.json() as {
-        items: { id: number; title: string }[];
+        items: { id: number; production_id: number }[];
         lookups: Record<string, Record<string, string>>;
       };
-      expect(catalogBody.items.map(item => item.title)).toEqual(["The Magic Flute"]);
+      expect(catalogBody.items.map(item => item.production_id)).toEqual([1]);
+      expect(catalogBody.lookups.production_id["1"]).toBe("The Magic Flute");
       expect(catalogBody.lookups.venue_id["1"]).toBe("Hall for Cornwall");
 
       const directDb = new Database(dbPath);

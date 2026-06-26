@@ -11,7 +11,7 @@ import { genSQL } from "./sql";
 import { genTypes } from "./typescript";
 import { validateSchema } from "./validation";
 import type { Column, Operation, Schema } from "./types";
-import { fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, labelWithTemporal, listFieldDisplayLabel, listSchemaFields, orderedSchemaFields } from "../ui/format";
+import { fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listFieldDisplayLabel, listSchemaFields, orderedSchemaFields } from "../ui/format";
 
 const baseColumn: Column = {
   type: "text",
@@ -129,7 +129,7 @@ describe("field metadata generation", () => {
   test("generated UI list helpers prefer record names over derived display labels", () => {
     const schema = {
       properties: {
-        title: {
+        name: {
           title: "Performance",
           "x-openb2c-field": { displayPriority: 10 },
         },
@@ -146,12 +146,12 @@ describe("field metadata generation", () => {
       },
     };
 
-    expect(listSchemaFields(schema).map(([name]) => name)).toEqual(["title", "duration_mins"]);
-    expect(listFieldDisplayLabel("title", schema.properties.title, true)).toBe("Name");
+    expect(listSchemaFields(schema).map(([name]) => name)).toEqual(["name", "duration_mins"]);
+    expect(listFieldDisplayLabel("name", schema.properties.name, true)).toBe("Name");
     expect(formatValue("duration_mins", 150)).toBe("2h 30m");
     expect(formatValue("duration_mins", 120)).toBe("2h");
-    expect(labelFor({ id: 1, title: "The Magic Flute", date: "2026-06-12", time: "19:30" })).toBe("The Magic Flute · 12 Jun 2026 19:30");
-    expect(labelWithTemporal("The Magic Flute", { date: "2026-06-12", time: "19:30" })).toBe("The Magic Flute · 12 Jun 2026 19:30");
+    expect(labelFor({ id: 1, name: "The Magic Flute", date: "2026-06-12", time: "19:30" })).toBe("The Magic Flute");
+    expect(labelFor({ id: 2, starts_at: "2026-06-27T19:30:00Z" })).toBe("27 Jun 2026 at 19:30");
   });
 
   test("generated services enforce per-field validation metadata", async () => {
@@ -169,6 +169,66 @@ describe("field metadata generation", () => {
       expect(services.createUser(db, { email: "ada@example.test", name: "Ada", status: "archived", age: 42 }).error).toContain("Status must be one of");
       expect(services.createUser(db, { email: "ada@example.test", name: "Ada", status: "active", age: 12 }).error).toContain("Age must be at least 13");
       expect(services.createUser(db, { email: "ada@example.test", name: "Ada", status: "active", age: 42 }).ok).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("generated services reject past temporal business fields but ignore system timestamps", async () => {
+    const schema: Schema = {
+      organization: { name: "Temporal Test", description: "Temporal test app", logo: null },
+      tables: {
+        event: {
+          id: col({ type: "integer", pk: true, auto: true }),
+          name: col({ required: true, metadata: { label: "Name" } }),
+          starts_at: col({ required: true, metadata: { label: "Starts", format: "date-time" } }),
+          date: col({ required: true, metadata: { label: "Date", format: "date" } }),
+          time: col({ required: true, metadata: { label: "Time", format: "time" } }),
+          created_at: col({ default: "CURRENT_TIMESTAMP", metadata: { label: "Created", format: "date-time" } }),
+          updated_at: col({ default: "CURRENT_TIMESTAMP", metadata: { label: "Updated", format: "date-time" } }),
+        },
+      },
+      operations: {
+        event: {
+          read: publicOp(),
+          create: publicOp(),
+          update: publicOp(),
+        },
+      },
+    };
+    const dir = mkdtempSync(join(tmpdir(), "openb2c-temporal-validation-"));
+    writeFileSync(join(dir, "types.ts"), genTypes(schema.tables, schema.operations));
+    writeFileSync(join(dir, "services.ts"), genServices(schema));
+
+    const services = await import(`${pathToFileURL(join(dir, "services.ts")).href}?${Date.now()}`);
+    const db = new Database(":memory:");
+    db.exec(genSQL(schema.tables, schema.indexes));
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrowDate = tomorrow.toISOString().slice(0, 10);
+    const tomorrowTime = tomorrow.toISOString().slice(11, 16);
+
+    try {
+      expect(services.createEvent(db, {
+        name: "Past event",
+        starts_at: yesterday,
+        date: tomorrowDate,
+        time: tomorrowTime,
+      }).error).toBe("Starts must be in the future");
+
+      const created = services.createEvent(db, {
+        name: "Future event",
+        starts_at: tomorrow.toISOString(),
+        date: tomorrowDate,
+        time: tomorrowTime,
+        created_at: "2000-01-01T00:00",
+        updated_at: "2000-01-01T00:00",
+      });
+      expect(created.ok).toBe(true);
+      const row = db.query<{ created_at: string; updated_at: string }, []>("SELECT created_at, updated_at FROM event WHERE id = 1").get();
+      expect(row?.created_at).not.toBe("2000-01-01T00:00");
+      expect(row?.updated_at).not.toBe("2000-01-01T00:00");
+      expect(services.updateEvent(db, 1, { date: "2000-01-01", time: "00:00" }).error).toBe("Date must be in the future");
     } finally {
       db.close();
     }

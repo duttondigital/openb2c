@@ -2,7 +2,7 @@
  * <ob-admin-calendar> - Inferred aggregate calendar for temporal admin entities.
  */
 import { ObApi, type AdminTemporalEntity } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldFormat, labelFor } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldFormat, formatValue, labelFor } from "../format";
 import { stylesheetLink } from "../style-link";
 
 type CalendarView = "month" | "list";
@@ -106,8 +106,10 @@ export class ObAdminCalendar extends HTMLElement {
         const res = await api.request(`/api/${entity.entity}s?${params}`);
         if (!res.ok) throw new Error(`${entity.label}: ${res.status}`);
         const data = await res.json();
-        return (data.items || [])
-          .map((row: Record<string, unknown>) => eventFromRow(api, entity, schema, descriptor, row, index))
+        const rows = data.items || [];
+        const lookups = await loadCalendarLookups(api, entity.entity, rows);
+        return rows
+          .map((row: Record<string, unknown>) => eventFromRow(api, entity, schema, descriptor, row, index, lookups))
           .filter((event: CalendarEvent | null): event is CalendarEvent => event !== null);
       } catch (error: any) {
         this._error = error?.message || "Could not load calendar records.";
@@ -252,6 +254,7 @@ function eventFromRow(
   descriptor: TemporalDescriptor,
   row: Record<string, unknown>,
   colorIndex: number,
+  lookups: Record<string, Map<string, string>>,
 ): CalendarEvent | null {
   const start = parseTemporalValue(row[descriptor.startField], descriptor.startKind, row[descriptor.timeField]);
   if (!start) return null;
@@ -262,7 +265,7 @@ function eventFromRow(
     id: String(row.id || ""),
     entity: entity.entity,
     entityLabel: displayName(entity.entity),
-    title: labelFor(row),
+    title: calendarTitleFor(row, schema, descriptor, lookups),
     href: recordHref(api, entity.entity, row.id),
     start,
     end,
@@ -270,6 +273,48 @@ function eventFromRow(
     timeLabel: timeRangeLabel(start, end, descriptor.startKind === "date" && !descriptor.timeField),
     color: colorIndex % 6,
   };
+}
+
+async function loadCalendarLookups(api: ObApi, entity: string, rows: Record<string, unknown>[]): Promise<Record<string, Map<string, string>>> {
+  const fks = api.getForeignKeys(entity);
+  const relationships = api.getForeignKeyRelationships(entity);
+  const lookups: Record<string, Map<string, string>> = {};
+  await Promise.all(Object.entries(fks).map(async ([field, targetEntity]) => {
+    const ids = [...new Set(rows.map((row) => row[field]).filter((value) => value !== null && value !== undefined && value !== "").map(String))];
+    const pairs = await Promise.all(ids.map(async (id) => {
+      const res = await api.request(`/api/${targetEntity}s/${id}`);
+      if (!res.ok) return null;
+      const row = await res.json();
+      if (!api.can(targetEntity, "read", row)) return null;
+      return [id, calendarRelationshipLabel(row, relationships[field])] as [string, string];
+    }));
+    lookups[field] = new Map(pairs.filter((pair): pair is [string, string] => pair !== null));
+  }));
+  return lookups;
+}
+
+function calendarRelationshipLabel(row: Record<string, unknown>, relationship: any): string {
+  return labelFor(row);
+}
+
+function calendarTitleFor(
+  row: Record<string, unknown>,
+  schema: any,
+  descriptor: TemporalDescriptor,
+  lookups: Record<string, Map<string, string>>,
+): string {
+  const direct = primaryLabelFor(row);
+  if (direct) return direct;
+  const refs = Object.entries(lookups)
+    .map(([field, labels]) => labels.get(String(row[field])))
+    .filter((label): label is string => Boolean(label));
+  const start = formatValue(descriptor.startField, row[descriptor.startField], schema.properties?.[descriptor.startField]);
+  const parts = [...refs, start].filter(Boolean).slice(0, 3);
+  return parts.length > 0 ? parts.join(" · ") : labelFor(row);
+}
+
+function primaryLabelFor(row: Record<string, unknown>): string {
+  return String(row.name || row.email || row.reference || "");
 }
 
 function parseTemporalValue(value: unknown, kind: TemporalKind, timeValue?: unknown): Date | null {

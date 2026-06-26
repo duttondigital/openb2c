@@ -113,7 +113,7 @@ describe("seed data generation", () => {
     });
     expect(duchy.seed?.fixtures.performance).toHaveLength(2);
     expect(ticketing.seed?.fixtures.issue[0]).toMatchObject({
-      title: "Harden generated checkout flow",
+      name: "Harden generated checkout flow",
       assignee_id: 2,
     });
 

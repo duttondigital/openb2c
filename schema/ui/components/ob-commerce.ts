@@ -22,7 +22,7 @@ type CommerceConfig = {
   enabled?: boolean;
   catalog?: {
     entity?: string;
-    title?: FieldRef | null;
+    label?: FieldRef | null;
     description?: FieldRef | null;
     price?: FieldRef | null;
     groupBy?: FieldRef[];
@@ -110,10 +110,10 @@ export class ObCommerce extends HTMLElement {
     return items.filter((item) => String(item[availability.field!.field]) === String(availability.available));
   }
 
-  private _groups(items: Record<string, unknown>[], config: CommerceConfig): Map<string, Record<string, unknown>[]> {
+  private _groups(items: Record<string, unknown>[], config: CommerceConfig, lookups: LookupMap): Map<string, Record<string, unknown>[]> {
     const groups = new Map<string, Record<string, unknown>[]>();
     for (const item of items) {
-      const key = this._groupKey(item, config);
+      const key = this._groupKey(item, config, lookups);
       groups.set(key, [...(groups.get(key) || []), item]);
     }
     return groups;
@@ -148,7 +148,7 @@ export class ObCommerce extends HTMLElement {
     if (renderSeq !== this._renderSeq) return;
     const catalog = this._availableCatalog(catalogRows, config);
     this._availableItems = catalog;
-    const groups = this._groups(catalog, config);
+    const groups = this._groups(catalog, config, lookups);
     if (this._selectedGroup && !groups.has(this._selectedGroup)) {
       this._selectedGroup = "";
       this._selectedItemId = "";
@@ -279,8 +279,8 @@ export class ObCommerce extends HTMLElement {
   ): string {
     if (this._paymentIntent) return this._renderCompleteStep();
     if (this._checkoutResult) return this._renderPaymentStep();
-    if (this._cart.length > 0 && this._reviewingCart) return this._renderReviewStep(api, config);
-    if (selectedItem) return this._renderConfigureStep(optionDefs, selectedItem, config);
+    if (this._cart.length > 0 && this._reviewingCart) return this._renderReviewStep(api, config, lookups);
+    if (selectedItem) return this._renderConfigureStep(optionDefs, selectedItem, config, lookups);
     if (this._selectedGroup) return this._renderVariantStep(selectedItems, selectedItem, config, lookups);
     return this._renderGroupStep(catalogEntity, groups, config);
   }
@@ -315,13 +315,13 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderConfigureStep(optionDefs: Record<string, CommerceOption>, item: Record<string, unknown>, config: CommerceConfig): string {
+  private _renderConfigureStep(optionDefs: Record<string, CommerceOption>, item: Record<string, unknown>, config: CommerceConfig, lookups: LookupMap): string {
     return `
       <section class="panel" aria-labelledby="configure-title">
         <div class="panel-header">
           <div>
             <h2 id="configure-title">Configure item</h2>
-            <p class="notice">${escapeHtml(this._itemTitle(item, config))} · ${escapeHtml(this._priceLabel(item, config))}</p>
+            <p class="notice">${escapeHtml(this._itemTitle(item, config, lookups))} · ${escapeHtml(this._priceLabel(item, config))}</p>
           </div>
           <span class="step">Step 3 of 4</span>
         </div>
@@ -330,7 +330,7 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderReviewStep(api: ObApi, config: CommerceConfig): string {
+  private _renderReviewStep(api: ObApi, config: CommerceConfig, lookups: LookupMap): string {
     const signedIn = api.authContext.userId !== null;
     return `
       <section class="panel" aria-labelledby="review-title">
@@ -341,7 +341,7 @@ export class ObCommerce extends HTMLElement {
           </div>
           <span class="step">Step 4 of 4</span>
         </div>
-        ${this._renderCart(config)}
+        ${this._renderCart(config, lookups)}
         ${signedIn ? `
           <form data-form="checkout">
             <div class="actions">
@@ -497,7 +497,7 @@ export class ObCommerce extends HTMLElement {
     `;
   }
 
-  private _renderCart(config: CommerceConfig): string {
+  private _renderCart(config: CommerceConfig, lookups: LookupMap): string {
     if (this._cart.length === 0) return `<div class="empty">Cart is empty.</div>`;
     const total = this._cartTotal(config);
     return `
@@ -505,10 +505,10 @@ export class ObCommerce extends HTMLElement {
         ${this._cart.map((line) => `
           <div class="cart-line">
             <div>
-              <h3>${escapeHtml(this._itemTitle(line.item, config))}</h3>
+              <h3>${escapeHtml(this._itemTitle(line.item, config, lookups))}</h3>
               <p>${escapeHtml(this._lineDescription(line, config))}</p>
             </div>
-            <button type="button" class="icon-btn danger" data-remove-line="${escapeAttr(line.id)}" aria-label="Remove ${escapeAttr(this._itemTitle(line.item, config))}">x</button>
+            <button type="button" class="icon-btn danger" data-remove-line="${escapeAttr(line.id)}" aria-label="Remove ${escapeAttr(this._itemTitle(line.item, config, lookups))}">x</button>
           </div>
         `).join("")}
       </div>
@@ -684,19 +684,20 @@ export class ObCommerce extends HTMLElement {
     }
   }
 
-  private _groupKey(item: Record<string, unknown>, config: CommerceConfig): string {
+  private _groupKey(item: Record<string, unknown>, config: CommerceConfig, lookups: LookupMap): string {
     const fields = config.catalog?.groupBy || [];
-    if (fields.length === 0) return this._itemTitle(item, config);
-    return fields.map((field) => this._fieldValue(item, field)).filter(Boolean).join(" - ") || this._itemTitle(item, config);
+    if (fields.length === 0) return this._itemTitle(item, config, lookups);
+    return fields.map((field) => this._formatFieldValue(field, item[field.field], lookups)).filter(Boolean).join(" - ") || this._itemTitle(item, config, lookups);
   }
 
-  private _itemTitle(item: Record<string, unknown>, config: CommerceConfig): string {
-    return this._fieldValue(item, config.catalog?.title) || labelFor(item);
+  private _itemTitle(item: Record<string, unknown>, config: CommerceConfig, lookups: LookupMap): string {
+    const labelField = config.catalog?.label;
+    return labelField ? this._formatFieldValue(labelField, item[labelField.field], lookups) || labelFor(item) : labelFor(item);
   }
 
   private _variantLabel(item: Record<string, unknown>, config: CommerceConfig, lookups: LookupMap): string {
     const fields = config.catalog?.variantFields || [];
-    if (fields.length === 0) return this._itemTitle(item, config);
+    if (fields.length === 0) return this._itemTitle(item, config, lookups);
     return fields.map((field) => this._formatFieldValue(field, item[field.field], lookups)).filter(Boolean).join(" - ");
   }
 

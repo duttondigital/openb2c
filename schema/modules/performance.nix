@@ -5,16 +5,6 @@ in
 {
   tables.performance = {
     id = { type = "integer"; pk = true; auto = true; };
-    title = {
-      type = "text";
-      required = true;
-      metadata = {
-        label = "Performance";
-        placeholder = "The Magic Flute";
-        displayPriority = 10;
-      };
-      validation.maxLength = 160;
-    };
     venue_id = {
       type = "integer";
       required = true;
@@ -26,40 +16,26 @@ in
       relationship = {
         label = "Venue";
         description = "Venue hosting this performance.";
-        targetLabel = config.refs.venue.name;
       };
     };
-    date = {
+    starts_at = {
       type = "text";
       required = true;
       metadata = {
-        label = "Date";
-        placeholder = "YYYY-MM-DD";
-        format = "date";
+        label = "Starts";
+        placeholder = "YYYY-MM-DDTHH:MM";
+        format = "date-time";
         displayPriority = 30;
       };
     };
-    time = {
+    ends_at = {
       type = "text";
       required = true;
       metadata = {
-        label = "Time";
-        placeholder = "HH:MM";
-        format = "time";
+        label = "Ends";
+        placeholder = "YYYY-MM-DDTHH:MM";
+        format = "date-time";
         displayPriority = 40;
-      };
-    };
-    duration_mins = {
-      type = "integer";
-      required = true;
-      metadata = {
-        label = "Duration";
-        helpText = "Duration in minutes.";
-        displayPriority = 50;
-      };
-      validation = {
-        minimum = 1;
-        maximum = 600;
       };
     };
     price_pence = {
@@ -68,7 +44,7 @@ in
       metadata = {
         label = "Price";
         format = "money";
-        displayPriority = 60;
+        displayPriority = 50;
       };
       validation.minimum = 0;
     };
@@ -77,7 +53,7 @@ in
       metadata = {
         label = "Description";
         format = "textarea";
-        displayPriority = 70;
+        displayPriority = 60;
       };
     };
     status = {
@@ -85,7 +61,7 @@ in
       default = "'scheduled'";
       metadata = {
         label = "Status";
-        displayPriority = 80;
+        displayPriority = 70;
       };
       validation.enum = [ "scheduled" "cancelled" "completed" ];
     };
@@ -100,8 +76,17 @@ in
     };
   };
 
-  indexes.performance.by_venue_date = {
-    columns = [ "venue_id" "date" ];
+  indexes.performance.by_venue_start = {
+    columns = [ "venue_id" "starts_at" ];
+  };
+
+  validations.performance.endsAfterStart = {
+    fields = [
+      config.refs.performance.starts_at
+      config.refs.performance.ends_at
+    ];
+    expression = E.lt (E.f "starts_at") (E.f "ends_at");
+    message = "Performance end time must be after the start time.";
   };
 
   audit.entities.performance = {
@@ -119,7 +104,6 @@ in
       references = "performance(id)";
       relationship = {
         label = "Performance";
-        targetLabel = config.refs.performance.title;
       };
     };
     user_id = {
@@ -128,7 +112,6 @@ in
       references = "user(id)";
       relationship = {
         label = "Artist";
-        targetLabel = config.refs.user.name;
       };
     };
     role_in_performance = { type = "text"; };  # Character name or role
@@ -232,13 +215,13 @@ in
         confirmation = {
           required = true;
           title = "Reschedule performance";
-          message = "This may notify ticket holders about the changed date or time.";
+          message = "This may notify ticket holders about the changed start or end time.";
           confirmLabel = "Reschedule";
           severity = "warning";
         };
       };
       guard = E.eq (E.f "status") (E.lit "scheduled");
-      # Note: actual date/time comes from input, not hardcoded
+      # Note: actual start/end datetimes come from input, not hardcoded.
       set = {};  # Fields set from input
       effects = [
         { notify = { channel = "email"; template = "performance_rescheduled"; to = "ticket_holders"; }; }

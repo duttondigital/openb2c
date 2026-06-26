@@ -542,11 +542,6 @@ let
         default = "one";
         description = "Relationship cardinality from the source row to the target entity.";
       };
-      targetLabel = lib.mkOption {
-        type = lib.types.nullOr fieldRefType;
-        default = null;
-        description = "Target entity field used to label choices and related records.";
-      };
     };
   };
 
@@ -664,7 +659,7 @@ let
         type = lib.types.submodule {
           options = {
             entity = lib.mkOption { type = lib.types.str; default = ""; };
-            title = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
+            label = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
             description = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
             price = lib.mkOption { type = lib.types.nullOr fieldRefType; default = null; };
             groupBy = lib.mkOption { type = lib.types.listOf fieldRefType; default = []; };

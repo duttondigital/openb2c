@@ -65,7 +65,6 @@ function relationshipSchema(): Schema {
             label: "Venue",
             description: "Venue hosting the performance.",
             cardinality: "one",
-            targetLabel: { table: "venue", field: "name", references: null },
           },
         }),
       },
@@ -75,14 +74,14 @@ function relationshipSchema(): Schema {
 }
 
 describe("relationship metadata generation", () => {
-  test("real examples expose relationship target labels from Nix config refs", async () => {
+  test("real examples expose generic relationship metadata", async () => {
     const duchy = await loadExampleSchema("duchyopera");
     const ticketing = await loadExampleSchema("ticketing");
 
-    expect(duchy.tables.performance.venue_id.relationship?.targetLabel?.field).toBe("name");
-    expect(duchy.tables.ticket.performance_id.relationship?.targetLabel?.field).toBe("title");
-    expect(ticketing.tables.issue.project_id.relationship?.targetLabel?.field).toBe("name");
-    expect(ticketing.tables.comment.author_id.relationship?.targetLabel?.field).toBe("email");
+    expect(duchy.tables.performance.venue_id.relationship).toMatchObject({ label: "Venue" });
+    expect(duchy.tables.ticket.performance_id.relationship).toMatchObject({ label: "Performance" });
+    expect(ticketing.tables.issue.project_id.relationship).toMatchObject({ label: "Project" });
+    expect(ticketing.tables.comment.author_id.relationship).toMatchObject({ label: "Author" });
   });
 
   test("threads relationship metadata into OpenAPI field extensions", () => {
@@ -95,9 +94,8 @@ describe("relationship metadata generation", () => {
       cardinality: "one",
       label: "Venue",
       description: "Venue hosting the performance.",
-      targetLabel: { entity: "venue", field: "name" },
     });
-    expect(fieldRelationship(venue).targetLabel?.field).toBe("name");
+    expect(fieldRelationship(venue).label).toBe("Venue");
   });
 
   test("emits relationship hints for raw foreign keys even without metadata", () => {
@@ -118,13 +116,11 @@ describe("relationship metadata generation", () => {
     schema.tables.performance.title.relationship = { label: "Invalid" };
     schema.tables.performance.venue_id.relationship = {
       cardinality: "some" as any,
-      targetLabel: { table: "performance", field: "title", references: null },
     };
 
     expect(validateSchema(schema)).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "tables.performance.title.relationship" }),
       expect.objectContaining({ path: "tables.performance.venue_id.relationship.cardinality" }),
-      expect.objectContaining({ path: "tables.performance.venue_id.relationship.targetLabel.table" }),
     ]));
   });
 });

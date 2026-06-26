@@ -68,7 +68,7 @@ let
             production = [
               {
                 id = 1;
-                title = "The Magic Flute";
+                name = "The Magic Flute";
                 season = "Summer 2026";
                 description = "Duchy Opera pilot production for internal scheduling and public ticketing.";
                 status = "active";
@@ -116,10 +116,10 @@ let
               {
                 id = 1;
                 production_id = 1;
-                title = "Act I music call";
+                name = "Act I music call";
                 venue_id = 1;
-                starts_at = "2026-05-20T18:30:00Z";
-                ends_at = "2026-05-20T21:30:00Z";
+                starts_at = "2026-06-29T18:30:00Z";
+                ends_at = "2026-06-29T21:30:00Z";
                 status = "published";
                 notes = "Cover Pamina entrance and Act I finale.";
               }
@@ -165,7 +165,7 @@ let
               {
                 id = 1;
                 production_id = 1;
-                title = "Current vocal score";
+                name = "Current vocal score";
                 kind = "score";
                 visibility = "participants";
                 status = "current";
@@ -188,11 +188,9 @@ let
               {
                 id = 1;
                 production_id = 1;
-                title = "The Magic Flute";
                 venue_id = 1;
-                date = "2026-06-12";
-                time = "19:30";
-                duration_mins = 150;
+                starts_at = "2026-06-27T19:30:00Z";
+                ends_at = "2026-06-27T22:00:00Z";
                 price_pence = 2500;
                 description = "Mozart's final opera staged for a Cornish charity audience.";
                 status = "scheduled";
@@ -200,11 +198,9 @@ let
               {
                 id = 2;
                 production_id = 1;
-                title = "Cancelled Gala";
                 venue_id = 1;
-                date = "2026-06-13";
-                time = "19:30";
-                duration_mins = 120;
+                starts_at = "2026-06-28T19:30:00Z";
+                ends_at = "2026-06-28T21:30:00Z";
                 price_pence = 3000;
                 description = "Fixture used to prove unavailable catalog items stay out of checkout.";
                 status = "cancelled";
@@ -216,13 +212,13 @@ let
           enabled = true;
           catalog = {
             entity = "performance";
-            title = config.refs.performance.title;
+            label = config.refs.performance.production_id;
             description = config.refs.performance.description;
             price = config.refs.performance.price_pence;
-            groupBy = [ config.refs.performance.title ];
+            groupBy = [ config.refs.performance.production_id ];
             variantFields = [
-              config.refs.performance.date
-              config.refs.performance.time
+              config.refs.performance.starts_at
+              config.refs.performance.ends_at
               config.refs.performance.venue_id
             ];
             availability = {

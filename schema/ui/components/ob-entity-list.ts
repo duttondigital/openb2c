@@ -2,7 +2,7 @@
  * <ob-entity-list entity="issues"> — Data table for any entity.
  */
 import { ObApi } from "./ob-api";
-import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, labelWithTemporal, listFieldDisplayLabel, listSchemaFields, pluralDisplayName, statusClass } from "../format";
+import { displayName, escapeAttr, escapeHtml, fieldDisplayLabel, filterableSchemaFields, formatValue, labelFor, listFieldDisplayLabel, listSchemaFields, pluralDisplayName, statusClass } from "../format";
 import { stylesheetLink } from "../style-link";
 
 export class ObEntityList extends HTMLElement {
@@ -325,9 +325,9 @@ export class ObEntityList extends HTMLElement {
 
     if (fks[column]) {
       const targetHref = recordHref(api, fks[column], value);
-      const targetLabel = lookupLabelFor(value, lookupRows, relationship);
-      const title = targetLabel === `#${value}` ? targetLabel : `${targetLabel} (#${value})`;
-      return `<td><a class="cell-link" title="${escapeAttr(title)}" href="${escapeAttr(targetHref)}">${escapeHtml(targetLabel)}</a></td>`;
+      const label = lookupLabelFor(value, lookupRows, relationship);
+      const title = label === `#${value}` ? label : `${label} (#${value})`;
+      return `<td><a class="cell-link" title="${escapeAttr(title)}" href="${escapeAttr(targetHref)}">${escapeHtml(label)}</a></td>`;
     }
 
     const badgeClass = statusClass(column, value);
@@ -359,10 +359,6 @@ function parseFilter(raw: string): Record<string, string> {
 }
 
 function relationshipLabelFor(row: Record<string, unknown>, relationship: any): string {
-  const targetField = relationship?.targetLabel?.field;
-  if (targetField && row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== "") {
-    return labelWithTemporal(String(row[targetField]), row);
-  }
   return labelFor(row);
 }
 
@@ -381,7 +377,6 @@ function recordHref(api: ObApi, entity: string, id: unknown): string {
 
 function primaryRecordColumn(cols: [string, any][]): string {
   return cols.find(([field]) => field === "name")?.[0]
-    || cols.find(([field]) => field === "title")?.[0]
     || cols.find(([field]) => field === "email")?.[0]
     || cols.find(([field]) => field === "reference")?.[0]
     || cols.find(([field]) => field !== "id")?.[0]

@@ -94,7 +94,7 @@ POST /issue
 {
   "project_id": 1,
   "number": 1,
-  "title": "Implement user authentication",
+  "name": "Implement user authentication",
   "description": "Add JWT-based auth",
   "type": "feature",
   "priority": "high",

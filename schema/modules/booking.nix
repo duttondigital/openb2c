@@ -12,7 +12,6 @@ in
       relationship = {
         label = "Customer";
         description = "Customer who owns this checkout.";
-        targetLabel = config.refs.user.email;
       };
     };
     status = { type = "text"; default = "'checkout_pending'"; };  # checkout_pending, paid, expired, cancelled
@@ -33,7 +32,6 @@ in
       references = "booking(id)";
       relationship = {
         label = "Booking";
-        targetLabel = config.refs.booking.id;
       };
     };
     ticket_id = {
@@ -42,7 +40,6 @@ in
       references = "ticket(id)";
       relationship = {
         label = "Ticket";
-        targetLabel = config.refs.ticket.seat;
       };
     };
   };

@@ -64,8 +64,8 @@ function seedDuchyOpera(dbPath: string) {
   try {
     db.query("INSERT INTO user (id, email, name) VALUES (1, 'ada@example.test', 'Ada Lovelace')").run();
     db.query("INSERT INTO venue (id, name, address, city, postcode, capacity) VALUES (1, 'Hall for Cornwall', 'Back Quay', 'Truro', 'TR1 2LL', 900)").run();
-    db.query("INSERT INTO production (id, title, season, status) VALUES (1, 'The Magic Flute', 'Summer 2026', 'active')").run();
-    db.query("INSERT INTO performance (id, production_id, title, venue_id, date, time, duration_mins, price_pence, status) VALUES (1, 1, 'The Magic Flute', 1, '2026-06-12', '19:30', 150, 2500, 'scheduled')").run();
+    db.query("INSERT INTO production (id, name, season, status) VALUES (1, 'The Magic Flute', 'Summer 2026', 'active')").run();
+    db.query("INSERT INTO performance (id, production_id, venue_id, starts_at, ends_at, price_pence, status) VALUES (1, 1, 1, '2026-06-27T19:30:00Z', '2026-06-27T22:00:00Z', 2500, 'scheduled')").run();
   } finally {
     db.close();
   }

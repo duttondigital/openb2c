@@ -62,6 +62,12 @@ describe("Duchy Opera production backend", () => {
     expect(schema.tables.rehearsal_call.user_id.references).toBe("user(id)");
     expect(schema.tables.production.opens_on).toBeUndefined();
     expect(schema.tables.production.closes_on).toBeUndefined();
+    expect(schema.tables.production.name).toBeDefined();
+    expect(schema.tables.production.title).toBeUndefined();
+    expect(schema.tables.rehearsal.name).toBeDefined();
+    expect(schema.tables.rehearsal.title).toBeUndefined();
+    expect(schema.tables.production_material.name).toBeDefined();
+    expect(schema.tables.production_material.title).toBeUndefined();
     expect(schema.tables.performance.production_id).toMatchObject({
       type: "integer",
       required: true,
@@ -100,8 +106,9 @@ describe("Duchy Opera production backend", () => {
     expect(sql).not.toContain("opens_on");
     expect(sql).not.toContain("closes_on");
     expect(sql).not.toContain("display_title");
+    expect(sql).toContain("name TEXT NOT NULL");
     expect(sql).toContain("production_id INTEGER NOT NULL REFERENCES production(id)");
-    expect(sql).toContain("CREATE INDEX IF NOT EXISTS performance_by_production_date");
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS performance_by_production_start");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS rehearsal_call_unique_rehearsal_user");
     expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS material_version_unique_material_version");
 
@@ -113,12 +120,10 @@ describe("Duchy Opera production backend", () => {
     expect(openapi.components.schemas.ProductionMember.properties.user_id["x-openb2c-relationship"]).toMatchObject({
       targetEntity: "user",
       label: "Person",
-      targetLabel: { entity: "user", field: "name" },
     });
     expect(openapi.components.schemas.Performance.properties.production_id["x-openb2c-relationship"]).toMatchObject({
       targetEntity: "production",
       label: "Production",
-      targetLabel: { entity: "production", field: "title" },
     });
     expect(openapi.paths["/api/productions"]).toBeDefined();
     expect(openapi.paths["/api/rehearsals/{id}/publish"]).toBeDefined();

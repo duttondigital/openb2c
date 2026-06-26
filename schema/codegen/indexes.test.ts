@@ -45,8 +45,8 @@ describe("ontology indexes", () => {
       columns: ["user_id", "status"],
       unique: false,
     });
-    expect(duchyOpera.indexes?.performance?.by_venue_date).toEqual({
-      columns: ["venue_id", "date"],
+    expect(duchyOpera.indexes?.performance?.by_venue_start).toEqual({
+      columns: ["venue_id", "starts_at"],
       unique: false,
     });
     expect(ticketing.indexes?.issue?.by_project_status).toEqual({
@@ -57,7 +57,7 @@ describe("ontology indexes", () => {
     const duchySql = genSQL(duchyOpera.tables, duchyOpera.indexes);
     const ticketingSql = genSQL(ticketing.tables, ticketing.indexes);
     expect(duchySql).toContain("CREATE INDEX IF NOT EXISTS ticket_by_user_status ON ticket (user_id, status);");
-    expect(duchySql).toContain("CREATE INDEX IF NOT EXISTS performance_by_venue_date ON performance (venue_id, date);");
+    expect(duchySql).toContain("CREATE INDEX IF NOT EXISTS performance_by_venue_start ON performance (venue_id, starts_at);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS performance_artist_unique_pair ON performance_artist (performance_id, user_id);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS transaction_ticket_unique_pair ON transaction_ticket (transaction_id, ticket_id);");
     expect(duchySql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS booking_ticket_unique_pair ON booking_ticket (booking_id, ticket_id);");

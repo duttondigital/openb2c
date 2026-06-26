@@ -11,7 +11,6 @@ in
       references = "project(id)";
       relationship = {
         label = "Project";
-        targetLabel = config.refs.project.name;
       };
     };
     name = { type = "text"; required = true; };
@@ -29,7 +28,6 @@ in
       references = "issue(id)";
       relationship = {
         label = "Issue";
-        targetLabel = config.refs.issue.title;
       };
     };
     label_id = {
@@ -38,7 +36,6 @@ in
       references = "label(id)";
       relationship = {
         label = "Label";
-        targetLabel = config.refs.label.name;
       };
     };
     created_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };

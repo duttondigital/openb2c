@@ -43,7 +43,7 @@ function normalizeEcommerceConfig(ecommerce: EcommerceConfig): Record<string, un
     catalog: {
       entity: catalogEntity,
       table: sqlIdent(catalogEntity),
-      title: ecommerce.catalog.title,
+      label: ecommerce.catalog.label,
       description: ecommerce.catalog.description,
       price: requireEcommerceField("catalog.price", ecommerce.catalog.price),
       groupBy: ecommerce.catalog.groupBy,
@@ -201,6 +201,7 @@ function fieldValidationRules(schema: Schema): Record<string, Record<string, unk
       const rule: Record<string, unknown> = {};
       if (metadata.label) rule.label = metadata.label;
       if (metadata.format) rule.format = metadata.format;
+      if (isFutureTemporalField(field, column)) rule.futureTemporal = true;
       if (validation.minLength !== null && validation.minLength !== undefined) rule.minLength = validation.minLength;
       if (validation.maxLength !== null && validation.maxLength !== undefined) rule.maxLength = validation.maxLength;
       if (validation.minimum !== null && validation.minimum !== undefined) rule.minimum = validation.minimum;
@@ -212,6 +213,21 @@ function fieldValidationRules(schema: Schema): Record<string, Record<string, unk
     if (Object.keys(entityRules).length > 0) rules[entity] = entityRules;
   }
   return rules;
+}
+
+function isSystemTimestampField(field: string): boolean {
+  return field === "created_at" || field === "updated_at";
+}
+
+function isFutureTemporalField(field: string, column: Column): boolean {
+  if (isSystemTimestampField(field)) return false;
+  const format = column.metadata?.format || "";
+  if (format === "date" || format === "time" || format === "date-time") return true;
+  return field === "date"
+    || field === "time"
+    || field.endsWith("_date")
+    || field.endsWith("_time")
+    || field.endsWith("_at");
 }
 
 function crossFieldValidationCases(schema: Schema): string {
@@ -407,6 +423,7 @@ export function validateTime(v: string): boolean { return TIME_RE.test(v); }
 type FieldValidationRule = {
   label?: string;
   format?: string;
+  futureTemporal?: boolean;
   minLength?: number;
   maxLength?: number;
   minimum?: number;
@@ -441,8 +458,85 @@ function validate(input: Record<string, unknown>, entity?: string, current?: Rec
     }
     const crossFieldError = validateCrossField(entity, input, current);
     if (crossFieldError) return crossFieldError;
+    const temporalError = validateFutureTemporalFields(entity, input, current);
+    if (temporalError) return temporalError;
   }
   return null;
+}
+
+function validateFutureTemporalFields(entity: string, input: Record<string, unknown>, current?: Record<string, unknown>): string | null {
+  const rules = FIELD_VALIDATION_RULES[entity] || {};
+  const record = current ? { ...current, ...input } : input;
+  for (const [field, rule] of Object.entries(rules)) {
+    if (!rule.futureTemporal || input[field] === undefined || input[field] === null || input[field] === "") continue;
+    const instant = futureTemporalInstant(field, record);
+    if (!instant) {
+      if (isTimeOnlyField(field) && !pairedDateField(field, record)) continue;
+      return \`\${rule.label || field} must be a valid date/time\`;
+    }
+    const dateOnly = isDateOnlyField(field, rule) && !pairedTimeField(field, record);
+    const threshold = dateOnly ? startOfToday().getTime() : Date.now();
+    if (instant.getTime() < threshold || (!dateOnly && instant.getTime() <= threshold)) {
+      return \`\${rule.label || field} must be in the future\`;
+    }
+  }
+  return null;
+}
+
+function futureTemporalInstant(field: string, record: Record<string, unknown>): Date | null {
+  const value = record[field];
+  if (isTimeOnlyField(field)) {
+    const dateField = pairedDateField(field, record);
+    return dateField ? parseDateTimeParts(record[dateField], value) : null;
+  }
+  const timeField = pairedTimeField(field, record);
+  if (timeField) return parseDateTimeParts(value, record[timeField]);
+  return parseTemporalValue(value);
+}
+
+function parseTemporalValue(value: unknown): Date | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const date = new Date(text.replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseDateTimeParts(dateValue: unknown, timeValue: unknown): Date | null {
+  const date = String(dateValue || "").trim();
+  const time = String(timeValue || "").trim();
+  if (!date) return null;
+  return parseTemporalValue(time ? \`\${date}T\${time}\` : date);
+}
+
+function isDateOnlyField(field: string, rule: FieldValidationRule): boolean {
+  return rule.format === "date" || field === "date" || field.endsWith("_date");
+}
+
+function isTimeOnlyField(field: string): boolean {
+  return field === "time" || field.endsWith("_time");
+}
+
+function pairedTimeField(field: string, record: Record<string, unknown>): string {
+  if (field === "date" && record.time !== undefined) return "time";
+  if (field.endsWith("_date")) {
+    const candidate = field.slice(0, -5) + "_time";
+    if (record[candidate] !== undefined) return candidate;
+  }
+  return "";
+}
+
+function pairedDateField(field: string, record: Record<string, unknown>): string {
+  if (field === "time" && record.date !== undefined) return "date";
+  if (field.endsWith("_time")) {
+    const candidate = field.slice(0, -5) + "_date";
+    if (record[candidate] !== undefined) return candidate;
+  }
+  return "";
+}
+
+function startOfToday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 function validateCrossField(entity: string, input: Record<string, unknown>, current?: Record<string, unknown>): string | null {
@@ -1117,9 +1211,9 @@ function genCrudService(entity: string, cols: Record<string, Column>): string {
   const tableName = entity === "transaction" ? "[transaction]" : entity;
 
   const colNames = Object.keys(cols);
-  const inputCols = colNames.filter(c => !(cols[c].pk && cols[c].auto));
+  const inputCols = colNames.filter(c => !(cols[c].pk && cols[c].auto)).filter(c => !isSystemTimestampField(c));
   const requiredCols = inputCols.filter(c => cols[c].required);
-  const updateCols = inputCols.filter(c => c !== "updated_at");
+  const updateCols = inputCols;
   const touchUpdatedAt = cols.updated_at
     ? `sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");`
     : "";
@@ -1603,7 +1697,30 @@ function referencedEntityName(ref: { references?: string | null }): string | nul
 }
 
 function labelRecord(row: Record<string, unknown>): string {
-  return String(row.title || row.name || row.email || row.reference || ("#" + row.id));
+  return String(row.name || row.email || row.reference || temporalSummaryRecord(row) || ("#" + row.id));
+}
+
+function temporalSummaryRecord(row: Record<string, unknown>): string {
+  const start = firstPresent(row, ["starts_at", "start_at", "scheduled_at", "date"]);
+  if (!start) return "";
+  const time = firstPresent(row, ["time", "start_time", "starts_time"]);
+  return [formatTemporalLabel(start), time ? String(time) : ""].filter(Boolean).join(", ");
+}
+
+function firstPresent(row: Record<string, unknown>, fields: string[]): unknown {
+  for (const field of fields) {
+    const value = row[field];
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return "";
+}
+
+function formatTemporalLabel(value: unknown): string {
+  const text = String(value || "");
+  const match = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})(?:[T ](\\d{1,2}):(\\d{2}))?/);
+  if (!match) return text;
+  const date = [match[3], match[2], match[1]].join("/");
+  return match[4] ? date + ", " + match[4].padStart(2, "0") + ":" + match[5] : date;
 }
 
 function resolveCommerceUser(inputUserId: number | undefined, auth: T.AuthContext): Result<number> {
@@ -1670,8 +1787,14 @@ export function listCommerceCatalog(db: Database): Result<CommerceCatalogResult>
     "SELECT * FROM " + ECOMMERCE.catalog.table + where + " ORDER BY [id]"
   ).all(...params) as Record<string, unknown>[];
 
+  const lookupRefs = uniqueFieldRefs([
+    ECOMMERCE.catalog.label,
+    ECOMMERCE.catalog.description,
+    ...ECOMMERCE.catalog.groupBy,
+    ...ECOMMERCE.catalog.variantFields,
+  ].filter(Boolean));
   const lookups: Record<string, Record<string, string>> = {};
-  for (const ref of ECOMMERCE.catalog.variantFields) {
+  for (const ref of lookupRefs) {
     const entity = referencedEntityName(ref);
     if (!entity) continue;
     const ids = [...new Set(items.map(item => item[ref.field]).filter(value => value !== null && value !== undefined).map(String))];
@@ -1686,6 +1809,18 @@ export function listCommerceCatalog(db: Database): Result<CommerceCatalogResult>
   }
 
   return { ok: true, data: { items, lookups } };
+}
+
+function uniqueFieldRefs(refs: Array<{ table: string; field: string; references?: string | null }>): Array<{ table: string; field: string; references?: string | null }> {
+  const seen = new Set<string>();
+  const result: Array<{ table: string; field: string; references?: string | null }> = [];
+  for (const ref of refs) {
+    const key = ref.table + "." + ref.field;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(ref);
+  }
+  return result;
 }
 
 function expireCommerceOrderIds(db: Database, orderIds: number[]): number {

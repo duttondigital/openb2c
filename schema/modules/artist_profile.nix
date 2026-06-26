@@ -17,7 +17,6 @@ in
       relationship = {
         label = "User";
         description = "Canonical person this artist profile enriches.";
-        targetLabel = config.refs.user.name;
       };
     };
     role = {

@@ -16,10 +16,9 @@ in
       relationship = {
         label = "Production";
         description = "Production this material belongs to.";
-        targetLabel = config.refs.production.title;
       };
     };
-    title = {
+    name = {
       type = "text";
       required = true;
       metadata = {
@@ -97,7 +96,6 @@ in
       relationship = {
         label = "Material";
         description = "Material this version belongs to.";
-        targetLabel = config.refs.production_material.title;
       };
     };
     version_label = {
@@ -153,7 +151,6 @@ in
       };
       relationship = {
         label = "Created by";
-        targetLabel = config.refs.user.email;
       };
     };
     created_at = {

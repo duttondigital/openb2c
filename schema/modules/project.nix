@@ -15,7 +15,6 @@ in
       relationship = {
         label = "Owner";
         description = "User accountable for this project.";
-        targetLabel = config.refs.user.email;
       };
     };
     status = { type = "text"; default = "'active'"; };  # active, archived

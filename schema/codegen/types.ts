@@ -31,7 +31,6 @@ export interface ColumnRelationshipMetadata {
   label?: string | null;
   description?: string | null;
   cardinality?: RelationshipCardinality;
-  targetLabel?: FieldRef | null;
 }
 
 export interface Column {
@@ -144,7 +143,7 @@ export interface EcommerceOption {
 
 export interface EcommerceCatalogConfig {
   entity: string;
-  title: FieldRef | null;
+  label: FieldRef | null;
   description: FieldRef | null;
   price: FieldRef | null;
   groupBy: FieldRef[];

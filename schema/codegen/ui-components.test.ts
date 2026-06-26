@@ -244,6 +244,11 @@ describe("generated UI web components", () => {
     expect(entityForm).toContain('"defaults"');
     expect(entityForm).toContain('"return-to"');
     expect(entityForm).toContain("lockedFields");
+    expect(entityForm).toContain("isSystemTimestampField");
+    expect(entityForm).toContain("lifecycleControlledFields");
+    expect(entityForm).toContain("Managed by workflow actions.");
+    expect(entityForm).toContain("localDateTimeMin()");
+    expect(entityForm).toContain("localDateMin()");
     expect(entityForm).toContain("this.returnTo");
     expect(entityForm).toContain('api.can(this.entity, "update", record)');
     expect(entityForm).toContain('api.canCollection(this.entity, "create")');
@@ -272,6 +277,12 @@ describe("generated UI web components", () => {
     expect(adminWorkspace).toContain("inferPeople");
     expect(adminWorkspace).toContain("Coverage matrix");
     expect(adminWorkspace).toContain('class="detail-fields"');
+    expect(adminWorkspace).toContain('class="workspace-breadcrumb"');
+    expect(adminWorkspace).toContain('class="panel-controls"');
+    expect(adminWorkspace).toContain('class="action-menu"');
+    expect(adminWorkspace).toContain("loadReferenceRows");
+    expect(adminWorkspace).toContain("renderRecordFieldValue");
+    expect(adminWorkspace).toContain("contextualOperationLabel");
     expect(adminWorkspace).toContain("<ob-entity-list");
     expect(adminWorkspace).not.toContain("Raw detail");
     expect(adminCalendar).toContain('customElements.define("ob-admin-calendar"');
@@ -432,6 +443,10 @@ describe("generated UI web components", () => {
     expect(adminStyles).toContain(":host(ob-nav) .nav-groups{display:grid;gap:18px;flex:1 1 auto;align-content:start;min-height:0;overflow-y:auto}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .record-panels{display:grid;gap:16px}");
     expect(adminStyles).toContain(":host(ob-admin-workspace) .detail-fields{width:100%}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .workspace-breadcrumb{margin-bottom:6px}");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .panel-controls{display:flex;flex-wrap:wrap;justify-content:flex-end");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .detail-link{color:var(--ob-primary)");
+    expect(adminStyles).toContain(":host(ob-admin-workspace) .action-menu-list{position:absolute");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr))");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .event-row{display:grid;grid-template-columns:150px 96px minmax(0,1fr) 140px");
     expect(adminStyles).toContain(":host(ob-admin-calendar) .more-events{padding:2px 7px;font-weight:800}");

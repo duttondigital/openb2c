@@ -260,9 +260,6 @@ function validateColumnRelationship(schema: Schema, table: string, field: string
   if (relationship.cardinality && !["one", "many"].includes(relationship.cardinality)) {
     add(diagnostics, `tables.${table}.${field}.relationship.cardinality`, "must be one of one or many");
   }
-  if (relationship.targetLabel) {
-    validateFieldRef(schema, relationship.targetLabel, `tables.${table}.${field}.relationship.targetLabel`, diagnostics, parsed.table);
-  }
 }
 
 function validateIndexes(schema: Schema, diagnostics: SchemaDiagnostic[]): void {
@@ -691,7 +688,7 @@ function validateEcommerce(schema: Schema, diagnostics: SchemaDiagnostic[]): voi
   if (!ecommerce?.enabled) return;
 
   requireEntity(schema, ecommerce.catalog.entity, "ecommerce.catalog.entity", diagnostics);
-  validateFieldRef(schema, ecommerce.catalog.title, "ecommerce.catalog.title", diagnostics, ecommerce.catalog.entity);
+  validateFieldRef(schema, ecommerce.catalog.label, "ecommerce.catalog.label", diagnostics, ecommerce.catalog.entity);
   validateOptionalFieldRef(schema, ecommerce.catalog.description, "ecommerce.catalog.description", diagnostics, ecommerce.catalog.entity);
   validateFieldRef(schema, ecommerce.catalog.price, "ecommerce.catalog.price", diagnostics, ecommerce.catalog.entity);
   ecommerce.catalog.groupBy.forEach((ref, index) => validateFieldRef(schema, ref, `ecommerce.catalog.groupBy.${index}`, diagnostics, ecommerce.catalog.entity));

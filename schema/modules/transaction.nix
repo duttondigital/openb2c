@@ -12,7 +12,6 @@ in
       relationship = {
         label = "Customer";
         description = "Customer who owns this transaction.";
-        targetLabel = config.refs.user.email;
       };
     };
     amount_pence = { type = "integer"; required = true; };
@@ -32,7 +31,6 @@ in
       references = "transaction(id)";
       relationship = {
         label = "Transaction";
-        targetLabel = config.refs.transaction.reference;
       };
     };
     ticket_id = {
@@ -41,7 +39,6 @@ in
       references = "ticket(id)";
       relationship = {
         label = "Ticket";
-        targetLabel = config.refs.ticket.seat;
       };
     };
   };

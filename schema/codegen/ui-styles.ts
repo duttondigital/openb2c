@@ -857,6 +857,19 @@ const adminWorkspace = `
     font-weight: 800;
     margin-bottom: 4px;
   }
+  :host(ob-admin-workspace) .workspace-breadcrumb {
+    margin-bottom: 6px;
+  }
+  :host(ob-admin-workspace) .workspace-breadcrumb a {
+    color: var(--ob-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+  :host(ob-admin-workspace) .workspace-breadcrumb a:hover {
+    color: var(--ob-text);
+    text-decoration: underline;
+  }
   :host(ob-admin-workspace) h1 {
     font-size: 28px;
     line-height: 1.15;
@@ -953,6 +966,12 @@ const adminWorkspace = `
     justify-content: space-between;
     gap: 12px;
   }
+  :host(ob-admin-workspace) .panel-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
   :host(ob-admin-workspace) .panel-header h2 {
     font-size: 16px;
     font-weight: 800;
@@ -975,13 +994,60 @@ const adminWorkspace = `
     font-size: 14px;
     overflow-wrap: anywhere;
   }
-  :host(ob-admin-workspace) .panel-actions,
+  :host(ob-admin-workspace) .detail-link {
+    color: var(--ob-primary);
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  :host(ob-admin-workspace) .detail-link:hover {
+    color: var(--ob-accent);
+  }
   :host(ob-admin-workspace) .inline-actions,
   :host(ob-admin-workspace) .segmented,
   :host(ob-admin-workspace) .call-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  :host(ob-admin-workspace) .action-menu {
+    position: relative;
+  }
+  :host(ob-admin-workspace) .action-menu summary {
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid var(--ob-border-strong);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    color: var(--ob-text);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    list-style: none;
+  }
+  :host(ob-admin-workspace) .action-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  :host(ob-admin-workspace) .action-menu summary:hover {
+    background: var(--ob-bg-alt);
+  }
+  :host(ob-admin-workspace) .action-menu-list {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    right: 0;
+    display: grid;
+    gap: 6px;
+    min-width: 220px;
+    padding: 8px;
+    border: 1px solid var(--ob-border);
+    border-radius: var(--ob-radius);
+    background: var(--ob-bg);
+    box-shadow: var(--ob-shadow-sm);
+  }
+  :host(ob-admin-workspace) .action-menu-list button {
+    width: 100%;
+    justify-content: flex-start;
   }
   :host(ob-admin-workspace) .segmented button.active {
     background: var(--ob-primary);
@@ -1081,6 +1147,10 @@ const adminWorkspace = `
     :host(ob-admin-workspace) .material-card {
       grid-template-columns: 1fr;
       flex-direction: column;
+    }
+    :host(ob-admin-workspace) .panel-controls {
+      justify-content: flex-start;
+      width: 100%;
     }
   }
 `;
