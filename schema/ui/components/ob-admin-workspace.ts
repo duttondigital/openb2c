@@ -12,6 +12,7 @@ type ChildCollection = {
   parentField: string;
   edge: EntityGraphEdge;
   rows: Record<string, unknown>[];
+  labels: Map<string, string>;
   temporalFields: string[];
 };
 
@@ -37,6 +38,7 @@ type MaterialPanel = {
 type PeoplePanel = {
   entity: string;
   rows: Record<string, unknown>[];
+  labels: Map<string, string>;
   calls: Record<string, unknown>[];
 };
 
@@ -295,17 +297,18 @@ export class ObAdminWorkspace extends HTMLElement {
               </a>
             `).join("") || emptyText("No scheduled records yet.")}
           </div>
-        ` : compactRows(api, child.entity, rows)}
+        ` : compactRows(api, child.entity, rows, child.labels)}
       </section>
     `;
   }
 
   private _renderPeople(api: ObApi, panel: PeoplePanel): string {
+    const title = contextualPluralDisplayName(panel.entity, this.entity);
     return `
-      <section class="record-panel people-panel" aria-label="People">
-        ${panelTitle("People", `${panel.rows.length} members, ${panel.calls.length} calls`, createHref(panel.entity, { [`${this.entity}_id`]: this.recordId }, returnPath(this.entity, this.recordId)), `New ${displayName(contextualEntityName(panel.entity, this.entity, null))}`)}
+      <section class="record-panel people-panel" aria-label="${escapeAttr(title)}">
+        ${panelTitle(title, `${panel.rows.length} members, ${panel.calls.length} calls`, createHref(panel.entity, { [`${this.entity}_id`]: this.recordId }, returnPath(this.entity, this.recordId)), `New ${displayName(contextualEntityName(panel.entity, this.entity, null))}`)}
         <div class="compact-list">
-          ${panel.rows.map((row) => compactRow(api, panel.entity, row)).join("") || emptyText("No people records yet.")}
+          ${panel.rows.map((row) => compactRow(api, panel.entity, row, panel.labels)).join("") || emptyText("No people records yet.")}
         </div>
         ${panel.calls.length > 0 ? `
           <div class="call-summary">
@@ -392,7 +395,7 @@ export class ObAdminWorkspace extends HTMLElement {
     return `
       <section class="record-panel list-panel" aria-label="${escapeAttr(pluralDisplayName(child.entity))}">
         ${panelTitle(contextualPluralDisplayName(child.entity, this.entity, child.edge), `${child.rows.length} records`, createHref(child.entity, { [child.parentField]: this.recordId }, returnPath(this.entity, this.recordId)))}
-        ${compactRows(api, child.entity, child.rows)}
+        ${compactRows(api, child.entity, child.rows, child.labels)}
       </section>
     `;
   }
@@ -509,11 +512,13 @@ async function loadRecordContext(api: ObApi, workspace: AdminWorkspace, record: 
     .filter((edge) => api.canCollection(edge.sourceEntity, "read"))
     .map(async (edge) => {
       const rows = await fetchList(api, edge.sourceEntity, { [edge.sourceField]: parentId, limit: "500" });
+      const labels = await loadCompactLabels(api, edge.sourceEntity, rows, [edge.sourceField]);
       return {
         entity: edge.sourceEntity,
         parentField: edge.sourceField,
         edge,
         rows,
+        labels,
         temporalFields: nodeByEntity.get(edge.sourceEntity)?.temporalFields || [],
       };
     }))).filter((child) => child.rows.length > 0 || api.canCollection(child.entity, "create"));
@@ -627,7 +632,7 @@ async function inferPeople(api: ObApi, nodes: EntityGraphNode[], children: Child
     const rows = await fetchList(api, callNode.entity, { limit: "500" });
     calls.push(...rows.filter((row) => scheduleIds.has(String(row[callEdge.sourceField]))));
   }
-  return { entity: people.entity, rows: people.rows, calls };
+  return { entity: people.entity, rows: people.rows, labels: people.labels, calls };
 }
 
 async function fetchList(api: ObApi, entity: string, params: Record<string, unknown>): Promise<Record<string, unknown>[]> {
@@ -711,14 +716,29 @@ function returnPath(entity: string, id: string): string {
   return `/workspaces/${entity}/${id}`;
 }
 
-function compactRows(api: ObApi, entity: string, rows: Record<string, unknown>[]): string {
-  return `<div class="compact-list">${rows.map((row) => compactRow(api, entity, row)).join("") || emptyText("No records yet.")}</div>`;
+async function loadCompactLabels(api: ObApi, entity: string, rows: Record<string, unknown>[], excludeFields: string[] = []): Promise<Map<string, string>> {
+  const pairs = await Promise.all(rows.map(async (row) => {
+    const label = await compactLabelFor(api, entity, row, excludeFields);
+    return [String(row.id), label] as [string, string];
+  }));
+  return new Map(pairs);
 }
 
-function compactRow(api: ObApi, entity: string, row: Record<string, unknown>): string {
+async function compactLabelFor(api: ObApi, entity: string, row: Record<string, unknown>, excludeFields: string[]): Promise<string> {
+  const fields = overviewFields(api.getSchema(entity)).filter(([field]) => !excludeFields.includes(field));
+  const references = await loadReferenceRows(api, entity, fields, row);
+  return recordTitleFor(api, entity, row, fields, references);
+}
+
+function compactRows(api: ObApi, entity: string, rows: Record<string, unknown>[], labels: Map<string, string>): string {
+  return `<div class="compact-list">${rows.map((row) => compactRow(api, entity, row, labels)).join("") || emptyText("No records yet.")}</div>`;
+}
+
+function compactRow(api: ObApi, entity: string, row: Record<string, unknown>, labels: Map<string, string>): string {
+  const label = labels.get(String(row.id)) || labelFor(row);
   return `
     <a class="compact-row" href="${escapeAttr(recordHref(api, entity, row.id))}">
-      <span>${escapeHtml(labelFor(row))}</span>
+      <span>${escapeHtml(label)}</span>
       ${row.status || row.call_status ? renderFormattedValue("status", row.status || row.call_status, api.getSchema(entity)?.properties?.status) : `<strong>#${escapeHtml(row.id)}</strong>`}
     </a>
   `;

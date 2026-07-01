@@ -12,15 +12,16 @@ function escapeAttr(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function genShell(title: string, tagName: "ob-app" | "ob-admin-app"): string {
+function genShell(title: string, tagName: "ob-app" | "ob-admin-app", baseHref = ""): string {
   const escapedTitle = escapeAttr(title);
+  const base = baseHref ? `  <base href="${escapeAttr(baseHref)}" />\n` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapedTitle}</title>
+${base}  <title>${escapedTitle}</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -40,7 +41,7 @@ export function genPublicAppShell(schema: Schema): string {
 export function genAdminAppShell(schema: Schema): string {
   const app = getAppMetadata(schema);
 
-  return genShell(`${app.uiTitle} Admin`, "ob-admin-app");
+  return genShell(`${app.uiTitle} Admin`, "ob-admin-app", "/admin/");
 }
 
 export const genAppShell = genPublicAppShell;

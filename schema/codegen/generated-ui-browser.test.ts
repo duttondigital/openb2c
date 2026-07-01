@@ -80,7 +80,7 @@ describe("generated UI browser automation", () => {
     const { context, page, errors } = await newPage();
 
     try {
-      await page.goto(`${staticApp.baseUrl}/admin/index.html#/workflows/issueWorkflow`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${staticApp.baseUrl}/admin/#/workflows/issueWorkflow`, { waitUntil: "domcontentloaded" });
       await page.getByRole("heading", { name: "Issue workflow" }).waitFor();
       await page.getByText("Harden generated checkout flow").waitFor();
 
@@ -116,17 +116,22 @@ describe("generated UI browser automation", () => {
     const { context, page, errors } = await newPage();
 
     try {
-      await page.goto(`${staticApp.baseUrl}/admin/index.html#/calendar`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${staticApp.baseUrl}/admin/#/calendar`, { waitUntil: "domcontentloaded" });
       await page.getByRole("heading", { name: "Calendar" }).waitFor();
       const calendarOptions = await page.locator("ob-admin-calendar select option").allTextContents();
       expect(calendarOptions).toEqual(expect.arrayContaining(["Performances", "Rehearsals"]));
       expect(calendarOptions).not.toContain("Productions");
       await page.locator("ob-admin-calendar").getByText("The Magic Flute").first().waitFor();
 
-      await page.goto(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${staticApp.baseUrl}/admin/#/workspaces/production/1`, { waitUntil: "domcontentloaded" });
       await page.getByRole("heading", { name: "The Magic Flute" }).waitFor();
       await page.getByRole("heading", { name: "Coverage matrix" }).waitFor();
       await page.getByRole("heading", { name: "Materials" }).waitFor();
+      expect(await page.getByRole("heading", { name: "Members" }).count()).toBe(1);
+      expect(await page.getByRole("heading", { name: "People" }).count()).toBe(0);
+      await page.locator("ob-admin-workspace").getByText("Elowen Trevorrow").first().waitFor();
+      await page.locator("ob-admin-workspace").getByText("Pamina").first().waitFor();
+      expect(await page.locator("ob-admin-workspace").getByText("#1 confirmed", { exact: true }).count()).toBe(0);
 
       const newRehearsalLink = page.locator('a[href*="/rehearsals/new"][href*="production_id=1"]');
       expect(await newRehearsalLink.count()).toBe(1);
@@ -139,7 +144,7 @@ describe("generated UI browser automation", () => {
       await page.getByLabel("Starts").fill("2027-05-22T18:00");
       await page.getByLabel("Ends").fill("2027-05-22T21:00");
       await page.getByRole("button", { name: "Create" }).click();
-      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+      await page.waitForURL(`${staticApp.baseUrl}/admin/#/workspaces/production/1`);
       await page.locator("ob-admin-workspace").getByText(rehearsalTitle).first().waitFor();
 
       const newRequirementLink = page.locator('a[href*="/rehearsal_requirements/new"][href*="production_id=1"]');
@@ -150,7 +155,7 @@ describe("generated UI browser automation", () => {
       const requirementName = `Act II duet ${Date.now()}`;
       await page.getByLabel("Requirement").fill(requirementName);
       await page.getByRole("button", { name: "Create" }).click();
-      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+      await page.waitForURL(`${staticApp.baseUrl}/admin/#/workspaces/production/1`);
       await page.locator("ob-admin-workspace").getByText(requirementName).first().waitFor();
 
       const coverageLinks = page.locator('a[href*="/rehearsal_coverages/new"]');
@@ -160,7 +165,7 @@ describe("generated UI browser automation", () => {
       expect(await page.locator('ob-entity-form input[type="hidden"][name="requirement_id"]').count()).toBe(1);
       expect(await page.locator('ob-entity-form input[type="hidden"][name="rehearsal_id"]').count()).toBe(1);
       await page.getByRole("button", { name: "Create" }).click();
-      await page.waitForURL(`${staticApp.baseUrl}/admin/index.html#/workspaces/production/1`);
+      await page.waitForURL(`${staticApp.baseUrl}/admin/#/workspaces/production/1`);
 
       await page.getByRole("heading", { name: "Coverage matrix" }).waitFor();
       const markCovered = page.locator("ob-admin-workspace").getByRole("button", { name: "Mark covered" });

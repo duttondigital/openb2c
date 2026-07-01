@@ -103,6 +103,7 @@ describe("generated UI web components", () => {
 
     expect(shell).toContain('<ob-app src="openapi.json"></ob-app>');
     expect(shell).not.toContain('api-base="http://localhost:3085"');
+    expect(shell).not.toContain("<base");
     expect(shell).toContain('<link rel="stylesheet" href="styles.css" />');
     expect(shell).not.toContain('id="content"');
     expect(shell).not.toContain("#content");
@@ -118,6 +119,7 @@ describe("generated UI web components", () => {
     expect(publicShell).not.toContain("ob-admin-app");
 
     expect(adminShell).toContain("<title>Component Shop Admin</title>");
+    expect(adminShell).toContain('<base href="/admin/" />');
     expect(adminShell).toContain('<ob-admin-app src="openapi.json"></ob-admin-app>');
     expect(adminShell).not.toContain("<ob-app");
   });
