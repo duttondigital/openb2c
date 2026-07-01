@@ -76,10 +76,6 @@ in
     };
   };
 
-  indexes.performance.by_venue_start = {
-    columns = [ "venue_id" "starts_at" ];
-  };
-
   validations.performance.endsAfterStart = {
     fields = [
       config.refs.performance.starts_at

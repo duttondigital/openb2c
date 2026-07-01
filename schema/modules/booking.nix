@@ -44,10 +44,6 @@ in
     };
   };
 
-  indexes.booking.by_user_status = {
-    columns = [ "user_id" "status" ];
-  };
-
   indexes.booking.unique_payment_reference = {
     columns = [ "payment_reference" ];
     unique = true;

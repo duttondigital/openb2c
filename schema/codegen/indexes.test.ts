@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { genSQL } from "./sql";
+import { genSQL, inferPerformanceIndexes } from "./sql";
 import type { Schema } from "./types";
 
 const PROJECT_ROOT = join(import.meta.dir, "..", "..");
@@ -37,19 +37,24 @@ function applySql(db: Database, sql: string) {
 }
 
 describe("ontology indexes", () => {
-  test("example compositions expose index metadata and SQL index statements", async () => {
+  test("example compositions infer performance indexes and preserve explicit uniqueness constraints", async () => {
     const duchyOpera = await loadExampleSchema("duchyopera");
     const ticketing = await loadExampleSchema("ticketing");
+    const duchyInferred = inferPerformanceIndexes(duchyOpera.tables, duchyOpera.indexes);
+    const ticketingInferred = inferPerformanceIndexes(ticketing.tables, ticketing.indexes);
 
-    expect(duchyOpera.indexes?.ticket?.by_user_status).toEqual({
+    expect(duchyOpera.indexes?.ticket?.by_user_status).toBeUndefined();
+    expect(duchyOpera.indexes?.performance?.by_venue_start).toBeUndefined();
+    expect(ticketing.indexes?.issue?.by_project_status).toBeUndefined();
+    expect(duchyInferred.ticket?.by_user_status).toEqual({
       columns: ["user_id", "status"],
       unique: false,
     });
-    expect(duchyOpera.indexes?.performance?.by_venue_start).toEqual({
+    expect(duchyInferred.performance?.by_venue_start).toEqual({
       columns: ["venue_id", "starts_at"],
       unique: false,
     });
-    expect(ticketing.indexes?.issue?.by_project_status).toEqual({
+    expect(ticketingInferred.issue?.by_project_status).toEqual({
       columns: ["project_id", "status"],
       unique: false,
     });

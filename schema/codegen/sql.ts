@@ -26,6 +26,72 @@ export function sqlType(col: Column, availableTables?: string[]): string {
   return parts.join(" ");
 }
 
+export function inferPerformanceIndexes(tables: Tables, explicitIndexes: Indexes = {}): Indexes {
+  const inferred: Indexes = {};
+  for (const [table, cols] of Object.entries(tables)) {
+    const existing = explicitIndexes[table] || {};
+    const names = new Set(Object.keys(existing));
+    const signatures = new Set(Object.values(existing).map((index) => index.columns.join("\0")));
+    const hasStatus = Boolean(cols.status);
+    const temporalField = firstExistingField(cols, ["starts_at", "start_at", "scheduled_at", "date"]);
+    const facetField = firstExistingField(cols, ["kind", "category"]);
+    const foreignKeys = Object.entries(cols)
+      .filter(([, col]) => col.references && !col.pk && !col.unique)
+      .map(([field]) => field);
+
+    if (hasStatus && foreignKeys.length === 0) {
+      addInferredIndex(inferred, table, names, signatures, "by_status", ["status"]);
+    }
+
+    for (const field of foreignKeys) {
+      const base = field.replace(/_id$/, "");
+      if (temporalField) {
+        addInferredIndex(inferred, table, names, signatures, `by_${base}_${temporalIndexSuffix(temporalField)}`, [field, temporalField]);
+      } else if (facetField) {
+        addInferredIndex(inferred, table, names, signatures, `by_${base}_${facetField}${hasStatus ? "_status" : ""}`, [field, facetField, ...(hasStatus ? ["status"] : [])]);
+      } else if (hasStatus) {
+        addInferredIndex(inferred, table, names, signatures, `by_${base}_status`, [field, "status"]);
+      } else {
+        addInferredIndex(inferred, table, names, signatures, `by_${base}`, [field]);
+      }
+    }
+  }
+  return inferred;
+}
+
+function firstExistingField(cols: Record<string, Column>, fields: string[]): string | null {
+  return fields.find((field) => Boolean(cols[field])) || null;
+}
+
+function temporalIndexSuffix(field: string): string {
+  if (field === "date") return "date";
+  return "start";
+}
+
+function addInferredIndex(
+  indexes: Indexes,
+  table: string,
+  names: Set<string>,
+  signatures: Set<string>,
+  name: string,
+  columns: string[],
+): void {
+  const signature = columns.join("\0");
+  if (names.has(name) || signatures.has(signature)) return;
+  indexes[table] ||= {};
+  indexes[table][name] = { columns, unique: false };
+  names.add(name);
+  signatures.add(signature);
+}
+
+function mergeIndexes(explicitIndexes: Indexes, inferredIndexes: Indexes): Indexes {
+  const merged: Indexes = { ...explicitIndexes };
+  for (const [table, indexes] of Object.entries(inferredIndexes)) {
+    merged[table] = { ...(merged[table] || {}), ...indexes };
+  }
+  return merged;
+}
+
 function genIndexSQL(tables: Tables, indexes: Indexes): string[] {
   const stmts: string[] = [];
   for (const [table, tableIndexes] of Object.entries(indexes)) {
@@ -46,6 +112,7 @@ function genIndexSQL(tables: Tables, indexes: Indexes): string[] {
 }
 
 export function genSQL(tables: Tables, indexes: Indexes = {}): string {
+  const allIndexes = mergeIndexes(indexes, inferPerformanceIndexes(tables, indexes));
   // Topological sort: tables with no FK deps first
   const tableNames = Object.keys(tables);
   const deps: Record<string, string[]> = {};
@@ -82,6 +149,6 @@ export function genSQL(tables: Tables, indexes: Indexes = {}): string {
     const tableName = quoteReserved(table);
     stmts.push(`CREATE TABLE IF NOT EXISTS ${tableName} (\n${defs.join(",\n")}\n);`);
   }
-  stmts.push(...genIndexSQL(tables, indexes));
+  stmts.push(...genIndexSQL(tables, allIndexes));
   return stmts.join("\n\n") + "\n";
 }

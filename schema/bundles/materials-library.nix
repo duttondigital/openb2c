@@ -164,14 +164,6 @@ in
     };
   };
 
-  indexes.production_material.by_production_kind_status = {
-    columns = [ "production_id" "kind" "status" ];
-  };
-
-  indexes.material_version.by_material_status = {
-    columns = [ "material_id" "status" ];
-  };
-
   indexes.material_version.unique_material_version = {
     columns = [ "material_id" "version_label" ];
     unique = true;

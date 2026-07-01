@@ -79,14 +79,6 @@ in
     };
   };
 
-  indexes.ticket.by_user_status = {
-    columns = [ "user_id" "status" ];
-  };
-
-  indexes.ticket.by_performance_status = {
-    columns = [ "performance_id" "status" ];
-  };
-
   indexes.ticket.unique_performance_seat = {
     columns = [ "performance_id" "seat" ];
     unique = true;

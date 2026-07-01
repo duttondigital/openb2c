@@ -399,38 +399,14 @@ in
     };
   };
 
-  indexes.production.by_status = {
-    columns = [ "status" ];
-  };
-
-  indexes.performance.by_production_start = {
-    columns = [ "production_id" "starts_at" ];
-  };
-
-  indexes.production_role.by_production_category = {
-    columns = [ "production_id" "category" ];
-  };
-
   indexes.production_member.unique_production_user = {
     columns = [ "production_id" "user_id" ];
     unique = true;
   };
 
-  indexes.rehearsal.by_production_status = {
-    columns = [ "production_id" "status" ];
-  };
-
-  indexes.rehearsal.by_venue_start = {
-    columns = [ "venue_id" "starts_at" ];
-  };
-
   indexes.rehearsal_call.unique_rehearsal_user = {
     columns = [ "rehearsal_id" "user_id" ];
     unique = true;
-  };
-
-  indexes.rehearsal_requirement.by_production_status = {
-    columns = [ "production_id" "status" ];
   };
 
   indexes.rehearsal_coverage.unique_requirement_rehearsal = {

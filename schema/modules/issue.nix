@@ -38,14 +38,6 @@ in
     updated_at = { type = "text"; default = "CURRENT_TIMESTAMP"; };
   };
 
-  indexes.issue.by_project_status = {
-    columns = [ "project_id" "status" ];
-  };
-
-  indexes.issue.by_assignee_status = {
-    columns = [ "assignee_id" "status" ];
-  };
-
   workflows.groups.issueWorkflow = {
     label = "Issue workflow";
     description = "Issue progress, review, completion, and escalation operations.";
